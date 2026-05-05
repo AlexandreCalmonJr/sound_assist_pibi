@@ -1,0 +1,125 @@
+(function () {
+    async function loadConfig() {
+        try {
+            const res = await fetch('/api/config');
+            if (!res.ok) return;
+
+            const config = await res.json();
+            const ipCard = document.getElementById('local-ip-card');
+            const ipDisplay = document.getElementById('server-ip-display');
+            const mobileUrl = document.getElementById('mobile-url');
+            const mobileLink = document.getElementById('mobile-open-link');
+            const mobileQrCode = document.getElementById('mobile-qr-code');
+
+            if (!ipCard || !ipDisplay || config.localIp === '127.0.0.1') return;
+
+            ipCard.style.display = 'block';
+            
+            // Prioriza o túnel seguro (HTTPS) para que o microfone funcione em todos os celulares
+            const baseUrl = config.tunnelUrl || `http://${config.localIp}:${config.port}`;
+            const localUrl = `http://${config.localIp}:${config.port}`;
+            const mobileHref = `${baseUrl}/mobile.html`;
+
+            ipDisplay.innerText = localUrl;
+            if (mobileUrl) mobileUrl.innerText = mobileHref;
+            if (mobileLink) mobileLink.href = mobileHref;
+            
+            if (mobileQrCode) {
+                // Adiciona um aviso visual se estiver usando o túnel
+                if (config.tunnelUrl) {
+                    mobileUrl.style.color = 'var(--accent-primary)';
+                    mobileUrl.title = 'Link Seguro Ativo (HTTPS)';
+                }
+                mobileQrCode.src = `https://chart.googleapis.com/chart?cht=qr&chs=220x220&chl=${encodeURIComponent(mobileHref)}`;
+            }
+        } catch (e) {
+            console.log('Erro ao carregar config:', e);
+        }
+    }
+
+    async function loadMappings() {
+        try {
+            const res = await fetch('/api/mappings');
+            if (!res.ok) return;
+
+            const mappings = await res.json();
+            const list = document.getElementById('db-mappings-list');
+            if (!list) return;
+
+            list.innerHTML = '';
+            if (mappings.length === 0) {
+                list.innerHTML = '<li style="color: var(--text-muted);">Nenhum mapeamento salvo.</li>';
+                return;
+            }
+
+            mappings.forEach(map => {
+                const li = document.createElement('li');
+                li.style.cssText = 'display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border);';
+                const location = map.location ? ` - ${map.location}` : '';
+                const channel = map.channel ? ` canal ${map.channel}` : '';
+                li.innerHTML = `
+                    <span><strong>${map.hz} Hz</strong>${channel}${location} - Detectado em ${new Date(map.date).toLocaleDateString()}</span>
+                    <button class="btn-delete-map" data-id="${map._id}" style="background: none; border: none; color: var(--danger); cursor: pointer;">Excluir</button>
+                `;
+                list.appendChild(li);
+            });
+
+            document.querySelectorAll('.btn-delete-map').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = e.target.getAttribute('data-id');
+                    await fetch(`/api/mappings/${id}`, { method: 'DELETE' });
+                    loadMappings();
+                });
+            });
+        } catch (e) {
+            console.log('Erro ao carregar mapeamentos:', e);
+        }
+    }
+
+    function initSaveMapping() {
+        const btnSaveMap = document.getElementById('btn-save-map');
+        if (!btnSaveMap) return;
+
+        btnSaveMap.addEventListener('click', async () => {
+            const hzInput = document.getElementById('save-hz');
+            const channelInput = document.getElementById('save-map-channel');
+            const locationInput = document.getElementById('save-map-location');
+            const hzVal = parseInt(hzInput.value, 10);
+
+            if (!hzVal) {
+                alert('Insira uma frequência válida!');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/mappings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        hz: hzVal,
+                        channel: Number(channelInput?.value || 1),
+                        location: locationInput?.value?.trim() || '',
+                        date: new Date().toISOString()
+                    })
+                });
+
+                if (res.ok) {
+                    hzInput.value = '';
+                    if (locationInput) locationInput.value = '';
+                    loadMappings();
+                    alert('Frequência salva com sucesso no Banco de Dados!');
+                }
+            } catch (e) {
+                alert('Erro ao salvar no banco de dados local.');
+            }
+        });
+    }
+
+    function init() {
+        loadConfig();
+        loadMappings();
+        initSaveMapping();
+    }
+
+    window.SoundMasterMappings = { init, loadMappings };
+})();

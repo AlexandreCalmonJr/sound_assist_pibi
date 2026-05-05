@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#00ffcc">
+    <title>SoundMaster Mobile</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="mobile-page">
+    <div class="mobile-app-container">
+        <header class="mobile-header">
+            <div>
+                <h1>SoundMaster Mobile</h1>
+                <p>Controle o master e confira a sala direto do banco ou do fundo da igreja.</p>
+            </div>
+            <span id="mobile-connection-badge" class="mixer-status offline">Offline</span>
+        </header>
+
+        <nav class="mobile-nav">
+            <button class="mobile-nav-btn active" data-target="mobile-conn">Conexão</button>
+            <button class="mobile-nav-btn" data-target="mobile-master">Master</button>
+            <button class="mobile-nav-btn" data-target="mobile-mic">Microfone</button>
+            <button class="mobile-nav-btn" data-target="mobile-tools">Ferramentas</button>
+            <button class="mobile-nav-btn" data-target="mobile-map">Mapeamento</button>
+            <button class="mobile-nav-btn" data-target="mobile-logs">Logs</button>
+            <button class="mobile-nav-btn" data-target="mobile-ai">IA</button>
+            <button class="mobile-nav-btn" data-target="mobile-guide">Guia</button>
+        </nav>
+
+        <main class="mobile-panel">
+            <section id="mobile-conn" class="mobile-card mobile-page active">
+                <h2>Conectar ao Mixer</h2>
+                <label class="mobile-field-label" for="mobile-mixer-ip">IP da mesa Soundcraft</label>
+                <input type="text" id="mobile-mixer-ip" class="custom-input" inputmode="decimal" autocomplete="off" value="10.10.1.1" placeholder="Ex: 10.10.1.1">
+                <div class="mobile-action-row">
+                    <button id="mobile-btn-connect" class="action-btn primary">Conectar</button>
+                    <button id="mobile-btn-disconnect" class="action-btn secondary">Desconectar</button>
+                </div>
+                <p id="mobile-connection-text" class="mobile-helper-text">Aguardando conexão...</p>
+            </section>
+
+            <section id="mobile-master" class="mobile-card mobile-page">
+                <h2>Controle Master</h2>
+                <div class="mobile-master-display">
+                    <span id="mobile-master-level">0%</span>
+                    <span id="mobile-master-db">(-∞ dB)</span>
+                </div>
+                <input type="range" id="mobile-master-slider" min="0" max="100" value="0" aria-label="Volume master">
+                <div class="mobile-scale-row">
+                    <span>mín</span>
+                    <span>referência</span>
+                    <span>máx</span>
+                </div>
+                <div class="mobile-action-row">
+                    <button id="mobile-master-down" class="action-btn secondary">-1%</button>
+                    <button id="mobile-master-up" class="action-btn secondary">+1%</button>
+                </div>
+                <div class="mobile-preset-grid" aria-label="Ajustes rápidos de master">
+                    <button class="mobile-preset-btn" type="button" data-master-preset="0">Mudo</button>
+                    <button class="mobile-preset-btn" type="button" data-master-preset="35">Pré-culto</button>
+                    <button class="mobile-preset-btn" type="button" data-master-preset="50">Pregação</button>
+                    <button class="mobile-preset-btn" type="button" data-master-preset="62">Louvor</button>
+                </div>
+            </section>
+
+            <section id="mobile-mic" class="mobile-card mobile-page">
+                <h2>Microfone do Telefone</h2>
+                <div class="mobile-action-row">
+                    <button id="mobile-btn-start-mic" class="action-btn primary">Ativar Microfone</button>
+                    <button id="mobile-btn-stop-mic" class="action-btn secondary" disabled>Parar</button>
+                </div>
+                <div class="mobile-mic-status" id="mobile-mic-status">Microfone offline</div>
+                <canvas id="mobile-fft-canvas" width="320" height="140"></canvas>
+                <div class="frequency-zones">
+                    <span>Sub</span>
+                    <span>Low</span>
+                    <span>Mid</span>
+                    <span>High-Mid</span>
+                    <span>High</span>
+                </div>
+                <div class="mobile-mic-readouts">
+                    <div>
+                        <span>Nível ambiente</span>
+                        <strong id="mobile-rms-readout">0%</strong>
+                    </div>
+                    <div>
+                        <span>Pico dominante</span>
+                        <strong id="mobile-peak-readout">-- Hz</strong>
+                    </div>
+                </div>
+                <div id="mobile-feedback-alert" class="alert safe mobile-alert">Pronto para análise.</div>
+                <button id="mobile-btn-cut-feedback" class="action-btn secondary mobile-danger-action" disabled>Cortar pico na mesa</button>
+            </section>
+
+            <section id="mobile-tools" class="mobile-card mobile-page">
+                <h2>Ferramentas do Técnico</h2>
+                <label class="mobile-field-label" for="mobile-target-channel">Canal alvo</label>
+                <input id="mobile-target-channel" type="number" min="1" max="24" value="1" class="custom-input" inputmode="numeric">
+                <div class="mobile-tool-grid">
+                    <button id="mobile-clean-channel" class="mobile-preset-btn" type="button">Som limpo</button>
+                    <button id="mobile-hpf-channel" class="mobile-preset-btn" type="button">HPF 100Hz</button>
+                    <button id="mobile-gate-channel" class="mobile-preset-btn" type="button">Gate leve</button>
+                    <button id="mobile-compressor-channel" class="mobile-preset-btn" type="button">Compressor</button>
+                    <button id="mobile-eq-mud" class="mobile-preset-btn" type="button">-250Hz</button>
+                    <button id="mobile-eq-harsh" class="mobile-preset-btn" type="button">-3.2kHz</button>
+                    <button id="mobile-afs-on" class="mobile-preset-btn" type="button">AFS2 on</button>
+                    <button id="mobile-afs-off" class="mobile-preset-btn" type="button">AFS2 off</button>
+                </div>
+                <p class="mobile-helper-text">Use estes botões com calma durante passagem de som. Eles aplicam ajustes leves para limpar fala, louvor e retornos.</p>
+            </section>
+
+            <section id="mobile-map" class="mobile-card mobile-page">
+                <h2>Mapeamento da Sala</h2>
+                <label class="mobile-field-label" for="mobile-map-location">Local medido</label>
+                <input id="mobile-map-location" type="text" class="custom-input" placeholder="Ex: fundo esquerdo, altar, centro">
+                <div class="mobile-action-row">
+                    <button id="mobile-save-peak" class="action-btn primary" type="button">Salvar pico atual</button>
+                    <button id="mobile-refresh-maps" class="action-btn secondary" type="button">Atualizar lista</button>
+                </div>
+                <div id="mobile-mapping-list" class="mobile-mapping-list">Nenhum mapeamento carregado.</div>
+            </section>
+
+            <section id="mobile-logs" class="mobile-card mobile-page">
+                <h2>Logs Rápidos</h2>
+                <div class="mixer-log-box" id="mobile-log">
+                    <div class="mixer-log-entry">Eventos aparecerão aqui.</div>
+                </div>
+            </section>
+            
+            <section id="mobile-ai" class="mobile-card mobile-page">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h2>Assistente de IA</h2>
+                    <button id="mobile-btn-ai-reset" class="action-btn secondary small" style="min-width: 80px; padding: 4px 8px;">Reiniciar</button>
+                </div>
+                <div class="mobile-tip-box" style="margin-bottom: 15px;">
+                    Dica: Ative o microfone primeiro para que a IA analise o som real do ambiente.
+                </div>
+                
+                <div id="mobile-ai-chat" style="height: 200px; overflow-y: auto; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 0.9rem;">
+                    <div style="color: var(--text-muted);">Aguardando sua dúvida ou análise...</div>
+                </div>
+
+                <div class="mobile-action-row" style="margin-bottom: 15px; gap: 8px;">
+                    <button id="mobile-btn-ai-analyze" class="action-btn primary" style="flex: 1;">Analisar Ambiente 🎤</button>
+                    <button id="mobile-btn-pink-noise" class="action-btn secondary" style="flex: 1;">Ruído Rosa 🔊</button>
+                </div>
+
+                <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+                    <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">Análise Especializada:</div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button class="action-btn secondary small ai-quick-tag" data-prompt="analise a reverberação (RT60)">Reverberação</button>
+                        <button class="action-btn secondary small ai-quick-tag" data-prompt="verifique sobras de grave (muddy)">Grave/Lama</button>
+                        <button class="action-btn secondary small ai-quick-tag" data-prompt="analise clareza da fala (inteligibilidade)">Clareza Fala</button>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 8px;">
+                    <input id="mobile-ai-input" type="text" class="custom-input" placeholder="Ex: voz está abafada" style="flex: 1;">
+                    <button id="mobile-btn-ai-send" class="action-btn secondary" style="width: 60px;">OK</button>
+                </div>
+            </section>
+
+            <section id="mobile-guide" class="mobile-card mobile-page">
+                <h2>Guia Rápido</h2>
+                <ul class="mobile-tutorial-list mobile-guide-list">
+                    <li>1. Conecte o telefone na mesma rede Wi-Fi da mesa/servidor.</li>
+                    <li>2. <strong>Importante (HTTPS):</strong> O microfone só funciona em conexões seguras. No Android/Chrome, acesse <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code> e adicione o IP do servidor.</li>
+                    <li>3. No iOS/Safari, você pode precisar de um túnel (Ngrok) para ter um link HTTPS válido.</li>
+                    <li>4. Use fones de ouvido para evitar feedback (microfonia) ao ativar o microfone.</li>
+                    <li>5. Ajuste o master e use a aba <strong>IA</strong> para analisar os pontos da igreja.</li>
+                </ul>
+                <div class="mobile-tip-box">Dica: use +1% / -1% para ajustes finos sem perder a referência do ganho.</div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/mobile.js"></script>
+</body>
+</html>

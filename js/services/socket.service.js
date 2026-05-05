@@ -1,0 +1,100 @@
+/**
+ * SoundMaster — SocketService
+ * Singleton que inicializa o Socket.IO e repassa todos os eventos
+ * para o AppStore. Nenhum outro módulo deve criar ou referenciar `socket` diretamente.
+ *
+ * USO:
+ *   SocketService.init();                          // chamar uma vez em app.js
+ *   SocketService.emit('set_master_level', data);  // enviar evento
+ *   SocketService.isConnected();                   // verificar estado
+ */
+(function () {
+    'use strict';
+
+    let _socket = null;
+
+    // -------------------------------------------------------------------------
+    // Inicialização
+    // -------------------------------------------------------------------------
+    function init() {
+        if (typeof io === 'undefined') {
+            console.warn('[SocketService] socket.io não disponível. Rodando sem servidor?');
+            return;
+        }
+
+        _socket = io();
+
+        // --- Eventos de conexão WebSocket ---
+        _socket.on('connect', function () {
+            AppStore.addLog('Conectado ao servidor WebSocket.');
+        });
+
+        _socket.on('disconnect', function () {
+            AppStore.addLog('Desconectado do servidor WebSocket.');
+            AppStore.setState({ mixerConnected: false, mixerStatusMsg: 'Servidor offline' });
+        });
+
+        // --- Eventos do Mixer ---
+        _socket.on('mixer_status', function (data) {
+            AppStore.setState({
+                mixerConnected: !!data.connected,
+                mixerStatusMsg: data.msg || (data.connected ? 'Conectado' : 'Offline')
+            });
+            if (data.msg) AppStore.addLog(data.msg);
+        });
+
+        _socket.on('master_level', function (level) {
+            AppStore.setState({ masterLevel: level });
+        });
+
+        _socket.on('master_level_db', function (db) {
+            AppStore.setState({ masterDb: db });
+        });
+
+        _socket.on('feedback_cut_success', function (data) {
+            if (data && data.msg) AppStore.addLog(data.msg);
+        });
+
+        // --- Limpar estado ao fechar janela ---
+        window.addEventListener('beforeunload', function () {
+            if (_socket) _socket.disconnect();
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Emissão de eventos (com guarda de conexão)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Emite um evento para o servidor. Retorna false se não conectado.
+     * @param {string} event
+     * @param {*} data
+     * @returns {boolean}
+     */
+    function emit(event, data) {
+        if (!_socket) {
+            console.warn('[SocketService] Socket não inicializado. Chame SocketService.init() primeiro.');
+            return false;
+        }
+        _socket.emit(event, data);
+        return true;
+    }
+
+    /**
+     * @returns {boolean}
+     */
+    function isConnected() {
+        return _socket !== null && _socket.connected;
+    }
+
+    /**
+     * Expõe o socket bruto para casos excepcionais (ex: analyzer.js que referencia `socket` globalmente).
+     * Prefira usar emit() sempre que possível.
+     * @returns {Object|null}
+     */
+    function raw() {
+        return _socket;
+    }
+
+    window.SocketService = { init, emit, isConnected, raw };
+})();
