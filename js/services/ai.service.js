@@ -10,7 +10,7 @@
 (function () {
     'use strict';
 
-    const AI_URL = 'http://localhost:3002/chat';
+    const AI_URL = '/api/ai';
     const TIMEOUT_MS = 8000;
 
     // -------------------------------------------------------------------------
