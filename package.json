@@ -5,6 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "build:css": "tailwindcss -i css/input.css -o css/styles.css --watch",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -30,7 +31,9 @@
     "soundcraft-ui-connection": "^6.0.3"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.2.4",
     "electron": "^41.5.0",
-    "electron-builder": "^26.8.1"
+    "electron-builder": "^26.8.1",
+    "tailwindcss": "^4.2.4"
   }
 }

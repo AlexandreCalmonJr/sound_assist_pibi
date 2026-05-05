@@ -101,15 +101,27 @@ class AILogic:
                 "command": command("eq_cut", "Corte Vidro Master", target="master", hz=2500, gain=-3)
             }
         
+        if re.search(r'(limpar afs|resetar afs|zerar microfonia)', text):
+            return {
+                "text": "Limpando todos os filtros de microfonia do AFS2.",
+                "command": command("set_afs_enabled", "Reset AFS2", enabled=0) # Toggling off/on clears live filters
+            }
+
         if re.search(r'(sibilancia|sibilância|sss|chiado)', text):
             return {
                 "text": f"Reduzindo sibilância no canal {channel} (De-esser em 6.5kHz).",
                 "command": command("eq_cut", f"De-esser Ch{channel}", target="channel", channel=channel, hz=6500, gain=-3, q=1.5)
             }
 
+        if re.search(r'(equilibrar master|curva ideal|flat)', text):
+            return {
+                "text": "Aplicando curva de correção master para o salão (Graves +3, Mid -2, High +1).",
+                "command": command("run_master_ideal_curve", "Curva Ideal Master")
+            }
+
         # 3. Resposta padrão
         return {
-            "text": "Entendido. Posso ajudar com: 'voz', 'violão', 'bumbo', 'teclado' ou problemas como 'som abafado' e 'microfonia'.",
+            "text": "Entendido. Posso ajudar com: 'voz', 'violão', 'bumbo', 'teclado' ou problemas como 'som abafado', 'microfonia' e 'limpar AFS'.",
             "command": None
         }
 

@@ -1,0 +1,133 @@
+<div class="mixer-panel h-full flex flex-col bg-slate-900 border-l border-white/10" id="mixer-workspace">
+    <div class="mixer-header p-4 bg-slate-800/50 border-b border-white/5">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex flex-col">
+                <span class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Soundcraft Ui24R</span>
+                <span id="mixer-status-badge" class="text-xs font-bold text-red-500">● Offline</span>
+            </div>
+            <div class="flex gap-2">
+                <input type="text" id="mixer-ip" value="10.10.1.1" 
+                    class="bg-black/40 border border-white/10 rounded px-3 py-1 text-xs text-cyan-400 font-mono focus:border-cyan-500 outline-none w-32"
+                    placeholder="IP (ex: 10.10.1.1)">
+                <button id="btn-connect-mixer" class="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1 rounded text-xs font-bold transition-all">Conectar</button>
+            </div>
+        </div>
+        
+        <div class="flex gap-1 bg-black/20 p-1 rounded-lg">
+            <button class="mixer-tab-btn active flex-1 text-[10px] uppercase font-bold py-1.5 rounded transition-all" data-tab="mixer-overview">Geral</button>
+            <button class="mixer-tab-btn flex-1 text-[10px] uppercase font-bold py-1.5 rounded text-slate-500 hover:text-white transition-all" data-tab="mixer-connection">Status</button>
+            <button class="mixer-tab-btn flex-1 text-[10px] uppercase font-bold py-1.5 rounded text-slate-500 hover:text-white transition-all" data-tab="mixer-presets">Presets</button>
+            <button class="mixer-tab-btn flex-1 text-[10px] uppercase font-bold py-1.5 rounded text-slate-500 hover:text-white transition-all" data-tab="mixer-interface">Mesa</button>
+        </div>
+    </div>
+
+    <div class="mixer-panel-body flex-1 overflow-y-auto p-4 space-y-4">
+        <!-- Visão Geral -->
+        <section id="mixer-overview" class="mixer-panel-section active space-y-4">
+            <div class="bg-slate-800/40 border border-white/5 rounded-xl p-4">
+                <h3 class="text-xs font-bold text-slate-500 uppercase mb-4">Master Fader</h3>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-end mb-2">
+                        <span id="mixer-master-level" class="text-2xl font-mono text-cyan-400">0%</span>
+                        <span id="mixer-master-db" class="text-xs text-slate-500">-∞ dB</span>
+                    </div>
+                    <div class="relative h-48 bg-black/40 rounded-lg border border-white/5 p-2 flex justify-center">
+                        <input type="range" id="master-volume-slider" min="0" max="100" value="0" 
+                            class="appearance-none w-full h-2 bg-slate-700 rounded-lg cursor-pointer accent-cyan-500" 
+                            style="writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 8px; height: 100%;">
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="btn-master-volume-down" class="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded text-xs">-1%</button>
+                        <button id="btn-master-volume-up" class="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded text-xs">+1%</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex gap-2">
+                <button id="btn-undo" class="flex-1 py-2 bg-slate-800 border border-white/5 hover:bg-slate-700 rounded text-xs transition-all">↩ Undo</button>
+                <button id="btn-redo" class="flex-1 py-2 bg-slate-800 border border-white/5 hover:bg-slate-700 rounded text-xs transition-all opacity-50" disabled>↪ Redo</button>
+            </div>
+
+            <!-- Mobile Quick Access -->
+            <div id="local-ip-card" class="bg-slate-800/40 border border-cyan-500/20 rounded-xl p-4 hidden">
+                <h3 class="text-xs font-bold text-cyan-500 uppercase mb-4">Comando Mobile</h3>
+                <div class="flex gap-4">
+                    <div class="bg-white p-1 rounded">
+                        <img id="mobile-qr-code" class="w-20 h-20" alt="QR Code">
+                    </div>
+                    <div class="flex flex-col justify-center gap-2">
+                        <span id="mobile-url" class="text-[10px] text-slate-400 break-all font-mono"></span>
+                        <a id="mobile-open-link" href="#" target="_blank" class="text-[10px] bg-cyan-600/20 text-cyan-400 px-2 py-1 rounded text-center border border-cyan-500/30">Abrir</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Conexão e Sugestões -->
+        <section id="mixer-connection" class="mixer-panel-section hidden space-y-4">
+            <div class="bg-slate-800/40 border border-white/5 rounded-xl p-4">
+                <h3 class="text-xs font-bold text-slate-500 uppercase mb-4">Sugestões da IA</h3>
+                <div id="ai-suggestions-list" class="space-y-2 min-h-[100px]">
+                    <div class="text-[10px] text-slate-500 italic text-center py-8">Nenhuma sugestão disponível ainda.</div>
+                </div>
+            </div>
+
+            <div class="bg-slate-800/40 border border-white/5 rounded-xl p-4">
+                <h3 class="text-xs font-bold text-slate-500 uppercase mb-4">Ações Técnicas</h3>
+                <div class="space-y-3">
+                    <div class="flex items-center gap-2">
+                        <input id="quick-channel-number" type="number" min="1" max="24" value="1" 
+                            class="bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-cyan-400 w-16">
+                        <span class="text-[10px] text-slate-500">Canal alvo</span>
+                    </div>
+                    <div class="grid grid-cols-1 gap-2">
+                        <button id="btn-quick-hpf" class="py-2 bg-cyan-600/20 text-cyan-400 border border-cyan-500/30 rounded text-[10px] uppercase font-bold">HPF 100Hz</button>
+                        <button id="btn-quick-gate" class="py-2 bg-slate-700 hover:bg-slate-600 rounded text-[10px] uppercase font-bold">Ativar Gate</button>
+                        <div class="flex gap-2">
+                            <button id="btn-quick-afs-enable" class="flex-1 py-2 bg-cyan-600 text-white rounded text-[10px] uppercase font-bold">AFS2 ON</button>
+                            <button id="btn-quick-afs-disable" class="flex-1 py-2 bg-red-600 text-white rounded text-[10px] uppercase font-bold">AFS2 OFF</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-black/20 rounded-xl p-3">
+                <h3 class="text-[10px] font-bold text-slate-600 uppercase mb-2">Logs do Mixer</h3>
+                <div id="mixer-log" class="h-48 overflow-y-auto font-mono text-[9px] text-slate-400 space-y-1">
+                    <div class="opacity-50">Aguardando eventos...</div>
+                </div>
+            </div>
+            
+            <button id="btn-disconnect-mixer" class="w-full py-2 bg-red-600/20 text-red-400 border border-red-500/30 rounded text-xs font-bold">Desconectar Mesa</button>
+        </section>
+
+        <!-- Presets -->
+        <section id="mixer-presets" class="mixer-panel-section hidden space-y-4">
+            <div class="bg-slate-800/40 border border-white/5 rounded-xl p-4">
+                <h3 class="text-xs font-bold text-slate-500 uppercase mb-4">Salvar Estado</h3>
+                <div class="space-y-3">
+                    <input type="text" id="preset-name" placeholder="Nome do Preset" 
+                        class="w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-xs focus:border-cyan-500 outline-none">
+                    <button id="btn-save-preset" class="w-full py-2 bg-cyan-600 text-white rounded text-xs font-bold">Salvar Atual</button>
+                </div>
+            </div>
+            <div id="presets-list" class="space-y-2">
+                <!-- Carregado via JS -->
+            </div>
+        </section>
+
+        <!-- Interface da Mesa (Iframe) -->
+        <section id="mixer-interface" class="mixer-panel-section hidden h-full">
+            <div class="h-full bg-black rounded-xl border border-white/10 overflow-hidden relative min-h-[400px]">
+                <div id="mixer-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-center p-8 space-y-4 bg-slate-900">
+                    <div class="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center text-2xl">🎹</div>
+                    <div>
+                        <p class="text-sm font-bold text-white">Interface Original</p>
+                        <p class="text-[10px] text-slate-500">Conecte-se para carregar a mesa aqui.</p>
+                    </div>
+                </div>
+                <iframe id="mixer-iframe" class="w-full h-full hidden" frameborder="0" allowfullscreen></iframe>
+            </div>
+        </section>
+    </div>
+</div>

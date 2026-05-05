@@ -1,0 +1,23 @@
+<section id="eq" class="module page-section">
+    <div class="mb-6">
+        <h2 class="text-2xl font-bold text-white">Guia de Equalização</h2>
+        <p class="text-slate-400 text-sm">Selecione o instrumento para ver sugestões de frequências e processamento.</p>
+    </div>
+
+    <div class="max-w-2xl">
+        <select id="eq-instrument-select" class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-cyan-500 outline-none mb-6 transition-all appearance-none">
+            <option value="voz">Voz / Pregação</option>
+            <option value="violao">Violão Acústico</option>
+            <option value="baixo">Baixo</option>
+            <option value="bumbo">Bateria (Bumbo)</option>
+            <option value="teclado">Teclado</option>
+        </select>
+
+        <div id="eq-data-display" class="space-y-4">
+            <!-- Preenchido via JS -->
+            <div class="bg-slate-800/40 border border-white/10 rounded-2xl p-8 text-center text-slate-500">
+                Selecione um instrumento acima para carregar o guia.
+            </div>
+        </div>
+    </div>
+</section>

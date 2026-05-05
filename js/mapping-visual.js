@@ -138,4 +138,11 @@
     }
 
     window.SoundMasterMapping = { init, updateDimensions };
+
+    // Ouvir evento do roteador
+    document.addEventListener('page-loaded', (e) => {
+        if (e.detail.pageId === 'rt60') {
+            init();
+        }
+    });
 })();

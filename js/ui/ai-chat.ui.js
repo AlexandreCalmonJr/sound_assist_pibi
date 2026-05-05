@@ -290,4 +290,11 @@
         init,
         sendAnalysis: _sendAcousticAnalysis
     };
+
+    // Ouvir evento do roteador
+    document.addEventListener('page-loaded', (e) => {
+        if (e.detail.pageId === 'ai-chat') {
+            init();
+        }
+    });
 })();

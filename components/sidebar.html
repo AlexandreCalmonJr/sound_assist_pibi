@@ -1,0 +1,43 @@
+<header class="agent-header p-6 border-b border-white/5">
+    <div class="logo flex items-center gap-3">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            class="text-cyan-400" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v20M17 5v14M7 9v6M22 10v4M2 10v4" />
+        </svg>
+        <h1 class="text-xl font-black tracking-tighter text-white">SOUNDMASTER</h1>
+    </div>
+</header>
+
+<nav class="agent-nav flex-1 p-4 space-y-2">
+    <button class="nav-btn group flex items-center gap-4 w-full p-4 rounded-xl transition-all hover:bg-white/5 active:scale-95" data-target="home">
+        <span class="nav-icon text-xl transition-transform group-hover:scale-110">🏠</span>
+        <span class="nav-label font-bold text-sm text-slate-400 group-hover:text-white">Dashboard</span>
+    </button>
+    <button class="nav-btn group flex items-center gap-4 w-full p-4 rounded-xl transition-all hover:bg-white/5 active:scale-95" data-target="analyzer">
+        <span class="nav-icon text-xl transition-transform group-hover:scale-110">🎛️</span>
+        <span class="nav-label font-bold text-sm text-slate-400 group-hover:text-white">Analisador</span>
+    </button>
+    <button class="nav-btn group flex items-center gap-4 w-full p-4 rounded-xl transition-all hover:bg-white/5 active:scale-95" data-target="eq">
+        <span class="nav-icon text-xl transition-transform group-hover:scale-110">🎚️</span>
+        <span class="nav-label font-bold text-sm text-slate-400 group-hover:text-white">Guia EQ</span>
+    </button>
+    <button class="nav-btn group flex items-center gap-4 w-full p-4 rounded-xl transition-all hover:bg-white/5 active:scale-95" data-target="rt60">
+        <span class="nav-icon text-xl transition-transform group-hover:scale-110">📐</span>
+        <span class="nav-label font-bold text-sm text-slate-400 group-hover:text-white">Acústica</span>
+    </button>
+    
+    <div class="pt-4 mt-4 border-t border-white/5">
+        <button class="nav-btn group flex items-center gap-4 w-full p-4 rounded-xl transition-all hover:bg-cyan-900/20 border border-transparent hover:border-cyan-500/30" data-target="ai-chat">
+            <span class="nav-icon text-xl transition-transform group-hover:scale-110">🤖</span>
+            <span class="nav-label font-bold text-sm text-cyan-400">Assistente IA</span>
+        </button>
+        <button class="nav-btn group flex items-center gap-4 w-full p-4 rounded-xl transition-all hover:bg-white/5" data-target="mobile">
+            <span class="nav-icon text-xl transition-transform group-hover:scale-110">📱</span>
+            <span class="nav-label font-bold text-sm text-slate-400 group-hover:text-white">Modo Mobile</span>
+        </button>
+    </div>
+</nav>
+
+<footer class="p-6 border-t border-white/5 text-[10px] text-slate-500 font-bold uppercase tracking-widest text-center">
+    v1.2.0-beta • Pro Edition
+</footer>

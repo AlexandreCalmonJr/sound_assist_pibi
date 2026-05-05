@@ -1,5 +1,4 @@
 // Analisador de Áudio em Tempo Real (Web Audio API)
-
 let audioCtx;
 let analyser;
 let source;
@@ -12,17 +11,76 @@ let pinkMeasurementCount = 0;
 let pinkMeasurementSum = null;
 let pinkReport = null;
 
-// Canvas setup
-const canvas = document.getElementById('fft-canvas');
-const canvasCtx = canvas.getContext('2d');
-const rmsBar = document.getElementById('rms-bar');
-const feedbackAlert = document.getElementById('feedback-alert');
-const analysisSummaryText = document.getElementById('acoustic-summary');
-const analysisDetailList = document.getElementById('acoustic-detail-list');
-const btnSendAnalysis = document.getElementById('btn-send-analysis');
-const btnMeasurePink = document.getElementById('btn-measure-pink');
-const btnDesktopPink = document.getElementById('btn-desktop-pink-noise');
-const pinkMeasureSummary = document.getElementById('pink-measure-summary');
+// Refs que serão capturadas no init
+let canvas, canvasCtx, rmsBar, feedbackAlert, analysisSummaryText, analysisDetailList, btnSendAnalysis, btnMeasurePink, btnDesktopPink, pinkMeasureSummary;
+
+function initAnalyzer() {
+    console.log('[Analyzer] Inicializando elementos do DOM...');
+    canvas = document.getElementById('fft-canvas');
+    if (!canvas) return; // Não está na página do analisador
+
+    canvasCtx = canvas.getContext('2d');
+    rmsBar = document.getElementById('rms-bar');
+    feedbackAlert = document.getElementById('feedback-alert');
+    analysisSummaryText = document.getElementById('acoustic-summary');
+    analysisDetailList = document.getElementById('acoustic-detail-list');
+    btnSendAnalysis = document.getElementById('btn-send-analysis');
+    btnMeasurePink = document.getElementById('btn-measure-pink');
+    btnDesktopPink = document.getElementById('btn-desktop-pink-noise');
+    pinkMeasureSummary = document.getElementById('pink-measure-summary');
+
+    // Re-anexar listeners
+    document.getElementById('btn-start-audio')?.addEventListener('click', startAnalyzer);
+    document.getElementById('btn-stop-audio')?.addEventListener('click', stopAnalyzer);
+    btnSendAnalysis?.addEventListener('click', sendAnalysisToAI);
+    btnMeasurePink?.addEventListener('click', startPinkNoiseMeasurement);
+    
+    // Sinais
+    const btnPink = document.getElementById('btn-pink-noise');
+    const btnSine = document.getElementById('btn-sine-wave');
+    const sineFreqInput = document.getElementById('sine-freq');
+
+    btnPink?.addEventListener('click', () => {
+        ensureAudioCtx();
+        if (isPinkNoisePlaying) stopPinkNoise();
+        else startPinkNoise(false);
+    });
+
+    btnSine?.addEventListener('click', () => {
+        ensureAudioCtx();
+        if (isSineWavePlaying && sineWaveNode) {
+            sineWaveNode.stop();
+            sineWaveNode.disconnect();
+            isSineWavePlaying = false;
+            btnSine.innerHTML = '🎵 Tom Senoidal';
+            return;
+        }
+        const freq = parseFloat(sineFreqInput?.value) || 60;
+        sineWaveNode = audioCtx.createOscillator();
+        sineWaveNode.type = 'sine';
+        sineWaveNode.frequency.value = freq;
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = 0.1;
+        sineWaveNode.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        sineWaveNode.start();
+        isSineWavePlaying = true;
+        btnSine.innerHTML = '⏹ Parar Senoidal';
+    });
+
+    btnDesktopPink?.addEventListener('click', () => {
+        ensureAudioCtx();
+        if (isPinkNoisePlaying) stopPinkNoise();
+        else startPinkNoise(false);
+    });
+}
+
+// Ouvir evento do roteador
+document.addEventListener('page-loaded', (e) => {
+    if (e.detail.pageId === 'analyzer') {
+        initAnalyzer();
+    }
+});
 
 async function startAnalyzer() {
     try {
@@ -474,16 +532,6 @@ async function sendAnalysisToAI() {
     }
 }
 
-document.getElementById('btn-start-audio').addEventListener('click', startAnalyzer);
-document.getElementById('btn-stop-audio').addEventListener('click', stopAnalyzer);
-btnSendAnalysis?.addEventListener('click', sendAnalysisToAI);
-btnMeasurePink?.addEventListener('click', startPinkNoiseMeasurement);
-btnDesktopPink?.addEventListener('click', () => {
-    ensureAudioCtx();
-    if (isPinkNoisePlaying) stopPinkNoise();
-    else startPinkNoise(false);
-});
-
 window.SoundMasterAnalyzer = {
     getLastAnalysis: function () { return lastAnalysis; },
     getPinkReport: function () { return pinkReport; },
@@ -510,46 +558,4 @@ function ensureAudioCtx() {
     }
 }
 
-// Gerador de Ruído Rosa (Algoritmo de filtro Paul Kellet)
-btnPink.addEventListener('click', () => {
-    ensureAudioCtx();
-    if (isPinkNoisePlaying) {
-        stopPinkNoise();
-        return;
-    }
-    startPinkNoise(false);
-});
-
-// Gerador de Onda Senoidal
-btnSine.addEventListener('click', () => {
-    ensureAudioCtx();
-    
-    if (isSineWavePlaying && sineWaveNode) {
-        sineWaveNode.stop();
-        sineWaveNode.disconnect();
-        isSineWavePlaying = false;
-        btnSine.innerHTML = '🎵 Tom Senoidal';
-        btnSine.classList.remove('primary');
-        btnSine.classList.add('secondary');
-        return;
-    }
-
-    const freq = parseFloat(sineFreqInput.value) || 60;
-    
-    sineWaveNode = audioCtx.createOscillator();
-    sineWaveNode.type = 'sine';
-    sineWaveNode.frequency.value = freq;
-    
-    const gainNode = audioCtx.createGain();
-    gainNode.gain.value = 0.1; // 10% volume
-    
-    sineWaveNode.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    
-    sineWaveNode.start();
-    isSineWavePlaying = true;
-    
-    btnSine.innerHTML = '⏹ Parar Senoidal';
-    btnSine.classList.remove('secondary');
-    btnSine.classList.add('primary');
-});
+// Helpers (mantidos fora para serem reutilizados)

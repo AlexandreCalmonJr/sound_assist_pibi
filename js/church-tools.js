@@ -113,4 +113,13 @@
     }
 
     window.SoundMasterChurchTools = { init };
+
+    // Ouvir eventos do roteador
+    document.addEventListener('page-loaded', (e) => {
+        if (e.detail.pageId === 'eq') {
+            initEqGuide();
+        } else if (e.detail.pageId === 'rt60') {
+            initRt60Calculator();
+        }
+    });
 })();

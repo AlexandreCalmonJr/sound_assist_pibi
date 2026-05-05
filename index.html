@@ -1,597 +1,90 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="dark">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SoundMaster - Assistente Ui24R</title>
+    <title>SoundMaster Pro - Assistente Ui24R</title>
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#00ffcc">
+    <meta name="theme-color" content="#09090b">
+    
+    <!-- Tailwind CSS (Build via CLI) -->
     <link rel="stylesheet" href="css/styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        [v-cloak] { display: none; }
+        
+        /* Custom scrollbar for dark theme */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #09090b; }
+        ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+    </style>
 </head>
 
-<body>
-    <div class="app-container">
-        <!-- ÁREA DO AGENTE (Esquerda) -->
-        <div class="agent-panel">
-            <header class="agent-header">
-                <div class="logo">
-                    <button id="btn-sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Alternar menu">☰</button>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)"
-                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 2v20M17 5v14M7 9v6M22 10v4M2 10v4" />
-                    </svg>
-                    <h1>SoundMaster</h1>
-                </div>
-            </header>
+<body class="bg-[#09090b] text-slate-200 overflow-hidden h-screen flex">
+    
+    <!-- Sidebar / Navigation -->
+    <aside id="app-sidebar" class="w-72 border-r border-white/5 flex flex-col bg-[#0c0c0e] z-20">
+        <!-- Carregado via components/sidebar.html -->
+    </aside>
 
-            <nav class="agent-nav">
-                <button class="nav-btn active" data-target="home" title="Home"><span class="nav-icon">🏠</span><span class="nav-label">Home</span></button>
-                <button class="nav-btn" data-target="analyzer" title="Analisador ao Vivo"><span class="nav-icon">🎛️</span><span class="nav-label">Analisador ao Vivo</span></button>
-                <button class="nav-btn" data-target="eq" title="Guia EQ"><span class="nav-icon">🎚️</span><span class="nav-label">Guia EQ</span></button>
-                <button class="nav-btn" data-target="rt60" title="Acústica (RT60)"><span class="nav-icon">📐</span><span class="nav-label">Acústica (RT60)</span></button>
-                <button class="nav-btn" data-target="mobile" title="Modo Mobile" style="color: var(--accent-primary);"><span class="nav-icon">📱</span><span class="nav-label">Modo Mobile</span></button>
-                <button class="nav-btn" data-target="ai-chat" title="Assistente IA" style="color: var(--accent-primary);"><span class="nav-icon">🤖</span><span class="nav-label">Assistente IA</span></button>
-            </nav>
-        </div>
-
-        <!-- ÁREA DE TRABALHO DO AGENTE (Centro) -->
-        <main class="agent-content" id="agent-workspace">
-            <div class="workspace-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; margin-bottom: 15px; border-bottom: 1px solid var(--border);">
-                <div style="display: flex; align-items: center; gap: 15px;">
-                    <h2 style="margin: 0; font-size: 1.2rem; color: var(--accent-primary);">Espaço de Trabalho</h2>
-                    <div class="status-indicator" style="background: rgba(0,0,0,0.3); padding: 4px 10px; border-radius: 12px; font-size: 0.85rem; border: 1px solid var(--border);">
-                        <span class="dot offline" id="mic-status-dot"></span>
-                        <span id="mic-status-text">Mic Offline</span>
-                    </div>
-                </div>
-                <button id="btn-hide-agent" class="action-btn secondary small" title="Recolher painel da IA para maximizar a mesa">Ocultar Ferramentas ➡️</button>
-            </div>
-                <!-- MÓDULO: Home -->
-                <section id="home" class="module page-section active">
-                    <div class="page-hero">
-                        <h2>SoundMaster</h2>
-                        <p class="subtitle">Use este painel para navegar entre análises, acústica, EQ e assistente IA de forma organizada.</p>
-                    </div>
-                    <div class="grid-card-row">
-                        <div class="card"> 
-                            <h3>Iniciar Analisador</h3>
-                            <p>Abra o analisador ao vivo para capturar ruído da igreja e gerar sugestões com IA.</p>
-                            <button class="action-btn primary" onclick="document.querySelector('[data-target=\'analyzer\']').click()">Ir para Analisador</button>
-                        </div>
-                        <div class="card"> 
-                            <h3>Acústica do Salão</h3>
-                            <p>Calcule RT60 e entenda como tratar reverberação e reflexões no espaço.</p>
-                            <button class="action-btn secondary" onclick="document.querySelector('[data-target=\'rt60\']').click()">Ir para Acústica</button>
-                        </div>
-                        <div class="card"> 
-                            <h3>Assistente IA</h3>
-                            <p>Envie a análise acústica e o relatório de ruído rosa para obter recomendações práticas.</p>
-                            <button class="action-btn secondary" onclick="document.querySelector('[data-target=\'ai-chat\']').click()">Abrir Assistente</button>
-                        </div>
-                    </div>
-
-                    <div class="card alert-card">
-                        <h3>Dica do Contexto</h3>
-                        <p>Sua igreja possui muitas janelas, o que causa reverberação. Use o módulo <strong>Acústica (RT60)</strong> para ver dicas de tratamento ou ative o <strong>Analisador</strong> para evitar microfonias.</p>
-                    </div>
-
-                    <div class="card info-card" id="local-ip-card"
-                        style="display: none; background: #2b3b4c; border-color: #34ace0; margin-bottom: 20px;">
-                        <h3>📱 Controle Remoto (iPads/Celulares)</h3>
-                        <p>Para abrir este assistente em outro dispositivo na mesma rede, acesse:</p>
-                        <h2 id="server-ip-display"
-                            style="color: #34ace0; text-align: center; margin: 10px 0; font-family: monospace;">
-                            Aguardando IP...</h2>
-                        <p style="margin-top: 10px;">Ou use este modo móvel direto:</p>
-                        <div class="mobile-quick-access">
-                            <a id="mobile-link" href="#" target="_blank" class="action-btn primary"
-                                style="width:100%; text-align:center; padding: 10px 12px;">Abrir modo mobile</a>
-                            <div class="qr-code-card">
-                                <img id="mobile-qr-code" src="" alt="QR Code para modo mobile" />
-                                <span>Leia no celular</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="quick-actions">
-                        <button class="action-btn primary"
-                            onclick="document.querySelector('[data-target=\'analyzer\']').click()">
-                            Iniciar Analisador
-                        </button>
-                        <div class="dashboard-mini-actions">
-                            <button class="action-btn secondary"
-                                onclick="document.querySelector('[data-target=\'rt60\']').click()">Acústica</button>
-                            <button class="action-btn secondary"
-                                onclick="document.querySelector('[data-target=\'ai-chat\']').click()">Assistente
-                                IA</button>
-                        </div>
-                    </div>
-
-                </section>
-
-                <!-- MÓDULO: Analisador -->
-                <section id="analyzer" class="module page-section">
-                    <h2>Analisador de Áudio (FFT)</h2>
-                    <div class="subtab-row">
-                        <button class="subtab-btn active" data-subtab="analyzer-visual">Visual</button>
-                        <button class="subtab-btn" data-subtab="analyzer-mappings">Mapeamentos</button>
-                        <button class="subtab-btn" data-subtab="analyzer-signals">Sinais</button>
-                    </div>
-
-                    <div id="analyzer-visual" class="analyzer-subtab active">
-                        <div class="analyzer-controls">
-                            <button id="btn-start-audio" class="action-btn primary">Ativar Microfone</button>
-                            <button id="btn-stop-audio" class="action-btn secondary" disabled>Parar</button>
-                        </div>
-
-                        <div class="visualizer-container">
-                            <canvas id="fft-canvas" width="400" height="200"></canvas>
-                            <div class="frequency-zones">
-                                <span>Sub</span>
-                                <span>Low</span>
-                                <span>Mid</span>
-                                <span>High-Mid</span>
-                                <span>High</span>
-                            </div>
-                        </div>
-
-                        <div class="feedback-detector">
-                            <h3>Detector de Feedback</h3>
-                            <div id="feedback-alert" class="alert safe">
-                                Sem picos perigosos.
-                            </div>
-                            <!-- Botão de Automação Nível 2 (Invisível por padrão) -->
-                            <button id="btn-auto-cut" class="action-btn primary mt-15"
-                                style="display: none; background: var(--danger); box-shadow: 0 0 15px rgba(255, 71, 87, 0.4);">
-                                🪄 Cortar Frequência na Mesa
-                            </button>
-                        </div>
-
-                        <div class="acoustic-summary-card" style="margin-top: 15px; padding: 15px; background: var(--surface-2); border: 1px solid rgba(255,255,255,.08);">
-                            <h3>Análise Acústica do Salão</h3>
-                            <p id="acoustic-summary" style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 12px;">Aguardando captação do ambiente...</p>
-                            <ul id="acoustic-detail-list" style="font-size: 0.85rem; color: var(--text-muted); padding-left: 18px; margin-bottom: 12px;"></ul>
-                            <div style="display: flex; gap: 10px;">
-                                <button id="btn-send-analysis" class="action-btn primary" style="flex: 1;">Analisar Ambiente 🎤</button>
-                                <button id="btn-desktop-pink-noise" class="action-btn secondary small" style="flex: 0.5;">Ruído Rosa 🔊</button>
-                            </div>
-                        </div>
-
-                        <div class="rms-meter">
-                            <div class="rms-bar-bg">
-                                <div id="rms-bar" class="rms-bar-fill"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="analyzer-mappings" class="analyzer-subtab">
-                        <div class="card mt-15" style="background: var(--surface-2); margin-bottom: 15px;">
-                            <h3>💾 Mapeamentos Acústicos Salvos</h3>
-                            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 10px;">Salve
-                                frequências problemáticas detectadas no salão.</p>
-                            <div style="display: flex; gap: 10px; align-items: center;">
-                                <input type="number" id="save-hz" class="custom-input" placeholder="Ex: 2500"
-                                    style="flex: 1; margin: 0;">
-                                <span style="font-size: 0.9rem;">Hz</span>
-                                <button id="btn-save-map" class="action-btn secondary" style="flex: 1;">Salvar
-                                    Pico</button>
-                            </div>
-                            <div style="display: grid; grid-template-columns: 90px 1fr; gap: 10px; margin-top: 10px;">
-                                <input type="number" id="save-map-channel" min="1" max="24" value="1"
-                                    class="custom-input" placeholder="Canal" style="margin: 0;">
-                                <input type="text" id="save-map-location" class="custom-input"
-                                    placeholder="Local: altar, fundo esquerdo, centro" style="margin: 0;">
-                            </div>
-                            <ul id="db-mappings-list"
-                                style="margin-top: 15px; font-size: 0.85rem; list-style: none; padding: 0;">
-                                <!-- Mapeamentos carregados via DB aqui -->
-                            </ul>
-                        </div>
-                    </div>
-
-                    <div id="analyzer-signals" class="analyzer-subtab">
-                        <div class="card" style="margin-top: 20px;">
-                            <h3>Gerador de Sinais (Alinhamento)</h3>
-                            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 15px;">Use a saída de
-                                fone ligada à mesa para jogar o som no PA.</p>
-                            <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
-                                <button id="btn-pink-noise" class="action-btn secondary"
-                                    style="flex: 1; min-width: 180px; border-color: #ff6b81;">
-                                    🔊 Ruído Rosa (Pink)
-                                </button>
-                                <button id="btn-measure-pink" class="action-btn secondary"
-                                    style="flex: 1; min-width: 180px; border-color: #ff6b81;">
-                                    🎚️ Medir Ruído Rosa
-                                </button>
-                            </div>
-                            <p id="pink-measure-summary" style="margin-top: 10px; font-size: 0.9rem; color: var(--text-muted);">Use a medição de ruído rosa para capturar a resposta do salão.</p>
-                            <div style="display: flex; gap: 10px; align-items: center;">
-                                <button id="btn-sine-wave" class="action-btn secondary"
-                                    style="flex: 1; border-color: #34ace0;">
-                                    🎵 Tom Senoidal
-                                </button>
-                                <input type="number" id="sine-freq" value="60" class="custom-input"
-                                    style="width: 80px; margin-top: 0; padding: 12px 5px; text-align: center;"
-                                    placeholder="Hz">
-                                <span style="font-size: 0.9rem;">Hz</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- MÓDULO: Guia EQ -->
-                <section id="eq" class="module page-section">
-                    <h2>Guia de Equalização</h2>
-                    <select id="eq-instrument-select" class="custom-select">
-                        <option value="voz">Voz / Pregação</option>
-                        <option value="violao">Violão Acústico</option>
-                        <option value="baixo">Baixo</option>
-                        <option value="bumbo">Bateria (Bumbo)</option>
-                        <option value="teclado">Teclado</option>
-                    </select>
-
-                    <div id="eq-data-display" class="card info-card">
-                        <!-- Preenchido via JS -->
-                    </div>
-                </section>
-
-                <!-- MÓDULO: RT60 & Acústica -->
-                <section id="rt60" class="module page-section">
-                    <h2>Calculadora Acústica</h2>
-                    <p class="subtitle">Insira as dimensões do salão para calcular a reverberação e o Delay das caixas
-                        auxiliares.</p>
-
-                    <div class="form-group" style="display: flex; gap: 10px;">
-                        <div style="flex: 1;">
-                            <label>Comprimento (m):</label>
-                            <input type="number" id="rt-length" value="20" class="custom-input">
-                        </div>
-                        <div style="flex: 1;">
-                            <label>Largura (m):</label>
-                            <input type="number" id="rt-width" value="10" class="custom-input">
-                        </div>
-                        <div style="flex: 1;">
-                            <label>Altura (m):</label>
-                            <input type="number" id="rt-height" value="5" class="custom-input">
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Distância: PA até Caixas Auxiliares (metros):</label>
-                        <input type="number" id="rt-delay-dist" value="10" class="custom-input" placeholder="Ex: 10">
-                        <small style="color: var(--text-muted); font-size: 0.75rem;">Deixe em 0 se não tiver caixas de
-                            reforço.</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Nível de Absorção (Estimado):</label>
-                        <select id="rt-absorption" class="custom-select">
-                            <option value="0.05">Baixa (Piso liso, muito vidro, paredes nuas)</option>
-                            <option value="0.15">Média (Cadeiras estofadas, pessoas, algumas cortinas)</option>
-                            <option value="0.30">Alta (Carpete, forro acústico, cortinas grossas)</option>
-                        </select>
-                    </div>
-                    <button id="btn-calc-rt60" class="action-btn primary">Calcular Acústica</button>
-
-                    <div id="rt60-result" class="card mt-15" style="display:none;"></div>
-
-                    <!-- MAPA VISUAL DE MAPEAMENTO -->
-                    <div id="mapping-container" class="card mt-15" style="display:none;">
-                        <h3>Mapa Visual de Cobertura</h3>
-                        <p class="subtitle">Clique no mapa para registrar uma análise acústica neste ponto.</p>
-                        <div class="map-wrapper" style="position: relative; background: #000; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-top: 10px;">
-                            <canvas id="mapping-canvas" width="600" height="300" style="display: block; width: 100%; height: auto;"></canvas>
-                        </div>
-                        <div id="mapping-legend" style="margin-top: 10px; font-size: 0.8rem; color: var(--text-muted); display: flex; gap: 15px; justify-content: center;">
-                            <span><span style="display:inline-block; width:10px; height:10px; background:#2ecc71; border-radius:50%;"></span> Bom</span>
-                            <span><span style="display:inline-block; width:10px; height:10px; background:#f1c40f; border-radius:50%;"></span> Alerta</span>
-                            <span><span style="display:inline-block; width:10px; height:10px; background:#e74c3c; border-radius:50%;"></span> Crítico</span>
-                        </div>
-                        <button id="btn-clear-mapping" class="action-btn secondary small mt-15">Limpar Mapa</button>
-                    </div>
-                </section>
-
-                <!-- MÓDULO: Mobile -->
-                <section id="mobile" class="module page-section">
-                    <h2>Modo Mobile</h2>
-                    <p class="subtitle">Acesse a versão web pelo celular para usar o microfone do telefone e ajustar o
-                        som remotamente.</p>
-                    <div class="card">
-                        <h3>Abra no seu celular</h3>
-                        <p>Use o endereço abaixo no navegador do seu telefone. Se possível, copie pelo QR Code ou use o
-                            link direto.</p>
-                        <div class="mobile-link-card">
-                            <span id="mobile-url" style="font-family: monospace; word-break: break-all;">Aguardando
-                                IP...</span>
-                        </div>
-                        <a id="mobile-open-link" href="#" target="_blank" class="action-btn primary"
-                            style="margin-top: 15px;">Abrir modo mobile</a>
-                        <div class="mobile-tutorial-compact" style="margin-top: 15px;">
-                            <span style="color: var(--text-muted);">Copie o link ou escaneie o QR Code no
-                                celular.</span>
-                        </div>
-                    </div>
-                    <div class="card">
-                        <h3>Passo a passo</h3>
-                        <ul class="mobile-tutorial-list" style="padding-left: 20px; color: var(--text-muted);">
-                            <li>Conecte seu celular na mesma rede local (Wi-Fi).</li>
-                            <li>Abra o link no navegador do celular.</li>
-                            <li>Permita o acesso ao microfone quando o navegador pedir.</li>
-                            <li>Use o slider master para ajustar o volume do PA.</li>
-                            <li>Ative o microfone móvel para verificar o áudio ambiente.</li>
-                        </ul>
-                    </div>
-                    <div class="card">
-                        <h3>Dicas rápidas</h3>
-                        <ul class="mobile-tutorial-list" style="padding-left: 20px; color: var(--text-muted);">
-                            <li>Use fone de ouvido no celular para evitar loop de feedback.</li>
-                            <li>Segure o telefone próximo ao ponto que você quer medir.</li>
-                            <li>Feche portas/janelas para comparar antes e depois.</li>
-                        </ul>
-                    </div>
-                </section>
-
-                <!-- MÓDULO: Assistente IA -->
-                <section id="ai-chat" class="module page-section">
-                    <h2>Assistente IA Local</h2>
-                    <div class="sound-ai-layout">
-                        <div class="sound-ai-tools">
-                            <div class="sound-ai-panel">
-                                <h3>Canal alvo</h3>
-                                <div class="sound-ai-channel-row">
-                                    <input id="ai-target-channel" type="number" min="1" max="24" value="1"
-                                        class="custom-input" aria-label="Canal alvo da IA">
-                                    <span>canal</span>
-                                </div>
-                                <div class="sound-ai-button-grid">
-                                    <button class="sound-ai-prompt" type="button"
-                                        data-prompt="Voz abafada no canal alvo. Quero limpar graves embolados e melhorar inteligibilidade.">Voz
-                                        abafada</button>
-                                    <button class="sound-ai-prompt" type="button"
-                                        data-prompt="Microfonia ou apito no canal alvo. Quero cortar o pico sem estragar a voz.">Microfonia</button>
-                                    <button class="sound-ai-prompt" type="button"
-                                        data-prompt="Som metalico e aspero no PA. Quero reduzir dureza nos medios-agudos.">Som
-                                        aspero</button>
-                                    <button class="sound-ai-prompt" type="button"
-                                        data-prompt="Retorno alto vazando no altar. Quero HPF, gate e controle de ganho.">Retorno
-                                        alto</button>
-                                    <button class="sound-ai-prompt" type="button"
-                                        data-prompt="Reflexao de vidro deixando a fala agressiva. Quero limpar o master para culto.">Vidro/eco</button>
-                                    <button class="sound-ai-prompt" type="button"
-                                        data-prompt="Live post-fader esta dura e cansativa. Quero um ajuste de EQ para transmissao.">Live
-                                        dura</button>
-                                </div>
-                            </div>
-
-                            <div class="sound-ai-panel">
-                                <h3>Acoes rapidas Ui</h3>
-                                <div class="sound-ai-button-grid">
-                                    <button id="btn-ai-clean-channel" class="sound-action-btn primary" type="button">Som
-                                        limpo no canal</button>
-                                    <button id="btn-ai-hpf" class="sound-action-btn" type="button">HPF 100Hz</button>
-                                    <button id="btn-ai-gate" class="sound-action-btn" type="button">Gate leve</button>
-                                    <button id="btn-ai-compressor" class="sound-action-btn" type="button">Compressor
-                                        leve</button>
-                                    <button id="btn-ai-eq-mud" class="sound-action-btn" type="button">Cortar
-                                        250Hz</button>
-                                    <button id="btn-ai-eq-harsh" class="sound-action-btn" type="button">Cortar
-                                        3.2kHz</button>
-                                    <button id="btn-ai-afs-on" class="sound-action-btn primary" type="button">Ativar
-                                        AFS2</button>
-                                    <button id="btn-ai-afs-off" class="sound-action-btn danger" type="button">Desativar
-                                        AFS2</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <p class="subtitle">Relate um problema para que a IA analise e sugira comandos na mesa
-                        (Human-in-the-loop).</p>
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px;">
-                        <button id="btn-ai-send-analysis" class="action-btn primary" type="button">Enviar análise acústica atual</button>
-                        <button id="btn-ai-send-pink-report" class="action-btn secondary" type="button">Enviar relatório de ruído rosa</button>
-                    </div>
-                    <div class="card"
-                        style="margin-bottom: 15px; background: rgba(255,255,255,0.04); border-color: rgba(0,255,204,0.18);">
-                        <h3>Frases sugeridas</h3>
-                        <ul class="mobile-tutorial-list" style="padding-left: 20px; color: var(--text-muted);">
-                            <li>Voz abafada: corte 250Hz</li>
-                            <li>Microfonia na voz: corte 4-6kHz</li>
-                            <li>Retorno muito alto no altar: HPF 100Hz + gate</li>
-                            <li>Live POST-FADER com dureza: corte 1.8-2.2kHz</li>
-                            <li>Reflexão de vidro: corte 2.5kHz na saída PA</li>
-                        </ul>
-                    </div>
-                    <div class="card sound-ai-chat">
-                        <div class="chat-header">
-                            <div>
-                                <strong>Status IA:</strong> <span id="chat-status"
-                                    style="color: var(--success);">Online</span>
-                            </div>
-                            <button id="btn-clear-chat" class="action-btn secondary"
-                                style="padding: 9px 14px; font-size: 0.85rem;">Limpar conversa</button>
-                        </div>
-                        <div id="chat-messages" class="chat-messages"
-                            style="flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 10px;">
-                            <div class="chat-bubble chat-assistant">
-                                Olá! Sou o SoundMaster IA. Conte o problema do som e eu sugiro ajustes práticos.
-                            </div>
-                        </div>
-                        <div class="chat-footer" style="display: flex; gap: 10px; margin-top: 10px;">
-                            <input type="text" id="chat-input" class="custom-input"
-                                placeholder="Ex: A voz está embolada e metálica" style="flex: 1; margin: 0;">
-                            <button id="btn-chat-send" class="action-btn primary" type="button">Enviar</button>
-                        </div>
-                    </div>
-                </section>
-            </main>
-
-        <!-- ÁREA DA MESA (Direita - Ui24R) -->
-        <div class="mixer-panel" id="mixer-workspace">
-            <div class="mixer-header">
-                <div class="mixer-title-block">
-                    <span>Soundcraft Ui24R</span>
-                    <span id="mixer-status-badge" class="mixer-status offline">Offline</span>
-                </div>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <input type="text" id="mixer-ip" value="10.10.1.1" placeholder="IP da mesa (ex: 10.10.1.1)">
-                    <button id="btn-connect-mixer" class="action-btn small primary">Conectar</button>
-                    <button id="btn-show-agent" class="action-btn small secondary" style="display: none;" title="Mostrar painel da IA">⬅️ Mostrar IA</button>
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col relative overflow-hidden">
+        <!-- Content Header -->
+        <header class="h-16 border-b border-white/5 bg-[#09090b]/80 backdrop-blur-md flex items-center justify-between px-8 z-10">
+            <div class="flex items-center gap-4">
+                <h2 id="page-title" class="text-sm font-bold uppercase tracking-widest text-slate-500">Dashboard</h2>
+                <div class="flex items-center gap-2 px-3 py-1 bg-black/40 rounded-full border border-white/5">
+                    <div class="w-1.5 h-1.5 rounded-full bg-slate-600" id="mic-status-dot"></div>
+                    <span class="text-[10px] font-bold uppercase text-slate-400" id="mic-status-text">Mic Offline</span>
                 </div>
             </div>
-            <div class="mixer-tabs">
-                <button class="mixer-tab-btn active" data-tab="mixer-overview">Visão Geral</button>
-                <button class="mixer-tab-btn" data-tab="mixer-connection">Conexão</button>
-                <button class="mixer-tab-btn" data-tab="mixer-presets">Presets</button>
-                <button class="mixer-tab-btn" data-tab="mixer-interface">Interface</button>
+            
+            <div class="flex items-center gap-4">
+                <button id="btn-toggle-mixer" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold transition-all border border-white/5">
+                    Ocultar Mixer ➡️
+                </button>
             </div>
-            <div class="mixer-panel-body">
-                <section id="mixer-overview" class="mixer-panel-section active">
-                    <div class="mixer-card">
-                        <h3>Status da Mesa</h3>
-                        <p>IP configurado: <strong id="mixer-ip-display">10.10.1.1</strong></p>
-                        <p>Conexão: <strong id="mixer-current-status">Offline</strong></p>
-                        <p>Nível master: <strong id="mixer-master-level">0%</strong> <span id="mixer-master-db"
-                                style="color: var(--text-muted); font-size: 0.9rem;">(-∞ dB)</span></p>
-                        <div style="margin-top: 15px;">
-                            <input type="range" id="master-volume-slider" min="0" max="100" value="0"
-                                style="width: 100%;">
-                            <div
-                                style="display:flex; justify-content:space-between; font-size:0.8rem; color: var(--text-muted); margin-top: 8px;">
-                                <span>-∞ dB</span>
-                                <span>0 dB</span>
-                            </div>
-                        </div>
-                        <div style="display:flex; gap:10px; margin-top: 10px;">
-                            <button id="btn-undo" class="action-btn secondary" style="flex:1;" title="Desfazer">↩ Undo</button>
-                            <button id="btn-redo" class="action-btn secondary" style="flex:1;" title="Refazer" disabled>↪ Redo</button>
-                        </div>
-                        <div style="display:flex; gap:10px; margin-top: 15px;">
-                            <button id="btn-master-volume-down" class="action-btn secondary"
-                                style="flex:1;">-1%</button>
-                            <button id="btn-master-volume-up" class="action-btn secondary" style="flex:1;">+1%</button>
-                        </div>
-                    </div>
-                    <div class="mixer-card">
-                        <h3>Ações Rápidas</h3>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-                            <button id="btn-switch-interface" class="action-btn secondary small">Interface Mesa</button>
-                            <button id="btn-show-log" class="action-btn secondary small">Ver Logs</button>
-                        </div>
-                    </div>
-                    <div class="mixer-card">
-                        <h3>Gerador de Sinais</h3>
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <button id="btn-pink-noise-main" class="action-btn secondary small">Ruído Rosa 🔊</button>
-                            <span id="pink-noise-status" style="font-size: 0.8rem; color: var(--text-muted);">Desligado</span>
-                        </div>
-                    </div>
-                    <div class="mixer-card" id="local-ip-card" style="display: none; border-left: 4px solid var(--accent-primary);">
-                        <h3>Central de Comando Mobile</h3>
-                        <p style="font-size: 0.85rem; margin-bottom: 8px;">Acesse para medição acústica via celular:</p>
-                        <div style="display: flex; gap: 15px; align-items: flex-start;">
-                            <img id="mobile-qr-code" style="width: 120px; height: 120px; border: 1px solid var(--border); padding: 5px; background: white;" alt="QR Code Mobile">
-                            <div>
-                                <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">Link Seguro (HTTPS):</p>
-                                <a id="mobile-url" href="#" target="_blank" style="font-size: 0.8rem; color: var(--accent-primary); word-break: break-all; display: block; margin-bottom: 10px;">Carregando...</a>
-                                <a id="mobile-open-link" href="#" target="_blank" class="action-btn primary small">Abrir no Navegador</a>
-                            </div>
-                        </div>
-                    </div>
-                </section>
+        </header>
 
-                <section id="mixer-connection" class="mixer-panel-section">
-                    <div class="mixer-card">
-                        <h3>Conexão e Logs</h3>
-                        <p>Use este painel para conectar, desconectar e revisar os eventos do mixer.</p>
-                        <div class="connection-actions">
-                            <button id="btn-disconnect-mixer" class="action-btn secondary">Desconectar</button>
-                        </div>
-                    </div>
-                    <div class="mixer-card">
-                        <h3>Sugestões da IA</h3>
-                        <div id="ai-suggestions-list" class="mixer-suggestion-list">
-                            <div class="mixer-suggestion-item" style="color: var(--text-muted);">Nenhuma sugestão
-                                disponível ainda.</div>
-                        </div>
-                    </div>
-                    <div class="mixer-card">
-                        <h3>Ações Técnicas Rápidas</h3>
-                        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 10px;">Informe o canal e
-                            acione rapidamente HPF, Gate ou AFS2.</p>
-                        <div style="display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
-                            <input id="quick-channel-number" type="number" min="1" max="24" value="1"
-                                class="custom-input" placeholder="Canal" style="width: 100px;">
-                            <span style="color: var(--text-muted); font-size: 0.85rem;">Canal alvo</span>
-                        </div>
-                        <div style="display:grid; gap:10px;">
-                            <button id="btn-quick-hpf" class="action-btn primary">HPF 100Hz no canal</button>
-                            <button id="btn-quick-gate" class="action-btn secondary">Ativar Gate no canal</button>
-                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                                <button id="btn-quick-afs-enable" class="action-btn primary">Ativar AFS2 Global</button>
-                                <button id="btn-quick-afs-disable" class="action-btn secondary">Desativar AFS2</button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mixer-log-box" id="mixer-log">
-                        <div class="mixer-log-entry">Logs do mixer aparecerão aqui.</div>
-                    </div>
-                </section>
-
-                <section id="mixer-presets" class="mixer-panel-section">
-                    <div class="card">
-                        <h3>Gerenciar Presets</h3>
-                        <p class="subtitle">Salve o estado atual do mixer para carregar depois.</p>
-                        <div class="custom-input">
-                            <input type="text" id="preset-name" placeholder="Nome do Preset (ex: Culto Manhã)">
-                            <button id="btn-save-preset" class="action-btn primary">Salvar Atual</button>
-                        </div>
-                        <div id="presets-list" class="mixer-log-box" style="height: 200px; margin-top: 15px;">
-                            <div class="mixer-log-entry">Carregando presets...</div>
-                        </div>
-                    </div>
-                </section>
-
-                <section id="mixer-interface" class="mixer-panel-section">
-                    <div class="mixer-frame-container">
-                        <div id="mixer-placeholder" class="mixer-placeholder">
-                            <p>Insira o IP da sua Soundcraft Ui24R acima e clique em conectar para carregar a interface
-                                aqui.</p>
-                            <p><small>(Normalmente 10.10.1.1 ou 10.10.2.1 no Wi-Fi interno)</small></p>
-                        </div>
-                        <iframe id="mixer-iframe" src="" frameborder="0" allowfullscreen></iframe>
-                    </div>
-                </section>
+        <!-- Dynamic Content Container -->
+        <div id="agent-workspace" class="flex-1 overflow-y-auto p-8 transition-opacity duration-300">
+            <!-- Carregado via Router -->
+            <div class="flex items-center justify-center h-full">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
             </div>
         </div>
-    </div>
+    </main>
 
-    <!-- socket.io (mantido igual) -->
+    <!-- Mixer Panel Area -->
+    <aside id="app-mixer" class="w-[400px] transition-all duration-500 ease-in-out">
+        <!-- Carregado via components/mixer-panel.html -->
+    </aside>
+
+    <!-- Scripts Core -->
     <script src="/socket.io/socket.io.js"></script>
-
-    <!-- ① Store — deve carregar antes de tudo -->
     <script src="js/store/app.store.js"></script>
-
-    <!-- ② Services — dependem do AppStore -->
     <script src="js/services/socket.service.js"></script>
     <script src="js/services/mixer.service.js"></script>
     <script src="js/services/ai.service.js"></script>
-
-    <!-- ③ Módulos principais -->
+    
+    <!-- Router & Shell Logic -->
+    <script src="js/core/router.js"></script>
+    
+    <!-- Scripts de Lógica -->
     <script src="js/data.js"></script>
     <script src="js/layout.js"></script>
     <script src="js/analyzer.js"></script>
     <script src="js/mapping-visual.js"></script>
     <script src="js/church-tools.js"></script>
     <script src="js/mappings.js"></script>
-
-    <!-- ④ UIs refatoradas -->
     <script src="js/ui/mixer-panel.ui.js"></script>
     <script src="js/ui/ai-chat.ui.js"></script>
-
-    <!-- ⑤ Inicialização — deve ser o último -->
     <script src="js/app.js"></script>
 </body>
-
 </html>

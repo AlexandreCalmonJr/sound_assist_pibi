@@ -1,0 +1,82 @@
+<section id="mobile-page" class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <!-- Header -->
+    <div class="flex flex-col gap-2">
+        <h2 class="text-3xl font-black tracking-tight text-white uppercase">Modo Mobile</h2>
+        <p class="text-slate-400 font-medium max-w-2xl">
+            Acesse a versão web pelo celular para usar o microfone do telefone e ajustar o som remotamente.
+        </p>
+    </div>
+
+    <!-- QR Code Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-8 flex flex-col items-center justify-center text-center group transition-all hover:bg-white/[0.07]">
+            <h3 class="text-xl font-bold text-white mb-6">Abra no seu celular</h3>
+            
+            <div class="bg-white p-4 rounded-2xl mb-6 shadow-2xl shadow-cyan-500/20">
+                <img id="mobile-qr-code" class="w-48 h-48" alt="QR Code para modo mobile" />
+            </div>
+            
+            <div class="space-y-4 w-full max-w-sm">
+                <div class="bg-black/40 border border-white/10 rounded-xl p-4 font-mono text-xs text-cyan-400 break-all">
+                    <span id="mobile-url">Aguardando IP...</span>
+                </div>
+                <a id="mobile-open-link" href="#" target="_blank" class="flex items-center justify-center gap-2 w-full p-4 bg-cyan-500 hover:bg-cyan-400 text-black font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 shadow-lg shadow-cyan-500/20">
+                    <span>Abrir Link Direto</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+
+        <div class="space-y-6">
+            <div class="bg-white/5 border border-white/10 rounded-2xl p-8 transition-all hover:bg-white/[0.07]">
+                <h3 class="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                    <span class="text-cyan-400">01.</span> Passo a passo
+                </h3>
+                <ul class="space-y-4">
+                    <li class="flex gap-4 text-slate-400">
+                        <span class="text-cyan-500 font-bold">•</span>
+                        <span>Conecte seu celular na mesma rede local (Wi-Fi).</span>
+                    </li>
+                    <li class="flex gap-4 text-slate-400">
+                        <span class="text-cyan-500 font-bold">•</span>
+                        <span>Abra o link no navegador do celular.</span>
+                    </li>
+                    <li class="flex gap-4 text-slate-400">
+                        <span class="text-cyan-500 font-bold">•</span>
+                        <span>Permita o acesso ao microfone quando o navegador pedir.</span>
+                    </li>
+                    <li class="flex gap-4 text-slate-400">
+                        <span class="text-cyan-500 font-bold">•</span>
+                        <span>Use o slider master para ajustar o volume do PA.</span>
+                    </li>
+                    <li class="flex gap-4 text-slate-400">
+                        <span class="text-cyan-500 font-bold">•</span>
+                        <span>Ative o microfone móvel para verificar o áudio ambiente.</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="bg-cyan-500/5 border border-cyan-500/20 rounded-2xl p-8">
+                <h3 class="text-xl font-bold text-cyan-400 mb-6 flex items-center gap-3">
+                    <span class="text-cyan-400">02.</span> Dicas rápidas
+                </h3>
+                <ul class="space-y-4">
+                    <li class="flex gap-4 text-slate-400">
+                        <span class="text-cyan-500 font-bold">💡</span>
+                        <span>Use fone de ouvido no celular para evitar loop de feedback.</span>
+                    </li>
+                    <li class="flex gap-4 text-slate-400">
+                        <span class="text-cyan-500 font-bold">💡</span>
+                        <span>Segure o telefone próximo ao ponto que você quer medir.</span>
+                    </li>
+                    <li class="flex gap-4 text-slate-400">
+                        <span class="text-cyan-500 font-bold">💡</span>
+                        <span>Feche portas/janelas para comparar antes e depois.</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>

@@ -117,6 +117,14 @@ function createMixerActions(getMixer) {
             sendUi('m.mute', cmd.enabled ? 1 : 0);
             return `Mute do master ${cmd.enabled ? 'ativado' : 'desativado'}.`;
         }
+        if (cmd.action === 'run_master_ideal_curve') {
+            const steps = [
+                applyEqCut('master', null, 60, 3, 1.0, 1),
+                applyEqCut('master', null, 400, -2, 1.2, 2),
+                applyEqCut('master', null, 3000, 1, 1.0, 3)
+            ];
+            return `Curva ideal aplicada no Master: ${steps.join(' ')}`;
+        }
         if (cmd.action === 'set_oscillator') {
             return applyOscillator(cmd.enabled !== 0, cmd.type, cmd.level);
         }

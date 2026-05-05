@@ -238,8 +238,18 @@ function registerSocketHandlers(io) {
             if (cmd) {
                 redoStack.push(cmd);
                 socket.emit('mixer_log', 'Undo: Comando revertido (Simulado/Visual)');
-                // Implementar logica inversa real seria complexo sem snapshot,
-                // mas podemos avisar o usuario.
+            }
+        });
+
+        socket.on('send_raw_message', (data) => {
+            if (!mixer) return;
+            try {
+                if (mixer.conn && typeof mixer.conn.sendMessage === 'function') {
+                    mixer.conn.sendMessage(data.message);
+                    socket.emit('mixer_log', `RAW enviado: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('Erro ao enviar mensagem RAW:', error.message);
             }
         });
 

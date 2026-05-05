@@ -11,22 +11,22 @@
             const mobileLink = document.getElementById('mobile-open-link');
             const mobileQrCode = document.getElementById('mobile-qr-code');
 
-            if (!ipCard || !ipDisplay || config.localIp === '127.0.0.1') return;
+            if (!ipCard || config.localIp === '127.0.0.1') return;
 
-            ipCard.style.display = 'block';
+            if (ipCard) ipCard.style.display = 'block';
             
             // Prioriza o túnel seguro (HTTPS) para que o microfone funcione em todos os celulares
             const baseUrl = config.tunnelUrl || `http://${config.localIp}:${config.port}`;
             const localUrl = `http://${config.localIp}:${config.port}`;
             const mobileHref = `${baseUrl}/mobile.html`;
 
-            ipDisplay.innerText = localUrl;
+            if (ipDisplay) ipDisplay.innerText = localUrl;
             if (mobileUrl) mobileUrl.innerText = mobileHref;
             if (mobileLink) mobileLink.href = mobileHref;
             
             if (mobileQrCode) {
                 // Adiciona um aviso visual se estiver usando o túnel
-                if (config.tunnelUrl) {
+                if (config.tunnelUrl && mobileUrl) {
                     mobileUrl.style.color = 'var(--accent-primary)';
                     mobileUrl.title = 'Link Seguro Ativo (HTTPS)';
                 }
@@ -122,4 +122,16 @@
     }
 
     window.SoundMasterMappings = { init, loadMappings };
+
+    // Ouvir eventos do roteador
+    document.addEventListener('page-loaded', (e) => {
+        if (e.detail.pageId === 'home') {
+            loadConfig();
+        } else if (e.detail.pageId === 'analyzer') {
+            loadMappings();
+            initSaveMapping();
+        } else if (e.detail.pageId === 'mobile') {
+            loadConfig();
+        }
+    });
 })();

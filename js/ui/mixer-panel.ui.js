@@ -16,39 +16,43 @@
     // -------------------------------------------------------------------------
     const $ = function (id) { return document.getElementById(id); };
 
-    const els = {
-        btnConnect:       $('btn-connect-mixer'),
-        btnDisconnect:    $('btn-disconnect-mixer'),
-        btnSwitchIface:   $('btn-switch-interface'),
-        btnShowLog:       $('btn-show-log'),
-        ipInput:          $('mixer-ip'),
-        iframe:           $('mixer-iframe'),
-        placeholder:      $('mixer-placeholder'),
-        statusBadge:      $('mixer-status-badge'),
-        statusText:       $('mixer-current-status'),
-        ipDisplay:        $('mixer-ip-display'),
-        masterLevelText:  $('mixer-master-level'),
-        masterDbLabel:    $('mixer-master-db'),
-        masterSlider:     $('master-volume-slider'),
-        masterDown:       $('btn-master-volume-down'),
-        masterUp:         $('btn-master-volume-up'),
-        logBox:           $('mixer-log'),
-        suggestionsList:  $('ai-suggestions-list'),
-        quickChannel:     $('quick-channel-number'),
-        btnQuickHpf:      $('btn-quick-hpf'),
-        btnQuickGate:     $('btn-quick-gate'),
-        btnAfsOn:         $('btn-quick-afs-enable'),
-        btnAfsOff:        $('btn-quick-afs-disable'),
-        tabButtons:       document.querySelectorAll('.mixer-tab-btn'),
-        tabSections:      document.querySelectorAll('.mixer-panel-section'),
-        btnPinkNoiseMain: $('btn-pink-noise-main'),
-        pinkNoiseStatus:  $('pink-noise-status'),
-        btnUndo:          $('btn-undo'),
-        btnRedo:          $('btn-redo'),
-        btnSavePreset:    $('btn-save-preset'),
-        presetNameInput:  $('preset-name'),
-        presetsList:      $('presets-list')
-    };
+    let els = {};
+    
+    function _getEls() {
+        return {
+            btnConnect:       $('btn-connect-mixer'),
+            btnDisconnect:    $('btn-disconnect-mixer'),
+            btnSwitchIface:   $('btn-switch-interface'),
+            btnShowLog:       $('btn-show-log'),
+            ipInput:          $('mixer-ip'),
+            iframe:           $('mixer-iframe'),
+            placeholder:      $('mixer-placeholder'),
+            statusBadge:      $('mixer-status-badge'),
+            statusText:       $('mixer-current-status'),
+            ipDisplay:        $('mixer-ip-display'),
+            masterLevelText:  $('mixer-master-level'),
+            masterDbLabel:    $('mixer-master-db'),
+            masterSlider:     $('master-volume-slider'),
+            masterDown:       $('btn-master-volume-down'),
+            masterUp:         $('btn-master-volume-up'),
+            logBox:           $('mixer-log'),
+            suggestionsList:  $('ai-suggestions-list'),
+            quickChannel:     $('quick-channel-number'),
+            btnQuickHpf:      $('btn-quick-hpf'),
+            btnQuickGate:     $('btn-quick-gate'),
+            btnAfsOn:         $('btn-quick-afs-enable'),
+            btnAfsOff:        $('btn-quick-afs-disable'),
+            tabButtons:       document.querySelectorAll('.mixer-tab-btn'),
+            tabSections:      document.querySelectorAll('.mixer-panel-section'),
+            btnPinkNoiseMain: $('btn-pink-noise-main'),
+            pinkNoiseStatus:  $('pink-noise-status'),
+            btnUndo:          $('btn-undo'),
+            btnRedo:          $('btn-redo'),
+            btnSavePreset:    $('btn-save-preset'),
+            presetNameInput:  $('preset-name'),
+            presetsList:      $('presets-list')
+        };
+    }
 
     // -------------------------------------------------------------------------
     // Helpers de renderização
@@ -163,11 +167,18 @@
     function _initTabs() {
         els.tabButtons.forEach(function (tab) {
             tab.addEventListener('click', function () {
-                els.tabButtons.forEach(function (b) { b.classList.remove('active'); });
-                els.tabSections.forEach(function (s) { s.classList.remove('active'); });
-                tab.classList.add('active');
+                // Update buttons
+                els.tabButtons.forEach(function (b) { 
+                    b.classList.remove('active', 'bg-white/10', 'text-white');
+                    b.classList.add('text-slate-500');
+                });
+                tab.classList.add('active', 'bg-white/10', 'text-white');
+                tab.classList.remove('text-slate-500');
+
+                // Update sections
+                els.tabSections.forEach(function (s) { s.classList.add('hidden'); });
                 const target = document.getElementById(tab.getAttribute('data-tab'));
-                if (target) target.classList.add('active');
+                if (target) target.classList.remove('hidden');
             });
         });
     }
@@ -319,6 +330,7 @@
     // Init
     // -------------------------------------------------------------------------
     function init() {
+        els = _getEls();
         _initTabs();
         _initEvents();
         _initSubscriptions();

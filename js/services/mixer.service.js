@@ -243,6 +243,14 @@
         return _emit('undo_command', {}, 'Desfazer última ação solicitada.');
     }
 
+    /**
+     * Envia uma mensagem RAW diretamente para a mesa.
+     * @param {string} message 
+     */
+    function sendRaw(message) {
+        return _emit('send_raw_message', { message: message }, 'Comando RAW enviado: ' + message);
+    }
+
     // -------------------------------------------------------------------------
     // Exportação
     // -------------------------------------------------------------------------
@@ -263,6 +271,7 @@
         savePreset,
         listPresets,
         loadPreset,
-        undo
+        undo,
+        sendRaw
     };
 })();

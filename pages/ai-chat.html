@@ -1,0 +1,74 @@
+<section id="ai-chat" class="module page-section">
+    <div class="mb-6">
+        <h2 class="text-2xl font-bold text-white">Assistente IA Local</h2>
+        <p class="text-slate-400 text-sm">Relate um problema para que a IA analise e sugira comandos na mesa (Human-in-the-loop).</p>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+        <!-- Ferramentas da IA -->
+        <div class="xl:col-span-1 space-y-6">
+            <div class="bg-slate-800/40 border border-white/10 rounded-2xl p-5">
+                <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4">Canal Alvo</h3>
+                <div class="flex items-center gap-3">
+                    <input id="ai-target-channel" type="number" min="1" max="24" value="1"
+                        class="bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-cyan-400 font-mono w-20 focus:border-cyan-500 outline-none">
+                    <span class="text-slate-400">canal selecionado</span>
+                </div>
+            </div>
+
+            <div class="bg-slate-800/40 border border-white/10 rounded-2xl p-5">
+                <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4">Prompts Rápidos</h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button class="sound-ai-prompt text-left p-3 rounded-xl bg-slate-700/50 hover:bg-cyan-900/30 border border-white/5 hover:border-cyan-500/50 text-xs transition-all" 
+                        data-prompt="Voz abafada no canal alvo. Quero limpar graves embolados e melhorar inteligibilidade.">Voz abafada</button>
+                    <button class="sound-ai-prompt text-left p-3 rounded-xl bg-slate-700/50 hover:bg-cyan-900/30 border border-white/5 hover:border-cyan-500/50 text-xs transition-all" 
+                        data-prompt="Microfonia ou apito no canal alvo. Quero cortar o pico sem estragar a voz.">Microfonia</button>
+                    <button class="sound-ai-prompt text-left p-3 rounded-xl bg-slate-700/50 hover:bg-cyan-900/30 border border-white/5 hover:border-cyan-500/50 text-xs transition-all" 
+                        data-prompt="Som metalico e aspero no PA. Quero reduzir dureza nos medios-agudos.">Som aspero</button>
+                    <button class="sound-ai-prompt text-left p-3 rounded-xl bg-slate-700/50 hover:bg-cyan-900/30 border border-white/5 hover:border-cyan-500/50 text-xs transition-all" 
+                        data-prompt="Retorno alto vazando no altar. Quero HPF, gate e controle de ganho.">Retorno alto</button>
+                </div>
+            </div>
+
+            <div class="bg-slate-800/40 border border-white/10 rounded-2xl p-5">
+                <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4">Ações Rápidas Ui</h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="btn-ai-hpf" class="p-2 rounded-lg bg-slate-700/50 hover:bg-slate-600 text-[10px] uppercase font-bold border border-white/5 transition-all">HPF 100Hz</button>
+                    <button id="btn-ai-gate" class="p-2 rounded-lg bg-slate-700/50 hover:bg-slate-600 text-[10px] uppercase font-bold border border-white/5 transition-all">Gate Leve</button>
+                    <button id="btn-ai-eq-mud" class="p-2 rounded-lg bg-slate-700/50 hover:bg-slate-600 text-[10px] uppercase font-bold border border-white/5 transition-all">Cortar 250Hz</button>
+                    <button id="btn-ai-eq-harsh" class="p-2 rounded-lg bg-slate-700/50 hover:bg-slate-600 text-[10px] uppercase font-bold border border-white/5 transition-all">Cortar 3.2kHz</button>
+                    <button id="btn-ai-afs-on" class="p-2 rounded-lg bg-cyan-900/40 hover:bg-cyan-800/40 text-[10px] uppercase font-bold border border-cyan-500/30 text-cyan-400 transition-all">Ativar AFS2</button>
+                    <button id="btn-ai-afs-off" class="p-2 rounded-lg bg-red-900/40 hover:bg-red-800/40 text-[10px] uppercase font-bold border border-red-500/30 text-red-400 transition-all">Desativar AFS2</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Principal -->
+        <div class="xl:col-span-2 flex flex-col h-[600px] bg-slate-900/50 border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
+            <div class="px-6 py-4 bg-slate-800/80 border-bottom border-white/10 flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                    <span class="text-sm font-bold">SoundMaster AI</span>
+                </div>
+                <button id="btn-clear-chat" class="text-[10px] uppercase tracking-wider font-bold text-slate-500 hover:text-white transition-colors">Limpar Conversa</button>
+            </div>
+            
+            <div id="chat-messages" class="flex-1 overflow-y-auto p-6 space-y-4">
+                <div class="flex justify-start">
+                    <div class="max-w-[80%] bg-slate-800 border border-white/5 p-4 rounded-2xl rounded-tl-none text-sm leading-relaxed text-slate-200 shadow-lg">
+                        Olá! Sou o SoundMaster IA. Conte o problema do som e eu sugiro ajustes práticos diretamente na sua Ui24R.
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 bg-slate-800/40 border-t border-white/10">
+                <div class="flex gap-3">
+                    <input type="text" id="chat-input" 
+                        class="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-cyan-500 outline-none transition-all"
+                        placeholder="Ex: A voz está embolada e metálica...">
+                    <button id="btn-chat-send" class="px-6 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-cyan-900/30">Enviar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
