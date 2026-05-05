@@ -52,5 +52,25 @@ document.addEventListener('DOMContentLoaded', async function () {
     //    Quando analyzer.js for refatorado, remover esta linha.
     window.socket = SocketService.raw();
 
+    // 5. Configurar QR Code e link mobile
+    try {
+        const res = await fetch('/api/config');
+        const config = await res.json();
+        const mobileUrl = config.tunnelUrl || `http://${config.localIp}:${config.port}`;
+        
+        const qrImg = document.getElementById('mobile-qr-code');
+        const linkEl = document.getElementById('mobile-url');
+        
+        if (qrImg) {
+            qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(mobileUrl + '/mobile.html')}`;
+        }
+        if (linkEl) {
+            linkEl.href = mobileUrl + '/mobile.html';
+            linkEl.innerText = mobileUrl + '/mobile.html';
+        }
+    } catch (err) {
+        console.error('[App] Erro ao carregar config de rede:', err);
+    }
+
     console.log('[SoundMaster] Aplicação iniciada.');
 });

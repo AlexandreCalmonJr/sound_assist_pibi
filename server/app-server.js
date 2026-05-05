@@ -26,7 +26,11 @@ function createAppServer({ app, rootDir, localIp, port }) {
     // Inicia o túnel HTTPS (importante para microfone no iOS/Android)
     async function startTunnel() {
         try {
-            const tunnel = await localtunnel({ port: port });
+            // Subdomínio fixo para evitar que o link mude toda hora
+            const tunnel = await localtunnel({ 
+                port: port,
+                subdomain: 'soundmaster-pibi' 
+            });
             tunnelUrl = tunnel.url;
             console.log('====================================');
             console.log('Túnel Seguro Ativo (HTTPS):');
