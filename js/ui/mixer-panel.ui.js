@@ -43,6 +43,11 @@
         tabSections:      document.querySelectorAll('.mixer-panel-section'),
         btnPinkNoiseMain: $('btn-pink-noise-main'),
         pinkNoiseStatus:  $('pink-noise-status'),
+        btnUndo:          $('btn-undo'),
+        btnRedo:          $('btn-redo'),
+        btnSavePreset:    $('btn-save-preset'),
+        presetNameInput:  $('preset-name'),
+        presetsList:      $('presets-list')
     };
 
     // -------------------------------------------------------------------------
@@ -128,6 +133,28 @@
             return null;
         }
         return val;
+    }
+
+    function _renderPresets(presets) {
+        if (!els.presetsList) return;
+        els.presetsList.innerHTML = '';
+        if (!presets || presets.length === 0) {
+            els.presetsList.innerHTML = '<div class="mixer-log-entry">Nenhum preset salvo.</div>';
+            return;
+        }
+        presets.forEach(p => {
+            const div = document.createElement('div');
+            div.className = 'mixer-log-entry';
+            div.style.display = 'flex';
+            div.style.justifyContent = 'space-between';
+            div.style.alignItems = 'center';
+            div.innerHTML = `
+                <span>${p.name} <small style="color:var(--text-muted)">(${new Date(p.timestamp).toLocaleTimeString()})</small></span>
+                <button class="action-btn primary small" style="padding: 4px 8px;">Carregar</button>
+            `;
+            div.querySelector('button').onclick = () => MixerService.loadPreset(p._id);
+            els.presetsList.appendChild(div);
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -231,6 +258,20 @@
             }
         });
 
+        // Undo / Redo
+        els.btnUndo && els.btnUndo.addEventListener('click', () => MixerService.undo());
+
+        // Presets
+        els.btnSavePreset && els.btnSavePreset.addEventListener('click', () => {
+            const name = els.presetNameInput?.value.trim();
+            if (!name) { alert('Dê um nome ao preset!'); return; }
+            MixerService.savePreset(name);
+            if (els.presetNameInput) els.presetNameInput.value = '';
+        });
+
+        const presetsTab = document.querySelector('[data-tab="mixer-presets"]');
+        presetsTab?.addEventListener('click', () => MixerService.listPresets());
+
         // Esconde botão desconectar inicialmente
         if (els.btnDisconnect) els.btnDisconnect.style.display = 'none';
     }
@@ -262,6 +303,9 @@
         AppStore.subscribe('aiSuggestions', function (suggestions) {
             _renderAISuggestions(suggestions);
         });
+
+        SocketService.on('presets_list', (presets) => _renderPresets(presets));
+        SocketService.on('preset_saved', () => MixerService.listPresets());
     }
 
     // -------------------------------------------------------------------------

@@ -443,6 +443,7 @@
             <div class="mixer-tabs">
                 <button class="mixer-tab-btn active" data-tab="mixer-overview">Visão Geral</button>
                 <button class="mixer-tab-btn" data-tab="mixer-connection">Conexão</button>
+                <button class="mixer-tab-btn" data-tab="mixer-presets">Presets</button>
                 <button class="mixer-tab-btn" data-tab="mixer-interface">Interface</button>
             </div>
             <div class="mixer-panel-body">
@@ -461,6 +462,10 @@
                                 <span>-∞ dB</span>
                                 <span>0 dB</span>
                             </div>
+                        </div>
+                        <div style="display:flex; gap:10px; margin-top: 10px;">
+                            <button id="btn-undo" class="action-btn secondary" style="flex:1;" title="Desfazer">↩ Undo</button>
+                            <button id="btn-redo" class="action-btn secondary" style="flex:1;" title="Refazer" disabled>↪ Redo</button>
                         </div>
                         <div style="display:flex; gap:10px; margin-top: 15px;">
                             <button id="btn-master-volume-down" class="action-btn secondary"
@@ -531,6 +536,20 @@
                     </div>
                     <div class="mixer-log-box" id="mixer-log">
                         <div class="mixer-log-entry">Logs do mixer aparecerão aqui.</div>
+                    </div>
+                </section>
+
+                <section id="mixer-presets" class="mixer-panel-section">
+                    <div class="card">
+                        <h3>Gerenciar Presets</h3>
+                        <p class="subtitle">Salve o estado atual do mixer para carregar depois.</p>
+                        <div class="custom-input">
+                            <input type="text" id="preset-name" placeholder="Nome do Preset (ex: Culto Manhã)">
+                            <button id="btn-save-preset" class="action-btn primary">Salvar Atual</button>
+                        </div>
+                        <div id="presets-list" class="mixer-log-box" style="height: 200px; margin-top: 15px;">
+                            <div class="mixer-log-entry">Carregando presets...</div>
+                        </div>
                     </div>
                 </section>
 

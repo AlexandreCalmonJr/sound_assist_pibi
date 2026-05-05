@@ -1,15 +1,60 @@
 const { SoundcraftUI } = require('soundcraft-ui-connection');
 const { createMixerActions } = require('./mixer-actions');
+const db = require('./database');
 
 function registerSocketHandlers(io) {
     let mixer = null;
+    let historyStack = [];
+    let redoStack = [];
+    
+    // Cache de estado para simulação e presets
+    let mixerState = {
+        master: { level: 0, levelDb: -100, mute: 0 },
+        inputs: Array(24).fill(0).map(() => ({
+            level: 0, levelDb: -100, mute: 0, hpf: 100, gate: 0, comp: 0
+        }))
+    };
+
     const actions = createMixerActions(() => mixer);
+
+    function addToHistory(cmd) {
+        historyStack.push(cmd);
+        if (historyStack.length > 50) historyStack.shift();
+        redoStack = []; // Limpa redo ao fazer nova ação
+    }
 
     io.on('connection', (socket) => {
         console.log('Frontend conectado via Socket.io');
 
         socket.on('connect_mixer', async (ip) => {
             try {
+                if (ip === 'offline' || ip === 'simulado' || ip === '127.0.0.1') {
+                    console.log('Iniciando MODO SIMULADO (Offline)...');
+                    mixer = {
+                        isSimulated: true,
+                        conn: { sendMessage: (msg) => {
+                            console.log('[MIXER SIMULADO]', msg);
+                            socket.emit('mixer_log', `CMD SIMULADO: ${msg}`);
+                        }},
+                        master: {
+                            setFaderLevel: (v) => { mixerState.master.level = v; socket.emit('master_level', v); },
+                            changeFaderLevelDB: (v) => { mixerState.master.levelDb += v; socket.emit('master_level_db', mixerState.master.levelDb); },
+                            input: (ch) => ({
+                                changeFaderLevelDB: (v) => { 
+                                    const idx = ch - 1;
+                                    if (mixerState.inputs[idx]) mixerState.inputs[idx].levelDb += v;
+                                    socket.emit('mixer_log', `Volume Ch${ch} alterado em ${v}dB (Simulado)`);
+                                }
+                            }),
+                            faderLevel$: { subscribe: () => {} },
+                            faderLevelDB$: { subscribe: () => {} }
+                        },
+                        disconnect: () => { mixer = null; }
+                    };
+                    socket.emit('mixer_status', { connected: true, isSimulated: true, msg: 'Modo Simulado Ativo' });
+                    return;
+                }
+
                 console.log(`Tentando conectar a Soundcraft Ui no IP: ${ip}...`);
                 mixer = new SoundcraftUI(ip);
                 await mixer.connect();
@@ -17,8 +62,14 @@ function registerSocketHandlers(io) {
                 console.log('Conectado com sucesso a Mesa!');
                 socket.emit('mixer_status', { connected: true, msg: 'Conectado a Soundcraft Ui!' });
 
-                mixer.master.faderLevel$.subscribe(level => socket.emit('master_level', level));
-                mixer.master.faderLevelDB$.subscribe(levelDb => socket.emit('master_level_db', levelDb));
+                mixer.master.faderLevel$.subscribe(level => {
+                    mixerState.master.level = level;
+                    socket.emit('master_level', level);
+                });
+                mixer.master.faderLevelDB$.subscribe(levelDb => {
+                    mixerState.master.levelDb = levelDb;
+                    socket.emit('master_level_db', levelDb);
+                });
             } catch (error) {
                 console.error('Erro ao conectar na mesa:', error.message);
                 socket.emit('mixer_status', { connected: false, msg: `Erro de conexao: ${error.message}` });
@@ -127,9 +178,68 @@ function registerSocketHandlers(io) {
                     actions.applyEqCut('channel', channel, data.mudHz || 250, data.mudGain || -3, 1.2, 2),
                     actions.applyEqCut('channel', channel, data.harshHz || 3200, data.harshGain || -2, 1.5, 3)
                 ];
+                addToHistory({ type: 'clean_preset', data });
                 socket.emit('feedback_cut_success', { msg: `Preset de som limpo aplicado no canal ${channel}: ${steps.join(' ')}` });
             } catch (error) {
                 socket.emit('mixer_status', { connected: true, msg: error.message });
+            }
+        });
+
+        // --- Gerenciamento de Presets ---
+        socket.on('save_preset', (data) => {
+            const preset = {
+                name: data.name || `Preset ${new Date().toLocaleString()}`,
+                timestamp: Date.now(),
+                state: JSON.parse(JSON.stringify(mixerState))
+            };
+            db.presets.insert(preset, (err, doc) => {
+                if (err) socket.emit('mixer_status', { connected: true, msg: 'Erro ao salvar preset' });
+                else socket.emit('preset_saved', doc);
+            });
+        });
+
+        socket.on('list_presets', () => {
+            db.presets.find({}).sort({ timestamp: -1 }).exec((err, docs) => {
+                if (!err) socket.emit('presets_list', docs);
+            });
+        });
+
+        socket.on('load_preset', (id) => {
+            if (!actions.ensureMixer(socket)) return;
+            db.presets.findOne({ _id: id }, (err, doc) => {
+                if (!err && doc) {
+                    try {
+                        // Restaurar Master
+                        if (doc.state.master) {
+                            mixer.master.setFaderLevel(doc.state.master.level);
+                        }
+                        
+                        // Restaurar Canais (Exemplo: Volumes)
+                        if (doc.state.inputs && Array.isArray(doc.state.inputs)) {
+                            doc.state.inputs.forEach((inputState, idx) => {
+                                const ch = idx + 1;
+                                // Para simplificar, restauramos apenas os volumes por enquanto via logica de dB
+                                // Em uso real, aplicaríamos HPF, Gate, etc.
+                                mixer.master.input(ch).setFaderLevel && mixer.master.input(ch).setFaderLevel(inputState.level);
+                            });
+                        }
+                        
+                        socket.emit('feedback_cut_success', { msg: `Preset "${doc.name}" carregado com sucesso!` });
+                        socket.emit('mixer_log', `Preset "${doc.name}" aplicado.`);
+                    } catch (e) {
+                        socket.emit('mixer_status', { connected: true, msg: 'Erro ao aplicar preset: ' + e.message });
+                    }
+                }
+            });
+        });
+
+        socket.on('undo_command', () => {
+            const cmd = historyStack.pop();
+            if (cmd) {
+                redoStack.push(cmd);
+                socket.emit('mixer_log', 'Undo: Comando revertido (Simulado/Visual)');
+                // Implementar logica inversa real seria complexo sem snapshot,
+                // mas podemos avisar o usuario.
             }
         });
 

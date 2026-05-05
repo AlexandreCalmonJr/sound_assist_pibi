@@ -224,6 +224,26 @@
     }
 
     // -------------------------------------------------------------------------
+    // Presets e Undo
+    // -------------------------------------------------------------------------
+
+    function savePreset(name) {
+        return _emit('save_preset', { name: name }, 'Salvando preset: ' + name);
+    }
+
+    function listPresets() {
+        SocketService.emit('list_presets');
+    }
+
+    function loadPreset(id) {
+        return _emit('load_preset', id, 'Carregando preset...');
+    }
+
+    function undo() {
+        return _emit('undo_command', {}, 'Desfazer última ação solicitada.');
+    }
+
+    // -------------------------------------------------------------------------
     // Exportação
     // -------------------------------------------------------------------------
     window.MixerService = {
@@ -239,6 +259,10 @@
         runCleanSoundPreset,
         cutFeedback,
         executeAICommand,
-        setOscillator
+        setOscillator,
+        savePreset,
+        listPresets,
+        loadPreset,
+        undo
     };
 })();
