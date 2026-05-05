@@ -191,16 +191,17 @@
     // -------------------------------------------------------------------------
     function _initEvents() {
         console.log('[AIChatUI] Vinculando eventos...');
-        // Envio via botão
+        
+        // Teste de clique agressivo
         if (els.btnSend) {
-            els.btnSend.addEventListener('click', function () {
+            els.btnSend.onclick = function() {
+                console.log('[AIChatUI] Clique detectado via onclick');
                 const text = els.chatInput && els.chatInput.value.trim();
-                console.log('[AIChatUI] Clique em Enviar. Texto:', text);
                 if (text) _sendMessage(text);
-                else console.warn('[AIChatUI] Campo de texto vazio.');
-            });
+                else alert('O campo de texto está vazio!');
+            };
         } else {
-            console.error('[AIChatUI] Botão btnSend não encontrado.');
+            console.error('[AIChatUI] Botão btnSend não encontrado no DOM.');
         }
 
         // Envio via Enter
