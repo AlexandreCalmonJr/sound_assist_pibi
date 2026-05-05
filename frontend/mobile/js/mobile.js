@@ -56,7 +56,30 @@ const MobileRouter = {
     }
 };
 
-// Connectivity Heartbeat
+// State de Mix Atual
+let currentMix = { type: 'master', id: null };
+
+function initMixSelector() {
+    const btns = document.querySelectorAll('.mix-selector-btn');
+    btns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            triggerHaptic('light');
+            btns.forEach(b => b.classList.remove('active-mix'));
+            btn.classList.add('active-mix');
+            
+            currentMix.type = btn.getAttribute('data-mix-type');
+            currentMix.id = btn.getAttribute('data-mix-id');
+            
+            appendMobileLog(`Mix alterado para: ${currentMix.type.toUpperCase()} ${currentMix.id || ''}`);
+            
+            // Opcional: Atualizar cor do acento baseado no mix?
+            const root = document.documentElement;
+            if (currentMix.type === 'aux') root.style.setProperty('--accent', '#a855f7'); // Roxo para Aux
+            else if (currentMix.type === 'fx') root.style.setProperty('--accent', '#ec4899'); // Rosa para FX
+            else root.style.setProperty('--accent', '#06b6d4'); // Ciano para Master
+        });
+    });
+}
 // Connectivity Heartbeat & Latency
 let lastPingTime = 0;
 let currentLatency = 0;
@@ -556,7 +579,16 @@ function analyzeTimbre() {
 function setMasterLevel(value) {
     const level = Math.min(1, Math.max(0, value));
     updateMasterDisplay(level, undefined);
-    socket.emit('set_master_level', { level });
+    
+    if (currentMix.type === 'master') {
+        socket.emit('set_master_level', { level });
+    } else if (currentMix.type === 'aux') {
+        const channel = getTargetChannel();
+        if (channel) socket.emit('set_aux_level', { channel, aux: currentMix.id, level });
+    } else if (currentMix.type === 'fx') {
+        const channel = getTargetChannel();
+        if (channel) socket.emit('set_fx_level', { channel, fx: currentMix.id, level });
+    }
 }
 
 function getTargetChannel() {
@@ -899,3 +931,4 @@ loadMobileMappings();
 
 // Pre-nav setup
 setupMobileTouchFader();
+initMixSelector();

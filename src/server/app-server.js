@@ -14,7 +14,7 @@ function createAppServer({ app, rootDir, localIp, port }) {
     const server = http.createServer(expressApp);
 
     expressApp.use(cors());
-    expressApp.use(express.static(rootDir));
+    expressApp.use(express.static(path.join(rootDir, 'frontend')));
     expressApp.use(express.json());
 
     let tunnelUrl = null;
@@ -26,8 +26,8 @@ function createAppServer({ app, rootDir, localIp, port }) {
     // Inicia o túnel HTTPS (importante para microfone no iOS/Android)
     async function startTunnel(retryCount = 0) {
         try {
-            // Tenta o subdomínio fixo, mas se falhar muitas vezes, tenta um aleatório
-            const sub = retryCount < 3 ? 'soundmaster-pibi' : `soundmaster-${Math.random().toString(36).substring(2, 7)}`;
+            // Tenta um subdomínio mais pessoal para evitar conflitos
+            const sub = retryCount < 3 ? 'soundmaster-pibi' : `soundmaster-pro-${Math.random().toString(36).substring(2, 6)}`;
             
             const tunnel = await localtunnel({ 
                 port: port,

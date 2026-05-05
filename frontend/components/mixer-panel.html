@@ -40,6 +40,16 @@
                         <button id="btn-master-volume-down" class="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded text-xs">-1%</button>
                         <button id="btn-master-volume-up" class="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded text-xs">+1%</button>
                     </div>
+
+                    <div class="h-px bg-white/5 my-4"></div>
+
+                    <h4 class="text-[9px] font-black uppercase text-slate-600 mb-3 tracking-widest">Seleção de Mix</h4>
+                    <div class="grid grid-cols-2 gap-2" id="desktop-mix-selector">
+                        <button class="mix-selector-btn-desktop active" data-mix-type="master">PA / Master</button>
+                        <button class="mix-selector-btn-desktop" data-mix-type="aux" data-mix-id="1">Monitor 1</button>
+                        <button class="mix-selector-btn-desktop" data-mix-type="aux" data-mix-id="2">Monitor 2</button>
+                        <button class="mix-selector-btn-desktop" data-mix-type="fx" data-mix-id="1">Reverb 1</button>
+                    </div>
                 </div>
             </div>
 

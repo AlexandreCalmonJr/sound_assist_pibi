@@ -167,6 +167,26 @@ function registerSocketHandlers(io) {
             socket.emit('feedback_cut_success', { msg: actions.applyOscillator(data.enabled, data.type, data.level) });
         });
 
+        socket.on('set_aux_level', (data) => {
+            if (!actions.ensureMixer(socket)) return;
+            try {
+                const msg = actions.setAuxLevel(data.channel, data.aux, data.level);
+                socket.emit('feedback_cut_success', { msg });
+            } catch (error) {
+                socket.emit('mixer_status', { connected: true, msg: error.message });
+            }
+        });
+
+        socket.on('set_fx_level', (data) => {
+            if (!actions.ensureMixer(socket)) return;
+            try {
+                const msg = actions.setFxLevel(data.channel, data.fx, data.level);
+                socket.emit('feedback_cut_success', { msg });
+            } catch (error) {
+                socket.emit('mixer_status', { connected: true, msg: error.message });
+            }
+        });
+
         socket.on('run_clean_sound_preset', (data) => {
             if (!actions.ensureMixer(socket)) return;
             try {

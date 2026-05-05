@@ -123,13 +123,24 @@ class AIEngine:
                 "command": None
             }
 
-        if re.search(r'(retorno|monitor|auxiliar)', text):
-            aux_match = re.search(r'(?:aux|retorno|monitor)\s*(\d{1,2})', text)
+        if re.search(r'(retorno|monitor|auxiliar|caixa)', text):
+            aux_match = re.search(r'(?:aux|retorno|monitor|caixa|auxiliar)\s*(\d{1,2})', text)
             aux_ch = int(aux_match.group(1)) if aux_match else 1
             
-            if "alto" in text or "baixar" in text or "reduzir" in text:
+            if "pa" in text or "frente" in text:
+                return {
+                    "text": f"Otimizando o envio do canal {channel} para o PA (Master).",
+                    "command": self.command("set_master_level", f"Volume PA Ch {channel}", channel=channel, level=0.7)
+                }
+
+            if "alto" in text or "mais" in text or "aumentar" in text:
                  return {
-                    "text": f"Reduzindo o envio do canal {channel} para o retorno {aux_ch} para evitar vazamentos.",
+                    "text": f"Aumentando o envio do canal {channel} para o retorno {aux_ch}.",
+                    "command": self.command("set_aux_level", f"Aumentar Aux {aux_ch}", channel=channel, aux=aux_ch, level=0.8)
+                }
+            if "baixo" in text or "baixar" in text or "reduzir" in text:
+                 return {
+                    "text": f"Reduzindo o envio do canal {channel} para o retorno {aux_ch}.",
                     "command": self.command("set_aux_level", f"Reduzir Aux {aux_ch}", channel=channel, aux=aux_ch, level=0.3)
                 }
             if "mudo" in text or "mutar" in text:
@@ -139,7 +150,27 @@ class AIEngine:
                 }
             
             return {
-                "text": f"Deseja ajustar o nível do canal {channel} no retorno {aux_ch}? Posso baixar ou mutar para você.",
+                "text": f"Deseja ajustar o nível do canal {channel} na caixa {aux_ch}? Posso aumentar, baixar ou mutar.",
+                "command": None
+            }
+
+        if re.search(r'(reverb|fx|efeito|echo)', text):
+            fx_match = re.search(r'(?:fx|reverb|efeito)\s*(\d{1,2})', text)
+            fx_ch = int(fx_match.group(1)) if fx_match else 1 # Default FX 1 = Reverb
+            
+            if "mais" in text or "muito" in text or "aumentar" in text:
+                 return {
+                    "text": f"Adicionando mais brilho/profundidade ao {channel} via FX {fx_ch}.",
+                    "command": self.command("set_fx_level", f"Mais Efeito Ch {channel}", channel=channel, fx=fx_ch, level=0.45)
+                }
+            if "menos" in text or "seco" in text or "tirar" in text:
+                 return {
+                    "text": f"Tirando o efeito do canal {channel}.",
+                    "command": self.command("set_fx_level", f"Remover Efeito Ch {channel}", channel=channel, fx=fx_ch, level=0)
+                }
+            
+            return {
+                "text": f"Ajustando a reverberação manual do canal {channel}. Quer mais ou menos efeito?",
                 "command": None
             }
 

@@ -11,29 +11,33 @@
             const mobileLink = document.getElementById('mobile-open-link');
             const mobileQrCode = document.getElementById('mobile-qr-code');
 
-            if (!ipCard || config.localIp === '127.0.0.1') return;
+            console.log('[Config] Configuração recebida:', config);
+
+            if (config.localIp === '127.0.0.1' && !config.tunnelUrl) {
+                console.warn('[Config] Servidor ainda em localhost sem túnel.');
+                if (mobileUrl) mobileUrl.innerText = 'Aguardando túnel seguro...';
+                return;
+            }
 
             if (ipCard) ipCard.style.display = 'block';
             
-            // Prioriza o túnel seguro (HTTPS) para que o microfone funcione em todos os celulares
             const baseUrl = config.tunnelUrl || `http://${config.localIp}:${config.port}`;
-            const localUrl = `http://${config.localIp}:${config.port}`;
-            const mobileHref = `${baseUrl}/mobile.html`;
+            const mobileHref = `${baseUrl}/mobile/index.html`;
+            
+            console.log('[Config] URL Mobile:', mobileHref);
 
-            if (ipDisplay) ipDisplay.innerText = localUrl;
+            if (ipDisplay) ipDisplay.innerText = `http://${config.localIp}:${config.port}`;
             if (mobileUrl) mobileUrl.innerText = mobileHref;
             if (mobileLink) mobileLink.href = mobileHref;
             
             if (mobileQrCode) {
-                // Adiciona um aviso visual se estiver usando o túnel
-                if (config.tunnelUrl && mobileUrl) {
-                    mobileUrl.style.color = 'var(--accent-primary)';
-                    mobileUrl.title = 'Link Seguro Ativo (HTTPS)';
-                }
-                mobileQrCode.src = `https://chart.googleapis.com/chart?cht=qr&chs=220x220&chl=${encodeURIComponent(mobileHref)}`;
+                // Usando o serviço qrickit que é bem estável
+                const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(mobileHref)}`;
+                mobileQrCode.src = qrUrl;
+                console.log('[Config] QR Code setado:', qrUrl);
             }
         } catch (e) {
-            console.log('Erro ao carregar config:', e);
+            console.error('[Config] Erro ao carregar config:', e);
         }
     }
 

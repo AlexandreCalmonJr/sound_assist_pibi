@@ -1,10 +1,11 @@
 const { app, BrowserWindow } = require('electron');
-
+const path = require('path');
 const { createAppServer } = require('./server/app-server');
 const { configureElectronSession, createWindow } = require('./server/electron-window');
 const { getLocalIp } = require('./server/network');
 const { startPythonAI, stopPythonAI } = require('./server/python-ai');
 
+const ROOT_DIR = path.join(__dirname, '..');
 const PORT = 3001;
 const localIp = getLocalIp();
 
@@ -13,7 +14,7 @@ let pythonProcess = null;
 function createHttpServer() {
     return createAppServer({
         app,
-        rootDir: __dirname,
+        rootDir: ROOT_DIR,
         localIp,
         port: PORT
     });
@@ -30,7 +31,8 @@ function startServer() {
 }
 
 app.whenReady().then(async () => {
-    pythonProcess = startPythonAI(__dirname);
+    const aiPath = path.join(ROOT_DIR, 'backend', 'ai');
+    pythonProcess = startPythonAI(aiPath);
     startServer();
     await configureElectronSession();
     createWindow(PORT);

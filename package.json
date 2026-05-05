@@ -2,7 +2,7 @@
   "name": "soundmaster",
   "version": "1.0.0",
   "description": "",
-  "main": "main.js",
+  "main": "src/main.js",
   "scripts": {
     "start": "electron .",
     "build:css": "tailwindcss -i css/input.css -o css/styles.css --watch",

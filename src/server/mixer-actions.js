@@ -71,6 +71,36 @@ function createMixerActions(getMixer) {
         return `AFS2 ${enabled ? 'ativado' : 'desativado'} globalmente.`;
     }
 
+    function setAuxLevel(channel, aux, level) {
+        const input = getInputIndex(channel);
+        const auxIdx = Number(aux) - 1;
+        if (auxIdx < 0 || auxIdx > 9) throw new Error('AUX invalido (1-10).');
+        const faderVal = clamp(level, 0, 1);
+        sendUi(`i.${input}.aux.${auxIdx}.value`, faderVal);
+        return `AUX ${aux} do canal ${channel} ajustado para ${Math.round(faderVal * 100)}%.`;
+    }
+
+    function setFxLevel(channel, fx, level) {
+        const input = getInputIndex(channel);
+        const fxIdx = Number(fx) - 1;
+        if (fxIdx < 0 || fxIdx > 3) throw new Error('FX invalido (1-4).');
+        const faderVal = clamp(level, 0, 1);
+        sendUi(`i.${input}.fx.${fxIdx}.value`, faderVal);
+        return `FX ${fx} do canal ${channel} ajustado para ${Math.round(faderVal * 100)}%.`;
+    }
+
+    function runCleanSoundPreset(channel, opts = {}) {
+        const ch = getInputIndex(channel);
+        const steps = [
+            applyChannelHpf(channel, opts.hpf || 100),
+            applyChannelGate(channel, 1, opts.gateThreshold || -52),
+            applyChannelCompressor(channel, opts.ratio || 2.5, opts.compThreshold || -18),
+            applyEqCut('channel', channel, opts.mudHz || 250, opts.mudGain || -3, 1.2, 2),
+            applyEqCut('channel', channel, opts.harshHz || 3200, opts.harshGain || -2, 1.5, 3)
+        ];
+        return `Preset de som limpo aplicado no canal ${channel}: ${steps.join(' ')}`;
+    }
+
     function applyOscillator(enabled, type = 1, level = -20) {
         // type 1 = pink noise
         sendUi('hw.osc.enabled', enabled ? 1 : 0);
@@ -129,6 +159,16 @@ function createMixerActions(getMixer) {
             return applyOscillator(cmd.enabled !== 0, cmd.type, cmd.level);
         }
 
+        if (cmd.action === 'set_aux_level') {
+            return setAuxLevel(cmd.channel || 1, cmd.aux || 1, cmd.level || 0);
+        }
+        if (cmd.action === 'set_fx_level') {
+            return setFxLevel(cmd.channel || 1, cmd.fx || 1, cmd.level || 0);
+        }
+        if (cmd.action === 'run_clean_sound_preset') {
+            return runCleanSoundPreset(cmd.channel || 1, cmd);
+        }
+
         throw new Error(`Acao nao suportada: ${cmd.action}`);
     }
 
@@ -140,7 +180,10 @@ function createMixerActions(getMixer) {
         applyOscillator,
         ensureMixer,
         executeMixerCommand,
-        setAfs
+        setAfs,
+        setAuxLevel,
+        setFxLevel,
+        runCleanSoundPreset
     };
 }
 

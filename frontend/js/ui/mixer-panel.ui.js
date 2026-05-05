@@ -50,9 +50,12 @@
             btnRedo:          $('btn-redo'),
             btnSavePreset:    $('btn-save-preset'),
             presetNameInput:  $('preset-name'),
-            presetsList:      $('presets-list')
+            presetsList:      $('presets-list'),
+            mixBtns:          document.querySelectorAll('.mix-selector-btn-desktop')
         };
     }
+
+    let currentMix = { type: 'master', id: null };
 
     // -------------------------------------------------------------------------
     // Helpers de renderização
@@ -236,7 +239,16 @@
         });
 
         els.masterSlider && els.masterSlider.addEventListener('change', function () {
-            MixerService.setMasterLevel(Number(els.masterSlider.value) / 100);
+            const level = Number(els.masterSlider.value) / 100;
+            if (currentMix.type === 'master') {
+                MixerService.setMasterLevel(level);
+            } else if (currentMix.type === 'aux') {
+                const ch = _getQuickChannel();
+                if (ch) MixerService.setAuxLevel(ch, currentMix.id, level);
+            } else if (currentMix.type === 'fx') {
+                const ch = _getQuickChannel();
+                if (ch) MixerService.setFxLevel(ch, currentMix.id, level);
+            }
         });
 
         // Botões +1% / -1%
@@ -289,6 +301,17 @@
 
         const presetsTab = document.querySelector('[data-tab="mixer-presets"]');
         presetsTab?.addEventListener('click', () => MixerService.listPresets());
+
+        // Mix Selector
+        els.mixBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                els.mixBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentMix.type = btn.getAttribute('data-mix-type');
+                currentMix.id = btn.getAttribute('data-mix-id');
+                AppStore.addLog(`Mix Desktop alterado para: ${currentMix.type.toUpperCase()} ${currentMix.id || ''}`);
+            });
+        });
 
         // Esconde botão desconectar inicialmente
         if (els.btnDisconnect) els.btnDisconnect.style.display = 'none';

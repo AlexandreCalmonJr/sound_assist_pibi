@@ -272,6 +272,21 @@
     }
 
     /**
+     * Define o nível de envio de um canal para um engine de efeito (FX).
+     * @param {number} channel 1-24
+     * @param {number} fxChannel 1-4
+     * @param {number} level 0.0 - 1.0
+     */
+    function setFxLevel(channel, fxChannel, level) {
+        const ch = _validateChannel(channel);
+        const fx = _clamp(fxChannel, 1, 4);
+        const clamped = _clamp(level, 0, 1);
+        
+        return _emit('set_fx_level', { channel: ch, fx: fx, level: clamped },
+            'Ajustando envio do canal ' + ch + ' para o FX ' + fx + ' em ' + Math.round(clamped * 100) + '%.');
+    }
+
+    /**
      * Envia uma mensagem RAW diretamente para a mesa.
      * @param {string} message 
      */
@@ -297,6 +312,7 @@
         executeAICommand,
         setOscillator,
         setAuxLevel,
+        setFxLevel,
         setDelay,
         savePreset,
         listPresets,
