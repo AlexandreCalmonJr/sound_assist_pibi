@@ -1,182 +1,272 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="dark">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#00ffcc">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#09090b">
     <title>SoundMaster Mobile</title>
+    
+    <!-- Tailwind CSS v4 -->
     <link rel="stylesheet" href="css/styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --accent: #00cfd5;
+            --bg: #09090b;
+            --card: rgba(17, 17, 20, 0.6);
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            overscroll-behavior-y: contain;
+            background-color: var(--bg);
+            color: #e2e8f0;
+        }
+
+        .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+        .safe-top { padding-top: env(safe-area-inset-top); }
+        
+        /* Premium Vertical Fader */
+        .fader-container {
+            position: relative;
+            width: 80px;
+            height: 280px;
+            background: linear-gradient(180deg, #050507 0%, #1a1a1e 100%);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 40px;
+            display: flex;
+            justify-content: center;
+            box-shadow: inset 0 4px 12px rgba(0,0,0,0.6);
+        }
+
+        .vertical-range {
+            appearance: none;
+            width: 280px;
+            height: 80px;
+            background: transparent;
+            transform: rotate(-90deg);
+            position: absolute;
+            top: 100px;
+            left: -100px;
+            outline: none;
+        }
+        
+        .vertical-range::-webkit-slider-thumb {
+            appearance: none;
+            width: 60px;
+            height: 34px;
+            background: linear-gradient(135deg, #00cfd5 0%, #008a8e 100%);
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 207, 213, 0.5), inset 0 1px 1px rgba(255,255,255,0.4);
+            cursor: pointer;
+            border: 2px solid rgba(0,0,0,0.3);
+        }
+
+        /* Glassmorphism Tabs */
+        .tab-active { color: var(--accent); }
+        .tab-active svg { transform: translateY(-2px); color: var(--accent); filter: drop-shadow(0 0 8px var(--accent)); }
+
+        .glass-card {
+            background: var(--card);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .nav-label { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+
+        /* Fix for overlap in screenshots */
+        .mobile-nav-btn {
+            position: relative;
+            z-index: 50;
+        }
+    </style>
 </head>
-<body class="mobile-page">
-    <div class="mobile-app-container">
-        <header class="mobile-header">
-            <div>
-                <h1>SoundMaster Mobile</h1>
-                <p>Controle o master e confira a sala direto do banco ou do fundo da igreja.</p>
+
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- Header Compacto -->
+    <header class="safe-top bg-black/60 backdrop-blur-2xl border-b border-white/5 px-6 py-4 flex items-center justify-between z-40">
+        <div class="flex items-center gap-2.5">
+            <div class="w-7 h-7 bg-cyan-500 rounded-lg flex items-center justify-center text-black font-black shadow-[0_0_15px_rgba(6,182,212,0.4)] text-sm">S</div>
+            <span class="text-xs font-black tracking-widest uppercase text-white/90 italic">SoundMaster <span class="text-cyan-500">Pro</span></span>
+        </div>
+        <div id="mobile-connection-badge" class="px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-[8px] font-black text-red-500 uppercase tracking-widest">
+            Offline
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main id="mobile-content" class="flex-1 overflow-y-auto pb-24 pt-2">
+        
+        <!-- SECTION: MASTER -->
+        <section id="mobile-master" class="mobile-page p-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div class="flex flex-col items-center">
+                <div class="text-center mb-8">
+                    <span id="mobile-master-level" class="text-7xl font-black text-cyan-400 font-mono tracking-tighter drop-shadow-[0_0_20px_rgba(34,211,238,0.3)]">0%</span>
+                    <p id="mobile-master-db" class="text-slate-500 font-black mt-1 tracking-[0.4em] uppercase text-[9px]">-∞ dB</p>
+                </div>
+
+                <div class="fader-container mb-10">
+                    <input type="range" id="mobile-master-slider" min="0" max="100" value="0" class="vertical-range">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 w-full max-w-xs px-2">
+                    <button id="mobile-master-down" class="glass-card py-5 rounded-[2rem] active:scale-95 transition-all text-xl font-black shadow-lg">-1%</button>
+                    <button id="mobile-master-up" class="glass-card py-5 rounded-[2rem] active:scale-95 transition-all text-xl font-black shadow-lg">+1%</button>
+                </div>
+
+                <div class="grid grid-cols-4 gap-2 w-full mt-8 px-2">
+                    <button class="mobile-preset-btn glass-card p-3 rounded-2xl text-[8px] font-black uppercase" data-master-preset="0">Muto</button>
+                    <button class="mobile-preset-btn glass-card p-3 rounded-2xl text-[8px] font-black uppercase" data-master-preset="35">Soft</button>
+                    <button class="mobile-preset-btn glass-card p-3 rounded-2xl text-[8px] font-black uppercase" data-master-preset="55">Voz</button>
+                    <button class="mobile-preset-btn glass-card p-3 rounded-2xl text-[8px] font-black uppercase" data-master-preset="68">Show</button>
+                </div>
             </div>
-            <span id="mobile-connection-badge" class="mixer-status offline">Offline</span>
-        </header>
+        </section>
 
-        <nav class="mobile-nav">
-            <button class="mobile-nav-btn active" data-target="mobile-conn">Conexão</button>
-            <button class="mobile-nav-btn" data-target="mobile-master">Master</button>
-            <button class="mobile-nav-btn" data-target="mobile-mic">Microfone</button>
-            <button class="mobile-nav-btn" data-target="mobile-tools">Ferramentas</button>
-            <button class="mobile-nav-btn" data-target="mobile-map">Mapeamento</button>
-            <button class="mobile-nav-btn" data-target="mobile-logs">Logs</button>
-            <button class="mobile-nav-btn" data-target="mobile-ai">IA</button>
-            <button class="mobile-nav-btn" data-target="mobile-guide">Guia</button>
-        </nav>
-
-        <main class="mobile-panel">
-            <section id="mobile-conn" class="mobile-card mobile-page active">
-                <h2>Conectar ao Mixer</h2>
-                <label class="mobile-field-label" for="mobile-mixer-ip">IP da mesa Soundcraft</label>
-                <input type="text" id="mobile-mixer-ip" class="custom-input" inputmode="decimal" autocomplete="off" value="10.10.1.1" placeholder="Ex: 10.10.1.1">
-                <div class="mobile-action-row">
-                    <button id="mobile-btn-connect" class="action-btn primary">Conectar</button>
-                    <button id="mobile-btn-disconnect" class="action-btn secondary">Desconectar</button>
+        <!-- SECTION: ANALISADOR -->
+        <section id="mobile-mic" class="mobile-page hidden p-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div class="flex justify-between items-center mb-6 px-1">
+                <h2 class="text-lg font-black uppercase tracking-tight italic">Análise <span class="text-cyan-500 underline decoration-2 underline-offset-4">Acústica</span></h2>
+                <div class="flex bg-black/40 p-1 rounded-full border border-white/10">
+                    <button id="btn-mode-fft" class="px-3.5 py-1.5 bg-cyan-500 text-black text-[9px] font-black rounded-full uppercase transition-all shadow-md">Live</button>
+                    <button id="btn-mode-pink" class="px-3.5 py-1.5 text-slate-400 text-[9px] font-black rounded-full uppercase transition-all">Rosa</button>
                 </div>
-                <p id="mobile-connection-text" class="mobile-helper-text">Aguardando conexão...</p>
-            </section>
-
-            <section id="mobile-master" class="mobile-card mobile-page">
-                <h2>Controle Master</h2>
-                <div class="mobile-master-display">
-                    <span id="mobile-master-level">0%</span>
-                    <span id="mobile-master-db">(-∞ dB)</span>
-                </div>
-                <input type="range" id="mobile-master-slider" min="0" max="100" value="0" aria-label="Volume master">
-                <div class="mobile-scale-row">
-                    <span>mín</span>
-                    <span>referência</span>
-                    <span>máx</span>
-                </div>
-                <div class="mobile-action-row">
-                    <button id="mobile-master-down" class="action-btn secondary">-1%</button>
-                    <button id="mobile-master-up" class="action-btn secondary">+1%</button>
-                </div>
-                <div class="mobile-preset-grid" aria-label="Ajustes rápidos de master">
-                    <button class="mobile-preset-btn" type="button" data-master-preset="0">Mudo</button>
-                    <button class="mobile-preset-btn" type="button" data-master-preset="35">Pré-culto</button>
-                    <button class="mobile-preset-btn" type="button" data-master-preset="50">Pregação</button>
-                    <button class="mobile-preset-btn" type="button" data-master-preset="62">Louvor</button>
-                </div>
-            </section>
-
-            <section id="mobile-mic" class="mobile-card mobile-page">
-                <h2>Microfone do Telefone</h2>
-                <div class="mobile-action-row">
-                    <button id="mobile-btn-start-mic" class="action-btn primary">Ativar Microfone</button>
-                    <button id="mobile-btn-stop-mic" class="action-btn secondary" disabled>Parar</button>
-                </div>
-                <div class="mobile-mic-status" id="mobile-mic-status">Microfone offline</div>
-                <canvas id="mobile-fft-canvas" width="320" height="140"></canvas>
-                <div class="frequency-zones">
-                    <span>Sub</span>
-                    <span>Low</span>
-                    <span>Mid</span>
-                    <span>High-Mid</span>
-                    <span>High</span>
-                </div>
-                <div class="mobile-mic-readouts">
-                    <div>
-                        <span>Nível ambiente</span>
-                        <strong id="mobile-rms-readout">0%</strong>
-                    </div>
-                    <div>
-                        <span>Pico dominante</span>
-                        <strong id="mobile-peak-readout">-- Hz</strong>
-                    </div>
-                </div>
-                <div id="mobile-feedback-alert" class="alert safe mobile-alert">Pronto para análise.</div>
-                <button id="mobile-btn-cut-feedback" class="action-btn secondary mobile-danger-action" disabled>Cortar pico na mesa</button>
-            </section>
-
-            <section id="mobile-tools" class="mobile-card mobile-page">
-                <h2>Ferramentas do Técnico</h2>
-                <label class="mobile-field-label" for="mobile-target-channel">Canal alvo</label>
-                <input id="mobile-target-channel" type="number" min="1" max="24" value="1" class="custom-input" inputmode="numeric">
-                <div class="mobile-tool-grid">
-                    <button id="mobile-clean-channel" class="mobile-preset-btn" type="button">Som limpo</button>
-                    <button id="mobile-hpf-channel" class="mobile-preset-btn" type="button">HPF 100Hz</button>
-                    <button id="mobile-gate-channel" class="mobile-preset-btn" type="button">Gate leve</button>
-                    <button id="mobile-compressor-channel" class="mobile-preset-btn" type="button">Compressor</button>
-                    <button id="mobile-eq-mud" class="mobile-preset-btn" type="button">-250Hz</button>
-                    <button id="mobile-eq-harsh" class="mobile-preset-btn" type="button">-3.2kHz</button>
-                    <button id="mobile-afs-on" class="mobile-preset-btn" type="button">AFS2 on</button>
-                    <button id="mobile-afs-off" class="mobile-preset-btn" type="button">AFS2 off</button>
-                </div>
-                <p class="mobile-helper-text">Use estes botões com calma durante passagem de som. Eles aplicam ajustes leves para limpar fala, louvor e retornos.</p>
-            </section>
-
-            <section id="mobile-map" class="mobile-card mobile-page">
-                <h2>Mapeamento da Sala</h2>
-                <label class="mobile-field-label" for="mobile-map-location">Local medido</label>
-                <input id="mobile-map-location" type="text" class="custom-input" placeholder="Ex: fundo esquerdo, altar, centro">
-                <div class="mobile-action-row">
-                    <button id="mobile-save-peak" class="action-btn primary" type="button">Salvar pico atual</button>
-                    <button id="mobile-refresh-maps" class="action-btn secondary" type="button">Atualizar lista</button>
-                </div>
-                <div id="mobile-mapping-list" class="mobile-mapping-list">Nenhum mapeamento carregado.</div>
-            </section>
-
-            <section id="mobile-logs" class="mobile-card mobile-page">
-                <h2>Logs Rápidos</h2>
-                <div class="mixer-log-box" id="mobile-log">
-                    <div class="mixer-log-entry">Eventos aparecerão aqui.</div>
-                </div>
-            </section>
+            </div>
             
-            <section id="mobile-ai" class="mobile-card mobile-page">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <h2>Assistente de IA</h2>
-                    <button id="mobile-btn-ai-reset" class="action-btn secondary small" style="min-width: 80px; padding: 4px 8px;">Reiniciar</button>
+            <div class="relative bg-black/40 rounded-[2.5rem] border border-white/10 p-2.5 shadow-2xl mb-6">
+                <div class="aspect-video w-full overflow-hidden rounded-[2rem] bg-black/80">
+                    <canvas id="mobile-fft-canvas" class="w-full h-full"></canvas>
                 </div>
-                <div class="mobile-tip-box" style="margin-bottom: 15px;">
-                    Dica: Ative o microfone primeiro para que a IA analise o som real do ambiente.
-                </div>
-                
-                <div id="mobile-ai-chat" style="height: 200px; overflow-y: auto; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 0.9rem;">
-                    <div style="color: var(--text-muted);">Aguardando sua dúvida ou análise...</div>
-                </div>
-
-                <div class="mobile-action-row" style="margin-bottom: 15px; gap: 8px;">
-                    <button id="mobile-btn-ai-analyze" class="action-btn primary" style="flex: 1;">Analisar Ambiente 🎤</button>
-                    <button id="mobile-btn-pink-noise" class="action-btn secondary" style="flex: 1;">Ruído Rosa 🔊</button>
-                </div>
-
-                <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 4px; margin-bottom: 10px;">
-                    <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">Análise Especializada:</div>
-                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                        <button class="action-btn secondary small ai-quick-tag" data-prompt="analise a reverberação (RT60)">Reverberação</button>
-                        <button class="action-btn secondary small ai-quick-tag" data-prompt="verifique sobras de grave (muddy)">Grave/Lama</button>
-                        <button class="action-btn secondary small ai-quick-tag" data-prompt="analise clareza da fala (inteligibilidade)">Clareza Fala</button>
+                <div id="rt60-overlay" class="absolute inset-2.5 bg-black/95 backdrop-blur-md rounded-[2rem] flex flex-col items-center justify-center hidden z-20">
+                    <div class="w-12 h-12 border-4 border-cyan-500/10 border-t-cyan-500 rounded-full animate-spin mb-4"></div>
+                    <span class="text-cyan-500 text-xs font-black uppercase tracking-widest">Escutando Impulso...</span>
+                    <div class="w-40 h-1 bg-white/10 rounded-full mt-4 overflow-hidden">
+                        <div id="rt60-progress" class="h-full bg-cyan-500 w-0 transition-all"></div>
                     </div>
                 </div>
+            </div>
 
-                <div style="display: flex; gap: 8px;">
-                    <input id="mobile-ai-input" type="text" class="custom-input" placeholder="Ex: voz está abafada" style="flex: 1;">
-                    <button id="mobile-btn-ai-send" class="action-btn secondary" style="width: 60px;">OK</button>
+            <div class="grid grid-cols-2 gap-3 mb-6">
+                <div class="glass-card p-4 rounded-3xl text-center">
+                    <span class="text-[8px] text-slate-500 uppercase font-black block mb-1 tracking-widest">SPL Est.</span>
+                    <strong id="mobile-rms-readout" class="text-2xl font-mono text-cyan-400">0%</strong>
                 </div>
-            </section>
+                <div class="glass-card p-4 rounded-3xl text-center">
+                    <span class="text-[8px] text-slate-500 uppercase font-black block mb-1 tracking-widest">RT60 (Rev)</span>
+                    <strong id="mobile-rt60-readout" class="text-2xl font-mono text-cyan-400">-- s</strong>
+                </div>
+            </div>
 
-            <section id="mobile-guide" class="mobile-card mobile-page">
-                <h2>Guia Rápido</h2>
-                <ul class="mobile-tutorial-list mobile-guide-list">
-                    <li>1. Conecte o telefone na mesma rede Wi-Fi da mesa/servidor.</li>
-                    <li>2. <strong>Importante (HTTPS):</strong> O microfone só funciona em conexões seguras. No Android/Chrome, acesse <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code> e adicione o IP do servidor.</li>
-                    <li>3. No iOS/Safari, você pode precisar de um túnel (Ngrok) para ter um link HTTPS válido.</li>
-                    <li>4. Use fones de ouvido para evitar feedback (microfonia) ao ativar o microfone.</li>
-                    <li>5. Ajuste o master e use a aba <strong>IA</strong> para analisar os pontos da igreja.</li>
-                </ul>
-                <div class="mobile-tip-box">Dica: use +1% / -1% para ajustes finos sem perder a referência do ganho.</div>
-            </section>
-        </main>
-    </div>
+            <div class="grid grid-cols-2 gap-3 mb-6 px-1">
+                <button id="mobile-btn-measure-rt60" class="glass-card py-4 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 active:bg-cyan-500/10">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Medir RT60
+                </button>
+                <button id="mobile-btn-analyze-timbre" class="glass-card py-4 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 active:bg-cyan-500/10">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-.3 2s3-.895 3-2m-3 0V12m0 0l12-3"></path></svg>
+                    Timbre
+                </button>
+            </div>
 
+            <div id="mobile-feedback-alert" class="p-3.5 rounded-2xl glass-card text-slate-500 text-center text-[10px] font-bold mb-6 italic">
+                Microfone pronto para análise técnica.
+            </div>
+
+            <div class="flex flex-col gap-3 px-1">
+                <button id="mobile-btn-start-mic" class="py-5 bg-cyan-600 rounded-[2rem] text-white font-black shadow-xl shadow-cyan-900/40 uppercase tracking-widest text-xs">Ativar Microfone</button>
+                <button id="mobile-btn-stop-mic" class="py-5 glass-card rounded-[2rem] text-slate-500 font-bold hidden uppercase tracking-widest text-xs">Parar</button>
+                <button id="mobile-btn-cut-feedback" class="py-5 bg-red-600 rounded-[2rem] text-white font-black animate-pulse hidden uppercase tracking-widest text-xs">CORTAR FEEDBACK</button>
+            </div>
+        </section>
+
+        <!-- SECTION: ASSISTENTE -->
+        <section id="mobile-ai" class="mobile-page hidden p-5 flex flex-col h-[calc(100vh-190px)] animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h2 class="text-lg font-black mb-6 uppercase tracking-tight italic">SoundMaster <span class="text-cyan-500 underline decoration-2 underline-offset-4">IA</span></h2>
+            
+            <div id="mobile-ai-chat" class="flex-1 glass-card rounded-[2.5rem] p-5 mb-5 overflow-y-auto space-y-4 shadow-inner no-scrollbar">
+                <div class="flex justify-start">
+                    <div class="bg-slate-800/60 backdrop-blur-lg p-4 rounded-3xl rounded-tl-none text-xs text-slate-200 border border-white/5 max-w-[90%] shadow-lg leading-relaxed">
+                        Olá! Como posso ajudar com o som hoje? Ative o microfone para uma análise automática do timbre ou reverberação.
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div class="flex gap-2 overflow-x-auto pb-1 no-scrollbar px-1">
+                    <button class="ai-quick-tag whitespace-nowrap px-5 py-2 glass-card rounded-full text-[9px] font-black uppercase text-slate-400" data-prompt="analise reverberação">RT60</button>
+                    <button class="ai-quick-tag whitespace-nowrap px-5 py-2 glass-card rounded-full text-[9px] font-black uppercase text-slate-400" data-prompt="verifique graves">Grave</button>
+                    <button class="ai-quick-tag whitespace-nowrap px-5 py-2 glass-card rounded-full text-[9px] font-black uppercase text-slate-400" data-prompt="limpar voz">Voz</button>
+                    <button class="ai-quick-tag whitespace-nowrap px-5 py-2 glass-card rounded-full text-[9px] font-black uppercase text-slate-400" data-prompt="ajuste bateria">Bateria</button>
+                </div>
+                <div class="flex gap-3 px-1">
+                    <input id="mobile-ai-input" type="text" placeholder="Dúvida técnica..." class="flex-1 bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm focus:border-cyan-500 outline-none backdrop-blur-xl">
+                    <button id="mobile-btn-ai-send" class="w-14 h-14 bg-cyan-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-cyan-900/30">➔</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION: FERRAMENTAS -->
+        <section id="mobile-tools" class="mobile-page hidden p-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h2 class="text-lg font-black mb-6 uppercase tracking-tight italic">Ferramentas <span class="text-cyan-500 underline decoration-2 underline-offset-4">Pro</span></h2>
+            
+            <div class="glass-card p-6 rounded-[2.5rem] mb-6 shadow-xl">
+                <label class="text-[8px] font-black uppercase tracking-[0.2em] text-slate-600 block mb-3 ml-1">Canal de Mixagem</label>
+                <div class="flex items-center gap-6">
+                    <input id="mobile-target-channel" type="number" min="1" max="24" value="1" class="w-20 bg-black/60 border border-white/10 rounded-2xl px-3 py-4 text-cyan-400 font-mono text-3xl text-center outline-none focus:border-cyan-500 shadow-inner">
+                    <div class="text-slate-400">
+                        <p class="text-xs font-black uppercase tracking-tight text-white/80">Canal Selecionado</p>
+                        <p class="text-[9px] text-slate-600 font-bold">Ajustes afetarão este canal.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 px-1">
+                <button id="mobile-clean-channel" class="glass-card p-5 rounded-[2rem] text-[10px] font-black uppercase active:bg-cyan-500/20 shadow-md">Som Limpo</button>
+                <button id="mobile-hpf-channel" class="glass-card p-5 rounded-[2rem] text-[10px] font-black uppercase active:bg-cyan-500/20 shadow-md">HPF 100Hz</button>
+                <button id="mobile-gate-channel" class="glass-card p-5 rounded-[2rem] text-[10px] font-black uppercase active:bg-cyan-500/20 shadow-md">Gate Leve</button>
+                <button id="mobile-compressor-channel" class="glass-card p-5 rounded-[2rem] text-[10px] font-black uppercase active:bg-cyan-500/20 shadow-md">Comp.</button>
+                <button id="mobile-eq-mud" class="p-5 bg-red-900/10 rounded-[2rem] border border-red-500/20 text-[10px] font-black uppercase text-red-400 active:bg-red-500/20 shadow-md">Cortar 250Hz</button>
+                <button id="mobile-eq-harsh" class="p-5 bg-red-900/10 rounded-[2rem] border border-red-500/20 text-[10px] font-black uppercase text-red-400 active:bg-red-500/20 shadow-md">Cortar 3.2k</button>
+                <button id="mobile-afs-on" class="p-5 bg-cyan-900/10 rounded-[2rem] border border-cyan-500/20 text-[10px] font-black uppercase text-cyan-400 shadow-md">AFS2 ON</button>
+                <button id="mobile-afs-off" class="glass-card p-5 rounded-[2rem] text-[10px] font-black uppercase text-slate-600 shadow-md">AFS2 OFF</button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Navegação Inferior de Alta Fidelidade -->
+    <nav class="safe-bottom bg-black/80 backdrop-blur-3xl border-t border-white/5 fixed bottom-0 w-full h-20 flex items-center justify-around z-50 px-6">
+        <button class="mobile-nav-btn tab-active flex flex-col items-center justify-center w-1/4" data-target="mobile-master">
+            <svg class="w-5 h-5 mb-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+            <span class="nav-label">Master</span>
+        </button>
+        <button class="mobile-nav-btn text-slate-600 flex flex-col items-center justify-center w-1/4" data-target="mobile-mic">
+            <svg class="w-5 h-5 mb-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+            <span class="nav-label">Análise</span>
+        </button>
+        <button class="mobile-nav-btn text-slate-600 flex flex-col items-center justify-center w-1/4" data-target="mobile-ai">
+            <svg class="w-5 h-5 mb-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+            <span class="nav-label">IA Chat</span>
+        </button>
+        <button class="mobile-nav-btn text-slate-600 flex flex-col items-center justify-center w-1/4" data-target="mobile-tools">
+            <svg class="w-5 h-5 mb-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            <span class="nav-label">Tools</span>
+        </button>
+    </nav>
+
+    <!-- Core Scripts -->
     <script src="/socket.io/socket.io.js"></script>
     <script src="js/mobile.js"></script>
+
 </body>
 </html>

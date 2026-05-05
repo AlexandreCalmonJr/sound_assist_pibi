@@ -13,13 +13,25 @@ const masterUp = document.getElementById('mobile-master-up');
 const presetButtons = document.querySelectorAll('[data-master-preset]');
 const btnStartMic = document.getElementById('mobile-btn-start-mic');
 const btnStopMic = document.getElementById('mobile-btn-stop-mic');
+const btnCutFeedback = document.getElementById('mobile-btn-cut-feedback');
+    
+// Novos botões
+const btnRT60 = document.getElementById('mobile-btn-measure-rt60');
+const btnTimbre = document.getElementById('mobile-btn-analyze-timbre');
+const btnModeFFT = document.getElementById('btn-mode-fft');
+const btnModePink = document.getElementById('btn-mode-pink');
+
+if (btnRT60) btnRT60.onclick = startRT60Measurement;
+if (btnTimbre) btnTimbre.onclick = analyzeTimbre;
+if (btnModeFFT) btnModeFFT.onclick = () => setMeasurementMode('fft');
+if (btnModePink) btnModePink.onclick = () => setMeasurementMode('pink');
+
 const micStatusText = document.getElementById('mobile-mic-status');
 const fftCanvas = document.getElementById('mobile-fft-canvas');
 const mobileLog = document.getElementById('mobile-log');
 const feedbackAlert = document.getElementById('mobile-feedback-alert');
 const rmsReadout = document.getElementById('mobile-rms-readout');
 const peakReadout = document.getElementById('mobile-peak-readout');
-const btnCutFeedback = document.getElementById('mobile-btn-cut-feedback');
 const mobileTargetChannel = document.getElementById('mobile-target-channel');
 const btnMobileCleanChannel = document.getElementById('mobile-clean-channel');
 const btnMobileHpf = document.getElementById('mobile-hpf-channel');
@@ -48,8 +60,17 @@ let micStream;
 let isMicActive = false;
 let animationId;
 let currentPeakHz = 0;
-let suspectedFeedbackFrames = 0;
+
+// Novas variáveis para medições avançadas
+let isMeasuringRT60 = false;
+let rt60StartTime = 0;
+let rt60DecayLevels = [];
+let isMeasuringPink = false;
+let pinkSamples = [];
+let pinkSampleCount = 0;
+let measurementMode = 'fft'; // 'fft' ou 'pink'
 let latestMasterPercent = 0;
+let suspectedFeedbackFrames = 0;
 let isPinkNoiseActive = false;
 
 function appendMobileLog(message) {
@@ -70,10 +91,16 @@ function setBusy(button, busy, label) {
 }
 
 function updateConnection(connected, msg) {
-    connectionBadge.classList.toggle('online', connected);
-    connectionBadge.classList.toggle('offline', !connected);
-    connectionBadge.innerText = connected ? 'Conectado' : 'Offline';
-    connectionText.innerText = msg || (connected ? 'Mixer conectado.' : 'Mixer desconectado.');
+    if (connectionBadge) {
+        if (connected) {
+            connectionBadge.className = 'px-2.5 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-[8px] font-black text-green-500 uppercase tracking-widest';
+            connectionBadge.innerText = 'Online';
+        } else {
+            connectionBadge.className = 'px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-[8px] font-black text-red-500 uppercase tracking-widest';
+            connectionBadge.innerText = 'Offline';
+        }
+    }
+    if (connectionText) connectionText.innerText = msg || (connected ? 'Mixer conectado.' : 'Mixer desconectado.');
     setBusy(btnConnect, false, 'Conectar');
     appendMobileLog(msg || (connected ? 'Conectado ao mixer.' : 'Desconectado do mixer.'));
 }
@@ -122,9 +149,9 @@ async function startMic() {
         isMicActive = true;
         suspectedFeedbackFrames = 0;
         micStatusText.innerText = 'Microfone ativo';
-        btnStartMic.disabled = true;
-        btnStopMic.disabled = false;
-        btnCutFeedback.disabled = true;
+        btnStartMic.classList.add('hidden');
+        btnStopMic.classList.remove('hidden');
+        btnCutFeedback.classList.add('hidden');
         analyzeMic();
         appendMobileLog('Microfone do telefone ativado.');
     } catch (error) {
@@ -147,10 +174,11 @@ function stopMic() {
     source = null;
     cancelAnimationFrame(animationId);
     micStatusText.innerText = 'Microfone offline';
-    btnStartMic.disabled = false;
-    btnStopMic.disabled = true;
-    btnCutFeedback.disabled = true;
-    feedbackAlert.className = 'alert safe mobile-alert';
+    btnStartMic.classList.remove('hidden');
+    btnStopMic.classList.add('hidden');
+    btnCutFeedback.classList.add('hidden');
+    
+    feedbackAlert.className = 'p-4 rounded-2xl bg-slate-800/40 border border-white/5 text-slate-400 text-center font-bold mb-6';
     feedbackAlert.innerText = 'Microfone parado.';
     rmsReadout.innerText = '0%';
     peakReadout.innerText = '-- Hz';
@@ -158,37 +186,46 @@ function stopMic() {
 }
 
 function drawAnalyzer(canvasCtx, dataArray, bufferLength) {
-    resizeCanvasForDisplay();
-    const width = fftCanvas.width;
-    const height = fftCanvas.height;
-    const barWidth = Math.max(2, (width / bufferLength) * 2.4);
-
-    canvasCtx.clearRect(0, 0, width, height);
-    canvasCtx.fillStyle = '#050508';
+    const canvas = fftCanvas;
+    if (!canvas) return;
+    
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // Fundo ultra dark
+    canvasCtx.fillStyle = '#050507';
     canvasCtx.fillRect(0, 0, width, height);
-    canvasCtx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
-    canvasCtx.lineWidth = 1;
-    for (let y = 0; y < height; y += height / 4) {
-        canvasCtx.beginPath();
-        canvasCtx.moveTo(0, y);
-        canvasCtx.lineTo(width, y);
-        canvasCtx.stroke();
-    }
-
+    
+    const barWidth = (width / bufferLength) * 2;
     let x = 0;
+    
     for (let i = 0; i < bufferLength; i++) {
-        const value = dataArray[i];
-        const freq = i * audioCtx.sampleRate / analyser.fftSize;
-        let color = '#8888a0';
-        if (freq < 100) color = '#34ace0';
-        else if (freq < 500) color = '#2ed573';
-        else if (freq < 2000) color = '#f1c40f';
-        else if (freq < 6000) color = '#ffa502';
-        else color = '#ff4757';
+        const db = dataArray[i];
+        const normalized = Math.max(0, Math.min(1, (db + 100) / 100));
+        const barHeight = normalized * height;
+        
+        const freq = i * audioCtx.sampleRate / (bufferLength * 2);
+        
+        // Cores Premium (Glow)
+        let color = '#334155';
+        if (freq < 250) color = '#0ea5e9'; // Cyan
+        else if (freq < 2500) color = '#10b981'; // Green
+        else if (freq < 6000) color = '#f59e0b'; // Amber
+        else color = '#ef4444'; // Red
+        
+        // Efeito de gradiente/brilho
         canvasCtx.fillStyle = color;
-        canvasCtx.fillRect(x, height - (value / 255) * height, barWidth, (value / 255) * height);
-        x += barWidth + 1;
+        canvasCtx.globalAlpha = 0.8;
+        canvasCtx.fillRect(x, height - barHeight, barWidth - 1.5, barHeight);
+        
+        // Brilho no topo da barra
+        canvasCtx.globalAlpha = 1.0;
+        canvasCtx.fillStyle = '#fff';
+        canvasCtx.fillRect(x, height - barHeight, barWidth - 1.5, 2);
+        
+        x += barWidth;
     }
+    canvasCtx.globalAlpha = 1.0;
 }
 
 function analyzeMic() {
@@ -199,6 +236,9 @@ function analyzeMic() {
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     analyser.getByteFrequencyData(dataArray);
+
+    const freqData = new Float32Array(bufferLength);
+    analyser.getFloatFrequencyData(freqData);
 
     let maxVal = 0;
     let maxIndex = 0;
@@ -214,9 +254,59 @@ function analyzeMic() {
         }
     }
 
+    resizeCanvasForDisplay();
     drawAnalyzer(canvasCtx, dataArray, bufferLength);
 
+    // Lógica de Medição de Ruído Rosa (Averaging)
+    if (isMeasuringPink && pinkSampleCount < 100) {
+        if (pinkSamples.length === 0) {
+            pinkSamples = new Float32Array(bufferLength);
+        }
+        for (let i = 0; i < bufferLength; i++) {
+            pinkSamples[i] += freqData[i];
+        }
+        pinkSampleCount++;
+        if (pinkSampleCount === 100) {
+            for (let i = 0; i < bufferLength; i++) pinkSamples[i] /= 100;
+            isMeasuringPink = false;
+            appendMobileLog('Medição de Ruído Rosa concluída.');
+            askAI('Analise a curva de ruído rosa que acabei de medir.', true);
+        }
+    }
+
     const rms = Math.sqrt(sumSquares / bufferLength);
+    const rmsDb = 20 * Math.log10(rms + 1e-6);
+
+    // Lógica de Medição de RT60 (Simplified Impulse Response)
+    if (isMeasuringRT60) {
+        const currentDb = rmsDb;
+        if (rt60StartTime === 0) {
+            if (currentDb > -20) { // Detecta impulso (> -20dB)
+                rt60StartTime = Date.now();
+                rt60DecayLevels = [currentDb];
+            }
+        } else {
+            rt60DecayLevels.push(currentDb);
+            const progress = (rt60DecayLevels.length / 50) * 100;
+            document.getElementById('rt60-progress').style.width = `${progress}%`;
+            
+            if (rt60DecayLevels.length > 50) { // Captura 50 frames (~1s)
+                isMeasuringRT60 = false;
+                document.getElementById('rt60-overlay').classList.add('hidden');
+                
+                // Calcula decaimento (Linear regression simplificada)
+                const first = rt60DecayLevels[0];
+                const last = rt60DecayLevels[rt60DecayLevels.length - 1];
+                const drop = first - last;
+                const time = (rt60DecayLevels.length * 1000 / 60) / 1000; // segundos
+                const rt60 = drop > 10 ? (time * 60 / drop) : 0;
+                
+                document.getElementById('mobile-rt60-readout').innerText = rt60 > 0 ? `${rt60.toFixed(2)}s` : '--';
+                appendMobileLog(`RT60 Medido: ${rt60.toFixed(2)}s`);
+            }
+        }
+    }
+
     const rmsPercent = Math.round(Math.min(100, rms * 350));
     currentPeakHz = maxIndex * (audioCtx.sampleRate / analyser.fftSize);
     const peakRounded = Math.round(currentPeakHz);
@@ -228,18 +318,104 @@ function analyzeMic() {
     suspectedFeedbackFrames = looksLikeFeedback ? suspectedFeedbackFrames + 1 : Math.max(0, suspectedFeedbackFrames - 2);
 
     if (suspectedFeedbackFrames > 16) {
-        feedbackAlert.className = 'alert danger mobile-alert';
-        feedbackAlert.innerText = `Atenção: pico sustentado em ${peakRounded} Hz.`;
-        btnCutFeedback.disabled = false;
+        feedbackAlert.className = 'p-4 rounded-xl bg-red-900/20 border border-red-500/30 text-red-400 text-center font-bold mb-6 animate-pulse text-[11px]';
+        feedbackAlert.innerText = `⚠️ Atenção: pico sustentado em ${peakRounded} Hz.`;
+        btnCutFeedback.classList.remove('hidden');
     } else if (rmsPercent > 75) {
-        feedbackAlert.className = 'alert danger mobile-alert';
-        feedbackAlert.innerText = 'Nível ambiente muito alto. Confira o master e os retornos.';
-        btnCutFeedback.disabled = true;
+        feedbackAlert.className = 'p-4 rounded-xl bg-red-900/20 border border-red-500/30 text-red-400 text-center font-bold mb-6 text-[11px]';
+        feedbackAlert.innerText = '🔊 Nível muito alto! Risco de microfonia.';
+        btnCutFeedback.classList.add('hidden');
+    } else if (isMeasuringPink) {
+        feedbackAlert.className = 'p-4 rounded-xl bg-cyan-900/20 border border-cyan-500/30 text-cyan-400 text-center font-bold mb-6 text-[11px]';
+        feedbackAlert.innerText = `Capturando Ruído Rosa (${pinkSampleCount}/100)...`;
     } else {
-        feedbackAlert.className = 'alert safe mobile-alert';
-        feedbackAlert.innerText = `Microfone ok. Pico em ${peakRounded} Hz.`;
-        btnCutFeedback.disabled = true;
+        feedbackAlert.className = 'p-4 rounded-xl bg-green-900/20 border border-green-500/30 text-green-400 text-center font-bold mb-6 text-[11px]';
+        feedbackAlert.innerText = `✅ Som Limpo. Pico: ${peakRounded} Hz.`;
+        btnCutFeedback.classList.add('hidden');
     }
+}
+
+function setMeasurementMode(mode) {
+    measurementMode = mode;
+    const btnFFT = document.getElementById('btn-mode-fft');
+    const btnPink = document.getElementById('btn-mode-pink');
+    
+    if (mode === 'pink') {
+        btnFFT.classList.replace('bg-cyan-500', 'bg-slate-800');
+        btnFFT.classList.replace('text-black', 'text-slate-400');
+        btnPink.classList.replace('bg-slate-800', 'bg-cyan-500');
+        btnPink.classList.replace('text-slate-400', 'text-black');
+        startPinkMeasurement();
+    } else {
+        btnPink.classList.replace('bg-cyan-500', 'bg-slate-800');
+        btnPink.classList.replace('text-black', 'text-slate-400');
+        btnFFT.classList.replace('bg-slate-800', 'bg-cyan-500');
+        btnFFT.classList.replace('text-slate-400', 'text-black');
+        isMeasuringPink = false;
+    }
+}
+
+function startPinkMeasurement() {
+    if (!isMicActive) {
+        alert('Ative o microfone primeiro!');
+        setMeasurementMode('fft');
+        return;
+    }
+    isMeasuringPink = true;
+    pinkSamples = [];
+    pinkSampleCount = 0;
+}
+
+function startRT60Measurement() {
+    if (!isMicActive) {
+        alert('Ative o microfone primeiro!');
+        return;
+    }
+    const overlay = document.getElementById('rt60-overlay');
+    overlay.classList.remove('hidden');
+    isMeasuringRT60 = true;
+    rt60StartTime = 0;
+    rt60DecayLevels = [];
+    
+    appendMobileLog('Iniciando medição de RT60. Faça um estalo ou barulho seco.');
+}
+
+function analyzeTimbre() {
+    if (!isMicActive) {
+        alert('Ative o microfone primeiro!');
+        return;
+    }
+    
+    // Simples análise de balanço espectral
+    const bufferLength = analyser.frequencyBinCount;
+    const data = new Float32Array(bufferLength);
+    analyser.getFloatFrequencyData(data);
+    
+    let lowSum = 0, midSum = 0, highSum = 0;
+    const sampleRate = audioCtx.sampleRate;
+    
+    for(let i=0; i<bufferLength; i++) {
+        const freq = i * sampleRate / (bufferLength * 2);
+        if (freq < 250) lowSum += data[i];
+        else if (freq < 4000) midSum += data[i];
+        else highSum += data[i];
+    }
+    
+    const lowAvg = lowSum / (bufferLength * 0.1);
+    const midAvg = midSum / (bufferLength * 0.5);
+    const highAvg = highSum / (bufferLength * 0.4);
+    
+    let report = 'Balanço Espectral: ';
+    if (lowAvg > midAvg + 6) report += 'Grave excessivo. ';
+    else if (lowAvg < midAvg - 6) report += 'Falta grave. ';
+    
+    if (highAvg > midAvg + 6) report += 'Agudo brilhante/reflexivo. ';
+    else if (highAvg < midAvg - 6) report += 'Agudo apagado. ';
+    
+    if (report === 'Balanço Espectral: ') report += 'Equilibrado.';
+    
+    appendMobileLog(report);
+    askAI(`Analise este timbre: Grave=${Math.round(lowAvg)}dB, Médio=${Math.round(midAvg)}dB, Agudo=${Math.round(highAvg)}dB. ${report}`);
 }
 
 function setMasterLevel(value) {
@@ -316,10 +492,15 @@ async function saveCurrentPeak() {
 async function askAI(text, includeAnalysis = false) {
     if (!text && !includeAnalysis) return;
     
-    const chatMsg = document.createElement('div');
-    chatMsg.style.marginBottom = '8px';
-    chatMsg.innerHTML = `<strong style="color: var(--accent-primary);">Você:</strong> ${text || 'Análise de áudio...'}`;
-    aiChatBox.appendChild(chatMsg);
+    // Bubble Usuário
+    const userRow = document.createElement('div');
+    userRow.className = 'flex justify-end mb-4';
+    userRow.innerHTML = `
+        <div class="bg-cyan-600 p-4 rounded-2xl rounded-tr-none text-sm text-white border border-cyan-500/30 max-w-[85%] shadow-lg shadow-cyan-900/20">
+            ${text || '📊 Enviando análise acústica...'}
+        </div>
+    `;
+    aiChatBox.appendChild(userRow);
     aiChatBox.scrollTop = aiChatBox.scrollHeight;
 
     const payload = { 
@@ -332,6 +513,18 @@ async function askAI(text, includeAnalysis = false) {
         } : null
     };
 
+    // Placeholder de carregamento
+    const loadingId = 'ai-loading-' + Date.now();
+    const loadingRow = document.createElement('div');
+    loadingRow.id = loadingId;
+    loadingRow.className = 'flex justify-start mb-4 animate-pulse';
+    loadingRow.innerHTML = `
+        <div class="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-xs text-slate-400 border border-white/5">
+            Pensando...
+        </div>
+    `;
+    aiChatBox.appendChild(loadingRow);
+
     try {
         const res = await fetch('/api/ai', {
             method: 'POST',
@@ -340,32 +533,47 @@ async function askAI(text, includeAnalysis = false) {
         });
         const data = await res.json();
         
-        const aiMsg = document.createElement('div');
-        aiMsg.style.marginBottom = '12px';
-        aiMsg.style.paddingLeft = '8px';
-        aiMsg.style.borderLeft = '2px solid var(--accent-secondary)';
-        aiMsg.innerHTML = `<strong style="color: var(--accent-secondary);">IA:</strong> ${data.text}`;
+        // Remove loading
+        document.getElementById(loadingId)?.remove();
+
+        const aiRow = document.createElement('div');
+        aiRow.className = 'flex justify-start mb-4';
         
+        let commandHtml = '';
         if (data.command) {
-            const btnCmd = document.createElement('button');
-            btnCmd.className = 'action-btn secondary small';
-            btnCmd.style.marginTop = '8px';
-            btnCmd.innerText = `Executar: ${data.command.desc}`;
+            commandHtml = `
+                <button class="mt-3 w-full py-2 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-xl text-[10px] font-black uppercase tracking-widest active:bg-cyan-500 active:text-black transition-all">
+                    Executar: ${data.command.desc}
+                </button>
+            `;
+        }
+
+        aiRow.innerHTML = `
+            <div class="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 border border-white/5 max-w-[85%] shadow-xl">
+                <div class="font-black text-[10px] text-cyan-500 uppercase tracking-widest mb-1">SoundMaster AI</div>
+                ${data.text}
+                ${commandHtml}
+            </div>
+        `;
+
+        if (data.command) {
+            const btnCmd = aiRow.querySelector('button');
             btnCmd.onclick = () => {
                 socket.emit('execute_ai_command', data.command);
                 appendMobileLog(`Executado via IA: ${data.command.desc}`);
                 btnCmd.disabled = true;
                 btnCmd.innerText = 'Aplicado ✅';
+                btnCmd.className = 'mt-3 w-full py-2 bg-green-500/20 text-green-400 border border-green-500/30 rounded-xl text-[10px] font-black uppercase tracking-widest';
             };
-            aiMsg.appendChild(btnCmd);
         }
 
-        aiChatBox.appendChild(aiMsg);
+        aiChatBox.appendChild(aiRow);
         aiChatBox.scrollTop = aiChatBox.scrollHeight;
     } catch (err) {
+        document.getElementById(loadingId)?.remove();
         const errMsg = document.createElement('div');
-        errMsg.style.color = 'var(--danger)';
-        errMsg.innerText = 'IA: Erro de conexão com o servidor.';
+        errMsg.className = 'text-center text-[10px] text-red-500 uppercase font-black my-2';
+        errMsg.innerText = 'Erro de conexão com o servidor de IA.';
         aiChatBox.appendChild(errMsg);
     }
 }
@@ -521,12 +729,23 @@ function initMobilePageNavigation() {
 
     navButtons.forEach((button) => {
         button.addEventListener('click', () => {
-            navButtons.forEach(btn => btn.classList.remove('active'));
-            pages.forEach(page => page.classList.remove('active'));
+            // Update buttons
+            navButtons.forEach(btn => {
+                btn.classList.remove('tab-active');
+                btn.classList.add('text-slate-500');
+            });
+            button.classList.add('tab-active');
+            button.classList.remove('text-slate-500');
 
-            button.classList.add('active');
-            const target = button.getAttribute('data-target');
-            document.getElementById(target)?.classList.add('active');
+            // Update pages
+            pages.forEach(page => page.classList.add('hidden'));
+            const targetId = button.getAttribute('data-target');
+            const targetPage = document.getElementById(targetId);
+            if (targetPage) {
+                targetPage.classList.remove('hidden');
+                // Adiciona animação de entrada
+                targetPage.classList.add('animate-in', 'fade-in', 'slide-in-from-bottom-2', 'duration-300');
+            }
         });
     });
 }

@@ -24,33 +24,38 @@ function createAppServer({ app, rootDir, localIp, port }) {
     });
 
     // Inicia o túnel HTTPS (importante para microfone no iOS/Android)
-    async function startTunnel() {
+    async function startTunnel(retryCount = 0) {
         try {
-            // Subdomínio fixo para evitar que o link mude toda hora
+            // Tenta o subdomínio fixo, mas se falhar muitas vezes, tenta um aleatório
+            const sub = retryCount < 3 ? 'soundmaster-pibi' : `soundmaster-${Math.random().toString(36).substring(2, 7)}`;
+            
             const tunnel = await localtunnel({ 
                 port: port,
-                subdomain: 'soundmaster-pibi' 
+                subdomain: sub 
             });
+
             tunnelUrl = tunnel.url;
             console.log('====================================');
-            console.log('Túnel Seguro Ativo (HTTPS):');
+            console.log(`Túnel Seguro Ativo (HTTPS) [Tentativa ${retryCount + 1}]:`);
             console.log(tunnelUrl);
             console.log('====================================');
 
             tunnel.on('close', () => {
                 console.log('Túnel fechado. Tentando reconectar...');
                 tunnelUrl = null;
-                setTimeout(startTunnel, 5000);
+                setTimeout(() => startTunnel(0), 5000);
             });
             
             tunnel.on('error', (err) => {
                 console.error('Erro no túnel:', err.message);
-                setTimeout(startTunnel, 5000);
+                tunnelUrl = null;
+                setTimeout(() => startTunnel(retryCount + 1), 5000);
             });
 
         } catch (err) {
             console.error('Falha ao criar túnel seguro:', err.message);
-            setTimeout(startTunnel, 10000); // Tenta novamente em 10s
+            // Se falhou (503), tenta novamente com um contador de retentativa
+            setTimeout(() => startTunnel(retryCount + 1), 10000);
         }
     }
     startTunnel();
