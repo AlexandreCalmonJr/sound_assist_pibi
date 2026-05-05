@@ -59,10 +59,11 @@
      * @param {boolean} isUser
      * @param {Object|null} command  - se presente, adiciona botão "Executar"
      */
-    function _appendBubble(text, isUser, command) {
+    function _appendBubble(text, isUser, command, id) {
         if (!els.chatMessages) return;
 
         const bubble = document.createElement('div');
+        if (id) bubble.id = id;
         bubble.className = 'chat-bubble ' + (isUser ? 'chat-user' : 'chat-assistant');
         bubble.innerText = text;
 
@@ -123,7 +124,7 @@
         const analysis = _getCurrentAnalysis();
         if (!analysis) return;
         if (usePinkReport && !analysis.pinkReport) {
-            alert('Não há relatório de ruído rosa. Faça a medição verde antes de enviar.');
+            alert('Não há relatório de ruído rosa. Faça a medição rosa antes de enviar.');
             return;
         }
 
@@ -141,8 +142,20 @@
             payload.pinkReport = analysis.pinkReport;
         }
 
-        const result = await AIService.ask(message, channel, payload);
-        _appendBubble(result.text, false, result.command);
+        // Feedback visual de carregamento
+        const loadingId = 'ai-loading-' + Date.now();
+        _appendBubble('Analisando dados acústicos...', false, null, loadingId);
+
+        try {
+            const result = await AIService.ask(message, channel, payload);
+            const loadingBubble = document.getElementById(loadingId);
+            if (loadingBubble) loadingBubble.remove();
+            
+            _appendBubble(result.text, false, result.command);
+        } catch (err) {
+            const loadingBubble = document.getElementById(loadingId);
+            if (loadingBubble) loadingBubble.innerText = 'Erro ao processar análise: ' + err.message;
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -157,8 +170,19 @@
         _appendBubble(text.trim(), true, null);
         if (els.chatInput) els.chatInput.value = '';
 
-        const result = await AIService.ask(text.trim(), channel);
-        _appendBubble(result.text, false, result.command);
+        const loadingId = 'msg-loading-' + Date.now();
+        _appendBubble('...', false, null, loadingId);
+
+        try {
+            const result = await AIService.ask(text.trim(), channel);
+            const loadingBubble = document.getElementById(loadingId);
+            if (loadingBubble) loadingBubble.remove();
+            
+            _appendBubble(result.text, false, result.command);
+        } catch (err) {
+            const loadingBubble = document.getElementById(loadingId);
+            if (loadingBubble) loadingBubble.innerText = 'Erro na conexão com IA.';
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -246,5 +270,8 @@
         await AIService.ping();
     }
 
-    window.SoundMasterAIChat = { init };
+    window.SoundMasterAIChat = { 
+        init,
+        sendAnalysis: _sendAcousticAnalysis
+    };
 })();

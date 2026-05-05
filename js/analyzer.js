@@ -436,6 +436,16 @@ async function sendAnalysisToAI() {
 
     const channelInput = document.getElementById('ai-target-channel');
     const channel = channelInput ? Number(channelInput.value) : 1;
+    
+    // Se o Assistente IA estiver carregado, use a função dele para mostrar no chat
+    if (window.SoundMasterAIChat && typeof window.SoundMasterAIChat.sendAnalysis === 'function') {
+        window.SoundMasterAIChat.sendAnalysis(false);
+        // Navega para a aba da IA para o usuário ver
+        const aiTab = document.querySelector('[data-target="ai-chat"]');
+        if (aiTab) aiTab.click();
+        return;
+    }
+
     if (!window.AIService) {
         alert('IA indisponível. Aguarde a inicialização do assistente.');
         return;
