@@ -4,11 +4,13 @@ async function configureElectronSession() {
     await session.defaultSession.clearStorageData();
 
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-        callback(permission === 'media');
+        const allowed = ['media', 'audioCapture', 'videoCapture', 'notifications'];
+        callback(allowed.includes(permission));
     });
 
     session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
-        return permission === 'media';
+        const allowed = ['media', 'audioCapture', 'videoCapture', 'notifications'];
+        return allowed.includes(permission);
     });
 }
 

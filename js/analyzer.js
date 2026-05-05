@@ -26,6 +26,10 @@ const pinkMeasureSummary = document.getElementById('pink-measure-summary');
 
 async function startAnalyzer() {
     try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert('Acesso ao microfone bloqueado pelo navegador ou sistema. Verifique se está usando HTTPS ou localhost.');
+            throw new Error('navigator.mediaDevices.getUserMedia não disponível.');
+        }
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
