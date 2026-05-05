@@ -181,11 +181,18 @@
             const ip = els.ipInput ? els.ipInput.value.trim() : '';
             if (!ip) { alert('Insira o IP da mesa Soundcraft Ui.'); return; }
 
-            // Abre iframe
+            // Abre iframe (apenas se não for modo simulado interno)
             if (els.placeholder) els.placeholder.style.display = 'none';
             if (els.iframe) {
                 els.iframe.style.display = 'block';
-                els.iframe.src = ip.startsWith('http') ? ip : 'http://' + ip;
+                let targetUrl = ip.startsWith('http') ? ip : 'http://' + ip;
+                
+                // Se for simulação, usa o demo oficial da Soundcraft como visual
+                if (ip.toLowerCase() === 'simulado' || ip === '127.0.0.1') {
+                    targetUrl = 'https://www.soundcraft.com/ui-demo/mixer.html';
+                }
+                
+                els.iframe.src = targetUrl;
             }
             if (els.ipDisplay) els.ipDisplay.innerText = ip;
 
