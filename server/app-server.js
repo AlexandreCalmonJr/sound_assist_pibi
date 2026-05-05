@@ -24,7 +24,7 @@ function createAppServer({ app, rootDir, localIp, port }) {
     });
 
     // Inicia o túnel HTTPS (importante para microfone no iOS/Android)
-    (async () => {
+    async function startTunnel() {
         try {
             const tunnel = await localtunnel({ port: port });
             tunnelUrl = tunnel.url;
@@ -34,12 +34,22 @@ function createAppServer({ app, rootDir, localIp, port }) {
             console.log('====================================');
 
             tunnel.on('close', () => {
+                console.log('Túnel fechado. Tentando reconectar...');
                 tunnelUrl = null;
+                setTimeout(startTunnel, 5000);
             });
+            
+            tunnel.on('error', (err) => {
+                console.error('Erro no túnel:', err.message);
+                setTimeout(startTunnel, 5000);
+            });
+
         } catch (err) {
             console.error('Falha ao criar túnel seguro:', err.message);
+            setTimeout(startTunnel, 10000); // Tenta novamente em 10s
         }
-    })();
+    }
+    startTunnel();
 
     const dbPath = path.join(app.getPath('userData'), 'mappings.db');
     const db = new Datastore({ filename: dbPath, autoload: true });
