@@ -253,6 +253,10 @@ function registerSocketHandlers(io) {
             }
         });
 
+        socket.on('ping_mixer', () => {
+            socket.emit('pong_mixer');
+        });
+
         socket.on('disconnect', () => {
             console.log('Frontend desconectado.');
         });

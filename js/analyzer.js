@@ -13,13 +13,86 @@ let pinkReport = null;
 
 // Refs que serão capturadas no init
 let canvas, canvasCtx, rmsBar, feedbackAlert, analysisSummaryText, analysisDetailList, btnSendAnalysis, btnMeasurePink, btnDesktopPink, pinkMeasureSummary;
+let waterfallCanvasEl, waterfallCtx;
 
-function initAnalyzer() {
+// --- Novas Variáveis de Melhoria ---
+let peakHold = { hz: 0, db: -100, timer: 0 };
+let waterfallData = []; // Histórico de espectro
+const WATERFALL_DEPTH = 100; // Quantos frames guardar
+
+class FeedbackDetector {
+    constructor(bufferSize = 10) {
+        this.peakHistory = new Array(bufferSize).fill(null);
+        this.bufferIndex = 0;
+    }
+    
+    analyze(peakHz, peakDb, threshold = -20) {
+        this.peakHistory[this.bufferIndex % this.peakHistory.length] = { hz: peakHz, db: peakDb };
+        this.bufferIndex++;
+        
+        // Feedback real = mesma frequência sustentada por múltiplos frames
+        const recentPeaks = this.peakHistory.filter(Boolean);
+        if (recentPeaks.length < this.peakHistory.length) return false;
+
+        const avgHz = recentPeaks.reduce((s, p) => s + p.hz, 0) / recentPeaks.length;
+        const allSimilarFreq = recentPeaks.every(p => Math.abs(p.hz - avgHz) < 50);
+        const allAboveThreshold = recentPeaks.every(p => p.db > threshold);
+        
+        return allSimilarFreq && allAboveThreshold;
+    }
+}
+
+const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
+
+    // -------------------------------------------------------------------------
+    // Controles Manuais (Ferramentas Técnicas)
+    // -------------------------------------------------------------------------
+    function _initManualControls() {
+        const btnPink = document.getElementById('btn-toggle-pink-noise');
+        const sliderPink = document.getElementById('pink-noise-level');
+        const valPink = document.getElementById('pink-noise-val');
+        const btnDiag = document.getElementById('btn-manual-diagnostic');
+
+        if (btnPink) {
+            btnPink.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                const level = sliderPink ? sliderPink.value : -20;
+                MixerService.setOscillator(enabled, level);
+                console.log(`[Analyzer] Ruído Rosa: ${enabled ? 'ON' : 'OFF'} (${level}dB)`);
+            });
+        }
+
+        if (sliderPink) {
+            sliderPink.addEventListener('input', (e) => {
+                const level = e.target.value;
+                if (valPink) valPink.innerText = level + 'dB';
+                // Só emite se o ruído estiver ligado (throttle implícito pelo protocolo)
+                if (btnPink && btnPink.checked) {
+                    MixerService.setOscillator(true, level);
+                }
+            });
+        }
+
+        if (btnDiag) {
+            btnDiag.addEventListener('click', () => {
+                const analysis = _analyzeSpectrum();
+                const summaryEl = document.getElementById('acoustic-summary');
+                if (summaryEl) {
+                    summaryEl.innerHTML = `<strong>Diagnóstico Manual:</strong> ${analysis.text}`;
+                    summaryEl.classList.add('text-cyan-400');
+                }
+                console.log('[Analyzer] Diagnóstico Manual disparado.');
+            });
+        }
+    }
+
+    function initAnalyzer() {
     console.log('[Analyzer] Inicializando elementos do DOM...');
     canvas = document.getElementById('fft-canvas');
     if (!canvas) return; // Não está na página do analisador
 
     canvasCtx = canvas.getContext('2d');
+    _initManualControls();
     rmsBar = document.getElementById('rms-bar');
     feedbackAlert = document.getElementById('feedback-alert');
     analysisSummaryText = document.getElementById('acoustic-summary');
@@ -28,6 +101,8 @@ function initAnalyzer() {
     btnMeasurePink = document.getElementById('btn-measure-pink');
     btnDesktopPink = document.getElementById('btn-desktop-pink-noise');
     pinkMeasureSummary = document.getElementById('pink-measure-summary');
+    waterfallCanvasEl = document.getElementById('waterfall-canvas');
+    if (waterfallCanvasEl) waterfallCtx = waterfallCanvasEl.getContext('2d');
 
     // Re-anexar listeners
     document.getElementById('btn-start-audio')?.addEventListener('click', startAnalyzer);
@@ -405,19 +480,35 @@ function analyze() {
     let peakIndex = 0;
     
     for (let i = 0; i < bufferLength; i++) {
-        const db = freqData[i];
-        if (db > peakDb) {
-            peakDb = db;
+        if (freqData[i] > peakDb) {
+            peakDb = freqData[i];
             peakIndex = i;
         }
+    }
 
+    // --- Lógica de Peak Hold ---
+    if (peakDb > peakHold.db) {
+        peakHold.db = peakDb;
+        peakHold.hz = peakIndex * audioCtx.sampleRate / analyser.fftSize;
+        peakHold.timer = 120; // ~2 segundos a 60fps
+    } else if (peakHold.timer > 0) {
+        peakHold.timer--;
+    } else {
+        peakHold.db = -100;
+    }
+
+    // --- Renderização FFT ---
+    for (let i = 0; i < bufferLength; i++) {
+        const db = freqData[i];
         const freq = i * audioCtx.sampleRate / analyser.fftSize;
         let fillStyle = 'var(--text-muted)';
-        if (freq < 100) fillStyle = '#3498db';
-        else if (freq < 500) fillStyle = '#2ecc71';
-        else if (freq < 2000) fillStyle = '#f1c40f';
-        else if (freq < 6000) fillStyle = '#e67e22';
-        else fillStyle = '#e74c3c';
+        
+        // Zonas frequenciais coloridas (Overlay)
+        if (freq < 100) fillStyle = '#3498db'; // Sub
+        else if (freq < 500) fillStyle = '#2ecc71'; // Low
+        else if (freq < 2000) fillStyle = '#f1c40f'; // Mid
+        else if (freq < 6000) fillStyle = '#e67e22'; // High-Mid
+        else fillStyle = '#e74c3c'; // High
 
         const normalized = Math.max(0, Math.min(1, (db - analyser.minDecibels) / (analyser.maxDecibels - analyser.minDecibels)));
         const barHeight = normalized * canvas.height;
@@ -425,6 +516,48 @@ function analyze() {
         canvasCtx.fillStyle = fillStyle;
         canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
         x += barWidth + 1;
+    }
+
+    // Desenhar Peak Hold Line
+    if (peakHold.timer > 0) {
+        const peakX = (peakHold.hz * analyser.fftSize / audioCtx.sampleRate) * (barWidth + 1) / 2.5; // Ajuste simplificado
+        const peakNormalized = Math.max(0, Math.min(1, (peakHold.db - analyser.minDecibels) / (analyser.maxDecibels - analyser.minDecibels)));
+        const peakY = canvas.height - (peakNormalized * canvas.height);
+        
+        canvasCtx.strokeStyle = '#ffffff';
+        canvasCtx.lineWidth = 2;
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(peakX, peakY);
+        canvasCtx.lineTo(peakX + barWidth, peakY);
+        canvasCtx.stroke();
+    }
+
+    // --- Lógica de Waterfall (Histórico Visual) ---
+    waterfallData.unshift(new Float32Array(freqData));
+    if (waterfallData.length > WATERFALL_DEPTH) waterfallData.pop();
+
+    if (waterfallCtx && waterfallCanvasEl) {
+        const w = waterfallCanvasEl.width;
+        const h = waterfallCanvasEl.height;
+        const rowHeight = h / WATERFALL_DEPTH;
+        
+        waterfallCtx.drawImage(waterfallCanvasEl, 0, rowHeight); // Scroll down
+        
+        const barW = w / bufferLength;
+        for (let i = 0; i < bufferLength; i++) {
+            const db = freqData[i];
+            const normalized = Math.max(0, Math.min(1, (db - analyser.minDecibels) / (analyser.maxDecibels - analyser.minDecibels)));
+            
+            // Cor baseada em intensidade (Heatmap)
+            let color;
+            if (normalized < 0.2) color = `rgb(0, 0, ${normalized * 255})`;
+            else if (normalized < 0.5) color = `rgb(0, ${(normalized-0.2)*255}, 255)`;
+            else if (normalized < 0.8) color = `rgb(${(normalized-0.5)*255}, 255, 0)`;
+            else color = `rgb(255, ${(1-normalized)*255}, 0)`;
+            
+            waterfallCtx.fillStyle = color;
+            waterfallCtx.fillRect(i * barW, 0, barW + 1, rowHeight);
+        }
     }
 
     const peakHz = peakIndex * audioCtx.sampleRate / analyser.fftSize;
@@ -469,9 +602,11 @@ function analyze() {
     
     const btnAutoCut = document.getElementById('btn-auto-cut');
     
-    if (peakDb > -20 && peakDb - neighborAvg > 8 && peakHz > 150) {
+    const isFeedback = feedbackDetector.analyze(peakHz, peakDb, -20);
+    
+    if (isFeedback) {
         feedbackAlert.className = 'alert danger';
-        feedbackAlert.innerHTML = `⚠️ <strong>Microfonia provável</strong> em <strong>${Math.round(peakHz)} Hz</strong>. Diferença local: ${formatDb(peakDb - neighborAvg)} dB.`;
+        feedbackAlert.innerHTML = `⚠️ <strong>Microfonia DETECTADA</strong> em <strong>${Math.round(peakHz)} Hz</strong> sustentados. Diferença local: ${formatDb(peakDb - neighborAvg)} dB.`;
 
         if (socket && typeof socket.emit === 'function') {
             btnAutoCut.style.display = 'block';

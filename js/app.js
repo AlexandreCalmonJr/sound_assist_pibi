@@ -78,25 +78,5 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (titleEl) titleEl.innerText = titles[e.detail.pageId] || 'SoundMaster';
     });
 
-    // 6. Controle do Painel do Mixer (Toggle)
-    const btnToggleMixer = document.getElementById('btn-toggle-mixer');
-    const appMixer = document.getElementById('app-mixer');
-    let mixerVisible = true;
-
-    if (btnToggleMixer && appMixer) {
-        btnToggleMixer.addEventListener('click', () => {
-            mixerVisible = !mixerVisible;
-            if (mixerVisible) {
-                appMixer.style.width = '400px';
-                appMixer.style.opacity = '1';
-                btnToggleMixer.innerHTML = 'Ocultar Mixer ➡️';
-            } else {
-                appMixer.style.width = '0px';
-                appMixer.style.opacity = '0';
-                btnToggleMixer.innerHTML = '⬅️ Mostrar Mixer';
-            }
-        });
-    }
-
     console.log('[SoundMaster] App Shell inicializado com sucesso.');
 });

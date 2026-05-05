@@ -38,8 +38,32 @@
     }
 
     function initRt60Calculator() {
-        const btnCalc = document.getElementById('btn-calc-rt60');
+        const btnCalc = document.getElementById('btn-calculate-rt60'); // ID atualizado
+        const btnPulse = document.getElementById('btn-trigger-pulse');
+        const btnClear = document.getElementById('btn-clear-measurements');
         const rtResult = document.getElementById('rt60-result');
+
+        if (btnPulse) {
+            btnPulse.addEventListener('click', () => {
+                console.log('[Acoustics] Disparando pulso de medição...');
+                // Emite um sinal curto de 1kHz para medição de decaimento
+                MixerService.setOscillator(true, -10);
+                setTimeout(() => MixerService.setOscillator(false, -10), 200);
+                alert('Pulso de medição disparado! O sistema está captando o decaimento.');
+            });
+        }
+
+        if (btnClear) {
+            btnClear.addEventListener('click', () => {
+                const inputs = ['rt-length', 'rt-width', 'rt-height', 'rt-delay-dist', 'rt-absorption'];
+                inputs.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = '';
+                });
+                if (rtResult) rtResult.style.display = 'none';
+            });
+        }
+
         if (!btnCalc || !rtResult) return;
 
         btnCalc.addEventListener('click', () => {

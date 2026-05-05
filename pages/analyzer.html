@@ -14,7 +14,7 @@
             <button id="btn-stop-audio" class="flex-1 py-3 bg-slate-700 text-slate-400 rounded-xl font-semibold cursor-not-allowed" disabled>Parar</button>
         </div>
 
-        <div class="relative bg-black rounded-2xl border border-white/10 p-4 mb-6">
+        <div class="relative bg-black rounded-2xl border border-white/10 p-4 mb-2">
             <canvas id="fft-canvas" class="w-full h-48 md:h-64"></canvas>
             <div class="flex justify-between mt-4 text-[10px] uppercase tracking-wider text-slate-500 font-bold px-2">
                 <span>Sub</span>
@@ -23,6 +23,12 @@
                 <span>High-Mid</span>
                 <span>High</span>
             </div>
+        </div>
+
+        <!-- Waterfall History -->
+        <div class="bg-black rounded-2xl border border-white/10 p-4 mb-6">
+            <h4 class="text-[8px] font-black uppercase text-slate-700 tracking-widest mb-2">Histórico Waterfall (Últimos 10s)</h4>
+            <canvas id="waterfall-canvas" class="w-full h-24 rounded-lg"></canvas>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -36,6 +42,35 @@
                 <button id="btn-auto-cut" class="w-full mt-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold hidden shadow-lg shadow-red-900/40">
                     🪄 Cortar Frequência na Mesa
                 </button>
+            </div>
+
+            <!-- Ferramentas Técnicas Manuais -->
+            <div class="bg-slate-900/50 border border-white/10 rounded-2xl p-6 shadow-xl">
+                <h3 class="text-xs font-black uppercase tracking-widest text-slate-500 mb-6">Ferramentas Técnicas</h3>
+                
+                <div class="space-y-6">
+                    <!-- Controle de Ruído Rosa -->
+                    <div class="p-4 bg-black/40 rounded-xl border border-white/5">
+                        <div class="flex justify-between items-center mb-4">
+                            <span class="text-sm font-bold text-slate-300">Ruído Rosa</span>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="btn-toggle-pink-noise" class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                            </label>
+                        </div>
+                        <input type="range" id="pink-noise-level" min="-60" max="0" value="-20" class="w-full accent-cyan-500 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+                        <div class="flex justify-between mt-2">
+                            <span class="text-[10px] text-slate-500">-60dB</span>
+                            <span id="pink-noise-val" class="text-[10px] font-mono text-cyan-400">-20dB</span>
+                            <span class="text-[10px] text-slate-500">0dB</span>
+                        </div>
+                    </div>
+
+                    <!-- Diagnóstico de Cobertura -->
+                    <button id="btn-manual-diagnostic" class="w-full py-3 bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2">
+                        <span>📊</span> Rodar Diagnóstico de Cobertura
+                    </button>
+                </div>
             </div>
 
             <div class="bg-slate-800/40 border border-white/10 rounded-2xl p-6">

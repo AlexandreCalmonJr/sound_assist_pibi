@@ -1,15 +1,123 @@
 const socket = io();
 
-const btnConnect = document.getElementById('mobile-btn-connect');
-const btnDisconnect = document.getElementById('mobile-btn-disconnect');
-const mixerIpInput = document.getElementById('mobile-mixer-ip');
-const connectionText = document.getElementById('mobile-connection-text');
-const connectionBadge = document.getElementById('mobile-connection-badge');
+// UI Elements - Navigation & Status
+const statusBar = document.getElementById('status-heartbeat');
+const connectionIndicator = document.getElementById('connection-indicator');
+const appRoot = document.getElementById('mobile-app-root');
+
+// UI Elements - Master
 const masterSlider = document.getElementById('mobile-master-slider');
 const masterLevelText = document.getElementById('mobile-master-level');
 const masterDbText = document.getElementById('mobile-master-db');
 const masterDown = document.getElementById('mobile-master-down');
 const masterUp = document.getElementById('mobile-master-up');
+
+// SPA Router State
+const MobileRouter = {
+    currentPage: 'mobile-master',
+    
+    init() {
+        const navButtons = document.querySelectorAll('.mobile-nav-btn');
+        navButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                triggerHaptic('light');
+                const target = btn.getAttribute('data-target');
+                this.navigate(target);
+            });
+        });
+        this.navigate(this.currentPage);
+    },
+
+    navigate(pageId) {
+        this.currentPage = pageId;
+        
+        // Update Nav UI
+        document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+            if (btn.getAttribute('data-target') === pageId) {
+                btn.classList.add('tab-active');
+            } else {
+                btn.classList.remove('tab-active');
+            }
+        });
+
+        // Update Page Visibility
+        document.querySelectorAll('.mobile-page').forEach(page => {
+            if (page.id === pageId) {
+                page.classList.remove('hidden');
+                page.classList.add('page-transition');
+            } else {
+                page.classList.add('hidden');
+                page.classList.remove('page-transition');
+            }
+        });
+
+        // Auto-scroll to top on navigation
+        appRoot.scrollTop = 0;
+    }
+};
+
+// Connectivity Heartbeat
+// Connectivity Heartbeat & Latency
+let lastPingTime = 0;
+let currentLatency = 0;
+
+function measureLatency() {
+    if (!socket.connected) return;
+    lastPingTime = Date.now();
+    socket.emit('ping_mixer');
+}
+
+socket.on('pong_mixer', () => {
+    currentLatency = Date.now() - lastPingTime;
+    updateConnectivityUI(true);
+});
+
+// Intervalo de latência (3s)
+setInterval(measureLatency, 3000);
+
+function updateConnectivityUI(connected) {
+    if (!statusBar || !connectionIndicator) return;
+    
+    if (connected) {
+        statusBar.className = 'status-bar-inner status-online';
+        statusBar.style.width = '100%';
+        connectionIndicator.innerText = `Online • ${currentLatency}ms`;
+        connectionIndicator.className = 'text-[8px] font-bold text-emerald-500 uppercase tracking-widest';
+    } else {
+        statusBar.className = 'status-bar-inner status-offline';
+        statusBar.style.width = '30%';
+        connectionIndicator.innerText = 'Mixer Offline';
+        connectionIndicator.className = 'text-[8px] font-bold text-red-500 uppercase tracking-widest';
+    }
+}
+
+// Haptic Feedback Helper
+function triggerHaptic(type = 'light') {
+    if (!navigator.vibrate) return;
+    if (type === 'light') navigator.vibrate(10);
+    if (type === 'medium') navigator.vibrate(30);
+    if (type === 'heavy') navigator.vibrate(50);
+}
+
+// Socket Listeners for Connectivity
+socket.on('connect', () => {
+    updateConnectivityUI(true);
+    appendMobileLog('Conectado via SPA Bridge.');
+    measureLatency();
+});
+
+socket.on('disconnect', () => {
+    updateConnectivityUI(false);
+    appendMobileLog('Desconectado do servidor.');
+});
+
+socket.on('mixer_status', (data) => {
+    updateConnectivityUI(data.connected);
+});
+
+// Initialize Router
+MobileRouter.init();
+
 const presetButtons = document.querySelectorAll('[data-master-preset]');
 const btnStartMic = document.getElementById('mobile-btn-start-mic');
 const btnStopMic = document.getElementById('mobile-btn-stop-mic');
@@ -46,12 +154,12 @@ const btnMobileSavePeak = document.getElementById('mobile-save-peak');
 const btnMobileRefreshMaps = document.getElementById('mobile-refresh-maps');
 const mobileMappingList = document.getElementById('mobile-mapping-list');
 const btnAiAnalyze = document.getElementById('mobile-btn-ai-analyze');
-const btnAiSend = document.getElementById('mobile-btn-ai-send');
+const btnAiSend = document.getElementById('mobile-ai-send');
 const btnAiReset = document.getElementById('mobile-btn-ai-reset');
 const btnPinkNoise = document.getElementById('mobile-btn-pink-noise');
 const aiInput = document.getElementById('mobile-ai-input');
 const aiChatBox = document.getElementById('mobile-ai-chat');
-const aiQuickTags = document.querySelectorAll('.ai-quick-tag');
+const aiQuickTags = document.querySelectorAll('.mobile-ai-suggest');
 
 let audioCtx;
 let analyser;
@@ -108,9 +216,36 @@ function updateConnection(connected, msg) {
 function updateMasterDisplay(level, db) {
     const percentage = Math.round(Math.min(100, Math.max(0, level * 100)));
     latestMasterPercent = percentage;
-    masterLevelText.innerText = `${percentage}%`;
-    masterDbText.innerText = `(${typeof db === 'number' ? db.toFixed(1) + ' dB' : '-∞ dB'})`;
-    if (masterSlider) masterSlider.value = percentage;
+    if (masterLevelText) masterLevelText.innerText = `${percentage}%`;
+    if (masterDbText) masterDbText.innerText = `${typeof db === 'number' ? db.toFixed(1) + ' db' : '-∞ dB'}`;
+    
+    if (masterSlider) {
+        masterSlider.value = percentage;
+    }
+}
+
+function setupMobileTouchFader() {
+    const container = document.querySelector('.fader-container');
+    if (!container) return;
+
+    const handleTouch = (e) => {
+        const rect = container.getBoundingClientRect();
+        const touchY = e.touches[0].clientY;
+        
+        let percent = ((rect.bottom - touchY) / rect.height) * 100;
+        percent = Math.min(100, Math.max(0, percent));
+        
+        const level = percent / 100;
+        setMasterLevel(level);
+
+        // Haptic feedback more precise
+        if (Math.abs(percent - latestMasterPercent) > 2) {
+            triggerHaptic('light');
+        }
+    };
+
+    container.addEventListener('touchstart', handleTouch, { passive: false });
+    container.addEventListener('touchmove', handleTouch, { passive: false });
 }
 
 function resizeCanvasForDisplay() {
@@ -496,7 +631,7 @@ async function askAI(text, includeAnalysis = false) {
     const userRow = document.createElement('div');
     userRow.className = 'flex justify-end mb-4';
     userRow.innerHTML = `
-        <div class="bg-cyan-600 p-4 rounded-2xl rounded-tr-none text-sm text-white border border-cyan-500/30 max-w-[85%] shadow-lg shadow-cyan-900/20">
+        <div class="bg-cyan-600/90 backdrop-blur-md p-3.5 rounded-3xl rounded-tr-none text-xs text-white border border-cyan-500/30 max-w-[85%] shadow-lg shadow-cyan-900/20">
             ${text || '📊 Enviando análise acústica...'}
         </div>
     `;
@@ -519,11 +654,12 @@ async function askAI(text, includeAnalysis = false) {
     loadingRow.id = loadingId;
     loadingRow.className = 'flex justify-start mb-4 animate-pulse';
     loadingRow.innerHTML = `
-        <div class="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-xs text-slate-400 border border-white/5">
-            Pensando...
+        <div class="bg-slate-800/60 backdrop-blur-md p-3.5 rounded-3xl rounded-tl-none text-xs text-slate-400 border border-white/5">
+            Processando...
         </div>
     `;
     aiChatBox.appendChild(loadingRow);
+    aiChatBox.scrollTop = aiChatBox.scrollHeight;
 
     try {
         const res = await fetch('/api/ai', {
@@ -549,9 +685,9 @@ async function askAI(text, includeAnalysis = false) {
         }
 
         aiRow.innerHTML = `
-            <div class="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 border border-white/5 max-w-[85%] shadow-xl">
-                <div class="font-black text-[10px] text-cyan-500 uppercase tracking-widest mb-1">SoundMaster AI</div>
-                ${data.text}
+            <div class="bg-slate-800/60 backdrop-blur-md p-3.5 rounded-3xl rounded-tl-none text-xs text-slate-200 border border-white/5 max-w-[85%] shadow-xl">
+                <div class="font-black text-[9px] text-cyan-500 uppercase tracking-widest mb-1">SoundMaster IA</div>
+                <div class="leading-relaxed">${data.text}</div>
                 ${commandHtml}
             </div>
         `;
@@ -598,15 +734,8 @@ btnDisconnect?.addEventListener('click', () => {
     appendMobileLog('Solicitando desconexão do mixer.');
 });
 
-masterSlider?.addEventListener('input', () => {
-    const value = Number(masterSlider.value) / 100;
-    updateMasterDisplay(value, undefined);
-});
-
-masterSlider?.addEventListener('change', () => {
-    const value = Number(masterSlider.value) / 100;
-    setMasterLevel(value);
-});
+// Removidos listeners de input/change padrão para usar touch nativo
+setupMobileTouchFader();
 
 masterDown?.addEventListener('click', () => {
     const next = Math.max(0, latestMasterPercent - 1) / 100;
@@ -637,47 +766,87 @@ btnCutFeedback?.addEventListener('click', () => {
     btnCutFeedback.disabled = true;
 });
 
+// -------------------------------------------------------------------------
+// Ferramentas do Técnico (Mobile Manual)
+// -------------------------------------------------------------------------
+const mobilePinkToggle = document.getElementById('mobile-pink-toggle');
+const mobilePinkLevel = document.getElementById('mobile-pink-level');
+const mobilePinkVal = document.getElementById('mobile-pink-val');
+const mobileBtnPulse = document.getElementById('mobile-btn-pulse');
+
+mobilePinkToggle?.addEventListener('change', (e) => {
+    const enabled = e.target.checked;
+    const level = mobilePinkLevel ? mobilePinkLevel.value : -20;
+    socket.emit('set_oscillator', { enabled, type: 1, level });
+    appendMobileLog(`Ruído Rosa ${enabled ? 'LIGADO' : 'DESLIGADO'}.`);
+});
+
+mobilePinkLevel?.addEventListener('input', (e) => {
+    const level = e.target.value;
+    if (mobilePinkVal) mobilePinkVal.innerText = `${level}dB`;
+    if (mobilePinkToggle?.checked) {
+        socket.emit('set_oscillator', { enabled: true, type: 1, level });
+    }
+});
+
+mobileBtnPulse?.addEventListener('click', () => {
+    triggerHaptic('medium');
+    appendMobileLog('Disparando pulso de medição manual...');
+    socket.emit('set_oscillator', { enabled: true, type: 1, level: -10 });
+    setTimeout(() => {
+        socket.emit('set_oscillator', { enabled: false, type: 1, level: -10 });
+    }, 200);
+});
+
 btnMobileCleanChannel?.addEventListener('click', () => {
+    triggerHaptic('medium');
     const channel = getTargetChannel();
     if (!channel) return;
     emitMobileTool('run_clean_sound_preset', { channel }, `Preset de som limpo no canal ${channel}.`);
 });
 
 btnMobileHpf?.addEventListener('click', () => {
+    triggerHaptic('light');
     const channel = getTargetChannel();
     if (!channel) return;
     emitMobileTool('apply_channel_hpf', { channel, hz: 100 }, `HPF 100Hz no canal ${channel}.`);
 });
 
 btnMobileGate?.addEventListener('click', () => {
+    triggerHaptic('light');
     const channel = getTargetChannel();
     if (!channel) return;
     emitMobileTool('apply_channel_gate', { channel, enabled: 1, threshold: -52 }, `Gate leve no canal ${channel}.`);
 });
 
 btnMobileCompressor?.addEventListener('click', () => {
+    triggerHaptic('light');
     const channel = getTargetChannel();
     if (!channel) return;
     emitMobileTool('apply_channel_compressor', { channel, ratio: 2.5, threshold: -18 }, `Compressor leve no canal ${channel}.`);
 });
 
 btnMobileEqMud?.addEventListener('click', () => {
+    triggerHaptic('medium');
     const channel = getTargetChannel();
     if (!channel) return;
     emitMobileTool('apply_eq_cut', { target: 'channel', channel, hz: 250, gain: -3, q: 1.1, band: 2 }, `Corte 250Hz no canal ${channel}.`);
 });
 
 btnMobileEqHarsh?.addEventListener('click', () => {
+    triggerHaptic('medium');
     const channel = getTargetChannel();
     if (!channel) return;
     emitMobileTool('apply_eq_cut', { target: 'channel', channel, hz: 3200, gain: -2.5, q: 1.5, band: 3 }, `Corte 3.2kHz no canal ${channel}.`);
 });
 
 btnMobileAfsOn?.addEventListener('click', () => {
+    triggerHaptic('heavy');
     emitMobileTool('set_afs_enabled', { enabled: 1 }, 'Solicitado AFS2 global ligado.');
 });
 
 btnMobileAfsOff?.addEventListener('click', () => {
+    triggerHaptic('light');
     emitMobileTool('set_afs_enabled', { enabled: 0 }, 'Solicitado AFS2 global desligado.');
 });
 
@@ -709,8 +878,8 @@ btnPinkNoise?.addEventListener('click', () => {
 
 aiQuickTags.forEach(tag => {
     tag.addEventListener('click', () => {
-        const prompt = tag.getAttribute('data-prompt');
-        askAI(prompt, true);
+        const query = tag.getAttribute('data-query');
+        askAI(query);
     });
 });
 
@@ -723,54 +892,10 @@ aiInput?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') btnAiSend.click();
 });
 
-function initMobilePageNavigation() {
-    const navButtons = document.querySelectorAll('.mobile-nav-btn');
-    const pages = document.querySelectorAll('.mobile-page');
-
-    navButtons.forEach((button) => {
-        button.addEventListener('click', () => {
-            // Update buttons
-            navButtons.forEach(btn => {
-                btn.classList.remove('tab-active');
-                btn.classList.add('text-slate-500');
-            });
-            button.classList.add('tab-active');
-            button.classList.remove('text-slate-500');
-
-            // Update pages
-            pages.forEach(page => page.classList.add('hidden'));
-            const targetId = button.getAttribute('data-target');
-            const targetPage = document.getElementById(targetId);
-            if (targetPage) {
-                targetPage.classList.remove('hidden');
-                // Adiciona animação de entrada
-                targetPage.classList.add('animate-in', 'fade-in', 'slide-in-from-bottom-2', 'duration-300');
-            }
-        });
-    });
-}
-
+// Startup
 window.addEventListener('resize', resizeCanvasForDisplay);
 resizeCanvasForDisplay();
 loadMobileMappings();
-initMobilePageNavigation();
 
-socket.on('connect', () => appendMobileLog('Conectado ao servidor WebSocket.'));
-socket.on('disconnect', () => appendMobileLog('Desconectado do servidor WebSocket.'));
-
-socket.on('mixer_status', (data) => {
-    updateConnection(data.connected, data.msg || 'Status do mixer recebido.');
-});
-
-socket.on('master_level', (level) => {
-    updateMasterDisplay(level, undefined);
-    appendMobileLog(`Master atual: ${Math.round(level * 100)}%.`);
-});
-
-socket.on('master_level_db', (db) => {
-    masterDbText.innerText = `(${db.toFixed(1)} dB)`;
-});
-
-socket.on('feedback_cut_success', (data) => {
-    appendMobileLog(data.msg || 'Ação de corte concluída.');
-});
+// Pre-nav setup
+setupMobileTouchFader();

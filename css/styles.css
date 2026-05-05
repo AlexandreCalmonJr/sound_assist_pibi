@@ -1364,3 +1364,56 @@
     }
   }
 }
+
+/* --- Layout Toggles --- */
+#app-sidebar, #app-mixer {
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, padding 0.3s ease;
+}
+
+.sidebar-collapsed #app-sidebar {
+    width: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none;
+}
+
+.mixer-collapsed #app-mixer {
+    width: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none;
+}
+
+.main-collapsed main {
+    width: 0 !important;
+    flex: 0 !important;
+    padding: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none;
+    margin: 0 !important;
+}
+
+/* A mesa se expande para preencher o vazio */
+.main-collapsed #app-mixer {
+    flex: 1 !important;
+    width: auto !important;
+    min-width: 0;
+}
+
+/* Se tudo sumir, a mesa vira 100% da tela */
+.sidebar-collapsed.main-collapsed #app-mixer {
+    width: 100% !important;
+}
+
+/* Chat Input Fix */
+#chat-input:focus {
+    box-shadow: 0 0 0 2px rgba(0, 207, 213, 0.2);
+    background-color: rgba(0, 0, 0, 0.6);
+}
+
+.chat-bubble {
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}

@@ -244,6 +244,34 @@
     }
 
     /**
+     * Define o delay (atraso) de uma saída auxiliar.
+     * @param {number} auxChannel 1-10
+     * @param {number} ms Milissegundos (0-500ms)
+     */
+    function setDelay(auxChannel, ms) {
+        const aux = _clamp(auxChannel, 1, 10);
+        const time = _clamp(ms, 0, 500);
+        
+        return _emit('set_aux_delay', { aux: aux, ms: time },
+            'Ajustando Delay do Aux ' + aux + ' para ' + time + 'ms.');
+    }
+
+    /**
+     * Define o nível de envio de um canal para um auxiliar (Monitor).
+     * @param {number} channel  1–24
+     * @param {number} auxChannel 1-10 (Ui24R tem 10 aux)
+     * @param {number} level 0.0 - 1.0
+     */
+    function setAuxLevel(channel, auxChannel, level) {
+        const ch = _validateChannel(channel);
+        const aux = _clamp(auxChannel, 1, 10);
+        const clamped = _clamp(level, 0, 1);
+        
+        return _emit('set_aux_level', { channel: ch, aux: aux, level: clamped },
+            'Ajustando envio do canal ' + ch + ' para o Aux ' + aux + ' em ' + Math.round(clamped * 100) + '%.');
+    }
+
+    /**
      * Envia uma mensagem RAW diretamente para a mesa.
      * @param {string} message 
      */
@@ -268,6 +296,8 @@
         cutFeedback,
         executeAICommand,
         setOscillator,
+        setAuxLevel,
+        setDelay,
         savePreset,
         listPresets,
         loadPreset,
