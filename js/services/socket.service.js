@@ -88,13 +88,24 @@
     }
 
     /**
-     * Expõe o socket bruto para casos excepcionais (ex: analyzer.js que referencia `socket` globalmente).
-     * Prefira usar emit() sempre que possível.
      * @returns {Object|null}
      */
     function raw() {
         return _socket;
     }
 
-    window.SocketService = { init, emit, isConnected, raw };
+    /**
+     * Registra um listener para eventos do socket.
+     * @param {string} event
+     * @param {Function} callback
+     */
+    function on(event, callback) {
+        if (!_socket) {
+            console.warn('[SocketService] Socket não inicializado para .on()');
+            return;
+        }
+        _socket.on(event, callback);
+    }
+
+    window.SocketService = { init, emit, isConnected, raw, on };
 })();
