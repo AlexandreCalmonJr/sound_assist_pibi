@@ -13,29 +13,28 @@
     // -------------------------------------------------------------------------
     const $ = function (id) { return document.getElementById(id); };
 
-    const els = {
-        chatMessages:    $('chat-messages'),
-        chatInput:       $('chat-input'),
-        btnSend:         $('btn-chat-send'),
-        btnClear:        $('btn-clear-chat'),
-        chatStatus:      $('chat-status'),
-        aiTargetChannel: $('ai-target-channel'),
-        btnSendAnalysis: $('btn-ai-send-analysis'),
-        btnSendPinkReport: $('btn-ai-send-pink-report'),
-
-        // Botões de prompt rápido
-        promptButtons:   document.querySelectorAll('.sound-ai-prompt'),
-
-        // Botões de ações rápidas Ui
-        btnCleanChannel: $('btn-ai-clean-channel'),
-        btnHpf:          $('btn-ai-hpf'),
-        btnGate:         $('btn-ai-gate'),
-        btnCompressor:   $('btn-ai-compressor'),
-        btnEqMud:        $('btn-ai-eq-mud'),
-        btnEqHarsh:      $('btn-ai-eq-harsh'),
-        btnAfsOn:        $('btn-ai-afs-on'),
-        btnAfsOff:       $('btn-ai-afs-off'),
-    };
+    let els = {};
+    function _getEls() {
+        return {
+            chatMessages:    $('chat-messages'),
+            chatInput:       $('chat-input'),
+            btnSend:         $('btn-chat-send'),
+            btnClear:        $('btn-clear-chat'),
+            chatStatus:      $('chat-status'),
+            aiTargetChannel: $('ai-target-channel'),
+            btnSendAnalysis: $('btn-ai-send-analysis'),
+            btnSendPinkReport: $('btn-ai-send-pink-report'),
+            promptButtons:   document.querySelectorAll('.sound-ai-prompt'),
+            btnCleanChannel: $('btn-ai-clean-channel'),
+            btnHpf:          $('btn-ai-hpf'),
+            btnGate:         $('btn-ai-gate'),
+            btnCompressor:   $('btn-ai-compressor'),
+            btnEqMud:        $('btn-ai-eq-mud'),
+            btnEqHarsh:      $('btn-ai-eq-harsh'),
+            btnAfsOn:        $('btn-ai-afs-on'),
+            btnAfsOff:       $('btn-ai-afs-off'),
+        };
+    }
 
     // -------------------------------------------------------------------------
     // Helpers de renderização
@@ -162,9 +161,11 @@
     // Envio de mensagem para IA
     // -------------------------------------------------------------------------
     async function _sendMessage(text) {
+        console.log('[AIChatUI] Iniciando _sendMessage:', text);
         if (!text || !text.trim()) return;
 
         const channel = _getTargetChannel();
+        console.log('[AIChatUI] Canal alvo:', channel);
         if (!channel) return;
 
         _appendBubble(text.trim(), true, null);
@@ -189,11 +190,18 @@
     // Eventos DOM
     // -------------------------------------------------------------------------
     function _initEvents() {
+        console.log('[AIChatUI] Vinculando eventos...');
         // Envio via botão
-        els.btnSend && els.btnSend.addEventListener('click', function () {
-            const text = els.chatInput && els.chatInput.value.trim();
-            if (text) _sendMessage(text);
-        });
+        if (els.btnSend) {
+            els.btnSend.addEventListener('click', function () {
+                const text = els.chatInput && els.chatInput.value.trim();
+                console.log('[AIChatUI] Clique em Enviar. Texto:', text);
+                if (text) _sendMessage(text);
+                else console.warn('[AIChatUI] Campo de texto vazio.');
+            });
+        } else {
+            console.error('[AIChatUI] Botão btnSend não encontrado.');
+        }
 
         // Envio via Enter
         els.chatInput && els.chatInput.addEventListener('keypress', function (e) {
@@ -256,6 +264,13 @@
     // Init
     // -------------------------------------------------------------------------
     async function init() {
+        console.log('[AIChatUI] Inicializando...');
+        els = _getEls();
+        
+        if (!els.btnSend) {
+            console.error('[AIChatUI] Erro: Botão de envio não encontrado no DOM.');
+        }
+
         _initEvents();
         _initSubscriptions();
 
