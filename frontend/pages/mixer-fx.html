@@ -1,0 +1,66 @@
+<section class="p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <header class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-12">
+        <div class="flex items-center gap-4">
+            <span class="p-3 bg-indigo-900/40 rounded-2xl text-2xl">✨</span>
+            <div>
+                <h2 class="text-3xl font-black text-white tracking-tighter">Envios de Efeito (FX)</h2>
+                <p class="text-slate-400 font-medium">Motores de Lexicon Reverb, Delay e Chorus</p>
+            </div>
+        </div>
+
+        <!-- Quick Tip -->
+        <div class="flex items-center gap-3 bg-amber-900/20 border border-amber-500/20 px-4 py-2 rounded-xl max-w-sm">
+            <span class="text-lg">💡</span>
+            <p class="text-[10px] text-amber-200/70 font-medium leading-tight">
+                <b>Dica:</b> A IA sincroniza o <b>Tap Delay</b> automaticamente com o tempo da música detectado via AES67.
+            </p>
+        </div>
+    </header>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Reverb 1 -->
+        <div class="bg-slate-900/60 border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-6">
+            <div class="flex items-center justify-between">
+                <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">FX 1</span>
+                <span class="text-[9px] font-bold text-slate-500">HALL REVERB</span>
+            </div>
+            
+            <!-- Fader Visual -->
+            <div class="h-48 w-12 bg-black/40 rounded-xl mx-auto p-2 relative flex items-end">
+                <div class="absolute inset-0 flex flex-col justify-between py-4 px-3 opacity-20">
+                    <span class="h-px bg-white w-full"></span>
+                    <span class="h-px bg-white w-full"></span>
+                    <span class="h-px bg-white w-full"></span>
+                    <span class="h-px bg-white w-full"></span>
+                </div>
+                <div class="w-full bg-indigo-500 rounded-lg h-[65%] relative">
+                    <div class="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-4 bg-white rounded shadow-lg"></div>
+                </div>
+            </div>
+
+            <div class="text-center">
+                <span class="text-xl font-black text-white">-12.4</span>
+                <span class="text-[10px] text-slate-500 ml-1">dB</span>
+            </div>
+        </div>
+
+        <!-- Delay 1 -->
+        <div class="bg-slate-900/60 border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-6">
+            <div class="flex items-center justify-between">
+                <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">FX 2</span>
+                <span class="text-[9px] font-bold text-slate-500">DIGITAL DELAY</span>
+            </div>
+            
+            <div class="h-48 w-12 bg-black/40 rounded-xl mx-auto p-2 relative flex items-end">
+                <div class="w-full bg-indigo-500 rounded-lg h-[40%] relative">
+                    <div class="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-4 bg-white rounded shadow-lg"></div>
+                </div>
+            </div>
+
+            <div class="text-center flex flex-col gap-2">
+                <span class="text-xl font-black text-white">420</span>
+                <span class="text-[10px] text-cyan-400 font-bold uppercase tracking-widest">ms (Sync)</span>
+            </div>
+        </div>
+    </div>
+</section>

@@ -1,13 +1,28 @@
 <section id="analyzer" class="module page-section">
-    <div class="flex items-center justify-between mb-6">
-        <h2 class="text-2xl font-bold text-white">Analisador de Áudio (FFT)</h2>
-        <div class="flex bg-slate-800 rounded-lg p-1 border border-white/5">
+    <header class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
+        <div class="flex items-center gap-4">
+            <span class="p-3 bg-cyan-900/40 rounded-2xl text-2xl">🔬</span>
+            <div>
+                <h2 class="text-3xl font-black text-white tracking-tighter">Analisador de Áudio</h2>
+                <p class="text-slate-400 font-medium">Espectro em tempo real & Detecção de Feedback</p>
+            </div>
+        </div>
+        
+        <!-- Quick Tip -->
+        <div class="flex items-center gap-3 bg-amber-900/20 border border-amber-500/20 px-4 py-2 rounded-xl max-w-sm">
+            <span class="text-lg">💡</span>
+            <p class="text-[10px] text-amber-200/70 font-medium leading-tight">
+                <b>Dica:</b> Use o modo <b>High-Res (32k)</b> na aba Calibração para detectar ressonâncias graves com precisão de 1.3Hz.
+            </p>
+        </div>
+
+        <div class="flex bg-slate-800 rounded-lg p-1 border border-white/5 h-fit">
             <button class="subtab-btn active px-4 py-1.5 rounded-md text-sm font-medium transition-all" data-subtab="analyzer-visual">Visual</button>
             <button class="subtab-btn px-4 py-1.5 rounded-md text-sm font-medium transition-all text-slate-400 hover:text-white" data-subtab="analyzer-mappings">Mapeamentos</button>
             <button class="subtab-btn px-4 py-1.5 rounded-md text-sm font-medium transition-all text-slate-400 hover:text-white" data-subtab="analyzer-signals">Sinais</button>
             <button class="subtab-btn px-4 py-1.5 rounded-md text-sm font-medium transition-all text-slate-400 hover:text-white" data-subtab="analyzer-calibration">Calibração</button>
         </div>
-    </div>
+    </header>
 
     <div id="analyzer-visual" class="analyzer-subtab active">
         <div class="flex flex-col gap-4 mb-6">

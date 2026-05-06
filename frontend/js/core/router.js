@@ -13,7 +13,12 @@ class Router {
             'ai-chat': 'pages/ai-chat.html',
             'aes67': 'pages/aes67.html',
             'systems': 'pages/systems.html',
-            'settings': 'pages/settings.html'
+            'settings': 'pages/settings.html',
+            'tutorials': 'pages/tutorials.html',
+            'mixer-input': 'pages/mixer-input.html',
+            'mixer-aux': 'pages/mixer-aux.html',
+            'mixer-fx': 'pages/mixer-fx.html',
+            'voice-presets': 'pages/voice-presets.html'
         };
         this.currentPage = null;
         
