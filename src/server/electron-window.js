@@ -1,4 +1,5 @@
 const { BrowserWindow, session } = require('electron');
+const path = require('path');
 
 async function configureElectronSession() {
     await session.defaultSession.clearStorageData();
@@ -20,12 +21,14 @@ function createWindow(port) {
         height: 800,
         webPreferences: {
             nodeIntegration: false,
-            contextIsolation: true
+            contextIsolation: true,
+            preload: path.join(__dirname, '..', 'preload.js')
         },
         autoHideMenuBar: true
     });
 
     win.loadURL(`http://localhost:${port}`);
+    return win;
 }
 
 module.exports = { configureElectronSession, createWindow };

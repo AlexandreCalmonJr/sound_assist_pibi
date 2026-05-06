@@ -1,11 +1,27 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { createAppServer } = require('./server/app-server');
 const { configureElectronSession, createWindow } = require('./server/electron-window');
 const { getLocalIp } = require('./server/network');
 const { startPythonAI, stopPythonAI } = require('./server/python-ai');
+const { setupUpdater } = require('./server/updater');
 
-const ROOT_DIR = path.join(__dirname, '..');
+let ROOT_DIR = path.join(__dirname, '..');
+const updateConfigPath = path.join(app.getPath('userData'), 'current_update.json');
+
+if (fs.existsSync(updateConfigPath)) {
+    try {
+        const config = JSON.parse(fs.readFileSync(updateConfigPath, 'utf8'));
+        if (fs.existsSync(config.path)) {
+            ROOT_DIR = config.path;
+            console.log('[Main] Usando arquivos da versão atualizada:', config.version);
+        }
+    } catch (e) {
+        console.error('[Main] Erro ao ler configuração de update:', e.message);
+    }
+}
+
 const PORT = 3001;
 const localIp = getLocalIp();
 
@@ -37,7 +53,11 @@ app.whenReady().then(async () => {
     pythonProcess = startPythonAI(aiPath);
     startServer();
     await configureElectronSession();
-    createWindow(PORT);
+    
+    const mainWindow = createWindow(PORT);
+    
+    // Configura o sistema de update
+    setupUpdater(mainWindow);
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
