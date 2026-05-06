@@ -94,7 +94,7 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     });
     registerSocketHandlers(io);
 
-    return server;
+    return { server, io };
 }
 
 module.exports = { createAppServer };
