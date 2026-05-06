@@ -18,7 +18,11 @@ class Router {
             'mixer-input': 'pages/mixer-input.html',
             'mixer-aux': 'pages/mixer-aux.html',
             'mixer-fx': 'pages/mixer-fx.html',
-            'voice-presets': 'pages/voice-presets.html'
+            'voice-presets': 'pages/voice-presets.html',
+            'benchmarking': 'pages/benchmarking.html',
+            'spl-heatmap': 'pages/spl-heatmap.html',
+            'feedback-detector': 'pages/feedback-detector.html',
+            'eq-guide': 'pages/eq-guide.html'
         };
         this.currentPage = null;
         
