@@ -130,14 +130,32 @@
             </div>
 
             <!-- Métricas SPL / RT60 -->
-            <div class="metrics-grid">
-                <div class="metric-card">
+            <div style="display: flex; justify-content: center; margin-bottom: 12px;">
+                <div class="metric-card" style="width: 50%;">
                     <span class="metric-label">SPL Est.</span>
                     <strong id="mobile-rms-readout" class="metric-value">0%</strong>
                 </div>
-                <div class="metric-card">
-                    <span class="metric-label">RT60 (Rev)</span>
-                    <strong id="mobile-rt60-readout" class="metric-value">-- s</strong>
+            </div>
+
+            <div style="background: rgba(0,0,0,0.2); border-radius: 16px; padding: 12px; margin-bottom: 24px;">
+                <span class="metric-label" style="text-align: center; display: block; margin-bottom: 8px;">RT60 Multibanda (Decay)</span>
+                <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); gap: 6px;">
+                    <div class="metric-card" style="padding: 8px 4px;">
+                        <span class="metric-label" style="font-size: 9px; color: #3498db;">125 Hz</span>
+                        <strong id="mobile-rt60-125" class="metric-value" style="font-size: 13px;">--</strong>
+                    </div>
+                    <div class="metric-card" style="padding: 8px 4px;">
+                        <span class="metric-label" style="font-size: 9px; color: #2ecc71;">500 Hz</span>
+                        <strong id="mobile-rt60-500" class="metric-value" style="font-size: 13px;">--</strong>
+                    </div>
+                    <div class="metric-card" style="padding: 8px 4px;">
+                        <span class="metric-label" style="font-size: 9px; color: #f1c40f;">1 kHz</span>
+                        <strong id="mobile-rt60-1k" class="metric-value" style="font-size: 13px;">--</strong>
+                    </div>
+                    <div class="metric-card" style="padding: 8px 4px;">
+                        <span class="metric-label" style="font-size: 9px; color: #e74c3c;">4 kHz</span>
+                        <strong id="mobile-rt60-4k" class="metric-value" style="font-size: 13px;">--</strong>
+                    </div>
                 </div>
             </div>
 

@@ -483,6 +483,12 @@ function analyze() {
     const timeData = new Float32Array(analyser.fftSize);
 
     analyser.getFloatFrequencyData(freqData);
+    
+    // Aplica correção de microfone e calibração SPL
+    if (window.AcousticCalibration) {
+        window.AcousticCalibration.applyCalibration(freqData, audioCtx.sampleRate);
+    }
+    
     analyser.getFloatTimeDomainData(timeData);
     
     canvasCtx.fillStyle = 'var(--bg-dark)';
@@ -585,6 +591,7 @@ function analyze() {
         sumSquares += timeData[i] * timeData[i];
     }
     const rms = Math.sqrt(sumSquares / timeData.length);
+    window.currentGlobalRMS = rms; // Expõe para a rotina de calibração
     const rmsDb = 20 * Math.log10(Math.max(rms, 1e-12));
     const rmsPercent = Math.min(100, Math.max(0, ((rmsDb - analyser.minDecibels) / (analyser.maxDecibels - analyser.minDecibels)) * 100));
     rmsBar.style.width = `${rmsPercent}%`;

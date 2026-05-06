@@ -16,6 +16,12 @@ CHURCH_PROFILES = {
     }
 }
 
+# IEC 60268-16 & Acústica Arquitetônica (Padrões Ideais de RT60)
+RT60_STANDARDS = {
+    'spoken_word': {'ideal': (0.8, 1.2), 'acceptable': (1.2, 1.5)},
+    'live_music': {'ideal': (1.2, 1.6), 'acceptable': (1.6, 2.0)}
+}
+
 class SessionContext:
     def __init__(self):
         self.history = []
@@ -82,6 +88,33 @@ class AIEngine:
                     "text": f"Análise Global: Identifiquei acúmulo em {peak}Hz no som da sala. {room_suggestion or 'Sugiro limpar o Master.'}",
                     "command": self.command("eq_cut", f"Limpeza Sala {peak}Hz", target="master", hz=peak, gain=-2, q=1.5)
                 }
+
+        # 1.5 Análise de RT60 Multibanda (Baseada na IEC 60268-16)
+        if analysis and 'rt60_multiband' in analysis:
+            bands = analysis['rt60_multiband'] # Ex: {'125': 2.1, '500': 1.6, '1k': 1.1, '4k': 0.8}
+            
+            # Análise focada na inteligibilidade (voz)
+            max_rt60 = max(bands.values())
+            
+            # Subgraves (125Hz) costumam mascarar a voz se > 2.0s
+            if bands.get('125', 0) > 2.0:
+                return {
+                    "text": f"O RT60 em 125Hz está crítico ({bands['125']}s), o que gera graves embolados. Sugiro um filtro HPF ou corte de prateleira (Low-Shelf) no Master.",
+                    "command": self.command("eq_cut", "Corte RT60 Grave", target="master", hz=125, gain=-4, q=1.0)
+                }
+            
+            # Inteligibilidade de voz (500Hz a 4kHz) - Norma IEC 60268-16
+            avg_mid = (bands.get('500', 0) + bands.get('1k', 0)) / 2
+            if avg_mid > 1.5:
+                return {
+                    "text": f"A reverberação média nas frequências de voz ({avg_mid:.1f}s) excede a norma IEC 60268-16 para inteligibilidade (>1.5s). Sugiro reduzir entre 500-1kHz no Master.",
+                    "command": self.command("eq_cut", "Melhorar Inteligibilidade", target="master", hz=800, gain=-3, q=1.2)
+                }
+            
+            return {
+                "text": "A sala apresenta bons tempos de reverberação para voz e música. Nenhuma correção grave necessária no momento.",
+                "command": None
+            }
 
         # 2. Respostas por Texto (Keywords)
         if re.search(r'(voz|pregador|pregação|pastor)', text):

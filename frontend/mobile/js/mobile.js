@@ -202,7 +202,31 @@ let currentPeakHz = 0;
 // Novas variáveis para medições avançadas
 let isMeasuringRT60 = false;
 let rt60StartTime = 0;
-let rt60DecayLevels = [];
+let rt60Bands = {
+    '125': { hz: 125, filter: null, analyser: null, data: null, decay: [] },
+    '500': { hz: 500, filter: null, analyser: null, data: null, decay: [] },
+    '1k': { hz: 1000, filter: null, analyser: null, data: null, decay: [] },
+    '4k': { hz: 4000, filter: null, analyser: null, data: null, decay: [] }
+};
+
+function setupMultibandFilters() {
+    if (!audioCtx || !source) return;
+    Object.keys(rt60Bands).forEach(key => {
+        let band = rt60Bands[key];
+        band.filter = audioCtx.createBiquadFilter();
+        band.filter.type = 'bandpass';
+        band.filter.frequency.value = band.hz;
+        band.filter.Q.value = 1.41;
+        
+        band.analyser = audioCtx.createAnalyser();
+        band.analyser.fftSize = 512;
+        band.analyser.smoothingTimeConstant = 0.2;
+        band.data = new Float32Array(band.analyser.fftSize);
+        
+        source.connect(band.filter);
+        band.filter.connect(band.analyser);
+    });
+}
 let isMeasuringPink = false;
 let pinkSamples = [];
 let pinkSampleCount = 0;
@@ -290,6 +314,7 @@ async function startMic() {
         analyser.smoothingTimeConstant = 0.82;
         source = audioCtx.createMediaStreamSource(micStream);
         source.connect(analyser);
+        setupMultibandFilters();
         isMicActive = true;
         suspectedFeedbackFrames = 0;
         btnStartMic?.classList.add('hidden');
@@ -430,38 +455,62 @@ function analyzeMic() {
     const rms = Math.sqrt(sumSquares / bufferLength);
     const rmsDb = 20 * Math.log10(rms + 1e-6);
 
-    // Lógica de Medição de RT60 (Simplified Impulse Response)
+    // Lógica de Medição de RT60 (Multibanda Schroeder-inspired)
     if (isMeasuringRT60) {
-        const currentDb = rmsDb;
+        let isImpulseDetected = false;
+        
+        // Coleta RMS de todas as bandas
+        Object.keys(rt60Bands).forEach(key => {
+            let band = rt60Bands[key];
+            if (!band.analyser) return;
+            band.analyser.getFloatTimeDomainData(band.data);
+            let sq = 0;
+            for(let i=0; i<band.data.length; i++) sq += band.data[i] * band.data[i];
+            let bandRmsDb = 20 * Math.log10(Math.sqrt(sq / band.data.length) + 1e-6);
+            
+            if (rt60StartTime === 0) {
+                if (bandRmsDb > -20) isImpulseDetected = true;
+            } else {
+                band.decay.push(bandRmsDb);
+            }
+        });
+
         if (rt60StartTime === 0) {
-            if (currentDb > -20) { // Detecta impulso (> -20dB)
+            if (isImpulseDetected || rmsDb > -20) {
                 rt60StartTime = Date.now();
-                rt60DecayLevels = [currentDb];
+                Object.keys(rt60Bands).forEach(k => rt60Bands[k].decay = []);
             }
         } else {
-            rt60DecayLevels.push(currentDb);
-            const progress = (rt60DecayLevels.length / 50) * 100;
+            const frames = rt60Bands['1k'].decay.length;
+            const progress = (frames / 60) * 100;
             document.getElementById('rt60-progress').style.width = `${progress}%`;
             
-            if (rt60DecayLevels.length > 50) { // Captura 50 frames (~1s)
+            if (frames > 60) { // ~1s de captura
                 isMeasuringRT60 = false;
                 document.getElementById('rt60-overlay').classList.add('hidden');
                 
-                // Calcula decaimento (Linear regression simplificada)
-                const maxLevel = Math.max(...rt60DecayLevels);
-                const maxIndex = rt60DecayLevels.indexOf(maxLevel);
-                const last = rt60DecayLevels[rt60DecayLevels.length - 1];
-                const drop = maxLevel - last;
+                let results = {};
+                Object.keys(rt60Bands).forEach(key => {
+                    let decayArr = rt60Bands[key].decay;
+                    const maxLevel = Math.max(...decayArr);
+                    const maxIndex = decayArr.indexOf(maxLevel);
+                    const last = decayArr[decayArr.length - 1];
+                    const drop = maxLevel - last;
+                    
+                    const framesDecay = decayArr.length - maxIndex;
+                    const time = (framesDecay * 1000 / 60) / 1000;
+                    
+                    const rt60 = drop > 5 ? (time * 60 / drop) : 0;
+                    results[key] = parseFloat(rt60.toFixed(2));
+                    const el = document.getElementById(`mobile-rt60-${key}`);
+                    if (el) el.innerText = rt60 > 0 ? `${rt60.toFixed(2)}` : '--';
+                });
                 
-                // Tempo do pico até o fim da janela (em segundos assumindo 60fps)
-                const framesDecay = rt60DecayLevels.length - maxIndex;
-                const time = (framesDecay * 1000 / 60) / 1000;
-                
-                // Extrapola para 60dB se houver um drop de pelo menos 5dB
-                const rt60 = drop > 5 ? (time * 60 / drop) : 0;
-                
-                document.getElementById('mobile-rt60-readout').innerText = rt60 > 0 ? `${rt60.toFixed(2)}s` : '--';
-                appendMobileLog(`RT60 Medido: ${rt60.toFixed(2)}s`);
+                appendMobileLog(`RT60 Multibanda concluído.`);
+                emitMobileTool('ai_chat', { 
+                    message: "Analise o RT60 Multibanda medido na sala.",
+                    analysis: { rt60_multiband: results }
+                }, "Enviando RT60 para IA...");
             }
         }
     }
@@ -537,7 +586,7 @@ function startRT60Measurement() {
     overlay.classList.remove('hidden');
     isMeasuringRT60 = true;
     rt60StartTime = 0;
-    rt60DecayLevels = [];
+    Object.keys(rt60Bands).forEach(k => rt60Bands[k].decay = []);
     
     appendMobileLog('Iniciando medição de RT60. Faça um estalo ou barulho seco.');
 }
