@@ -27,8 +27,12 @@ let pinkMeasurementSum = null;
 let pinkReport = null;
 
 // Refs que serão capturadas no init
-let canvas, canvasCtx, rmsBar, feedbackAlert, analysisSummaryText, analysisDetailList, btnSendAnalysis, btnMeasurePink, btnDesktopPink, pinkMeasureSummary;
+let canvas, canvasCtx, rmsBar, feedbackAlert, analysisSummaryText, analysisDetailList, btnSendAnalysis, btnMeasurePink, btnDesktopPink, pinkMeasureSummary, btnLogSweep, micSelect;
 let waterfallCanvasEl, waterfallCtx;
+
+// Web Workers & Worklets
+let acousticWorker = null;
+let audioWorkletNode = null;
 
 // --- Novas Variáveis de Melhoria ---
 let peakHold = { hz: 0, db: -100, timer: 0 };
@@ -104,10 +108,12 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
     function initAnalyzer() {
     console.log('[Analyzer] Inicializando elementos do DOM...');
     canvas = document.getElementById('fft-canvas');
-    if (!canvas) return; // Não está na página do analisador
+    if (!canvas) return;
 
     canvasCtx = canvas.getContext('2d');
     _initManualControls();
+    
+    // Captura de elementos
     rmsBar = document.getElementById('rms-bar');
     feedbackAlert = document.getElementById('feedback-alert');
     analysisSummaryText = document.getElementById('acoustic-summary');
@@ -115,17 +121,33 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
     btnSendAnalysis = document.getElementById('btn-send-analysis');
     btnMeasurePink = document.getElementById('btn-measure-pink');
     btnDesktopPink = document.getElementById('btn-desktop-pink-noise');
+    btnLogSweep = document.getElementById('btn-log-sweep');
+    micSelect = document.getElementById('mic-select');
     pinkMeasureSummary = document.getElementById('pink-measure-summary');
     waterfallCanvasEl = document.getElementById('waterfall-canvas');
     if (waterfallCanvasEl) waterfallCtx = waterfallCanvasEl.getContext('2d');
 
-    // Re-anexar listeners
+    // Inicializa Worker de Acústica
+    if (!acousticWorker) {
+        acousticWorker = new Worker('js/workers/acoustic.worker.js');
+        acousticWorker.onmessage = (e) => {
+            if (e.data.type === 'rt60-result') {
+                _handleRT60Result(e.data.result);
+            }
+        };
+    }
+
+    // Listeners
     document.getElementById('btn-start-audio')?.addEventListener('click', startAnalyzer);
     document.getElementById('btn-stop-audio')?.addEventListener('click', stopAnalyzer);
     btnSendAnalysis?.addEventListener('click', sendAnalysisToAI);
     btnMeasurePink?.addEventListener('click', startPinkNoiseMeasurement);
+    btnLogSweep?.addEventListener('click', startLogarithmicSweep);
     
-    // Sinais — capturar no escopo correto (DOM existe neste momento)
+    // Popula lista de microfones
+    _populateDeviceList();
+
+    // Sinais
     btnPink = document.getElementById('btn-pink-noise');
     btnSine = document.getElementById('btn-sine-wave');
     sineFreqInput = document.getElementById('sine-freq');
@@ -157,12 +179,27 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
         isSineWavePlaying = true;
         btnSine.innerHTML = '⏹ Parar Senoidal';
     });
+}
 
-    btnDesktopPink?.addEventListener('click', () => {
-        ensureAudioCtx();
-        if (isPinkNoisePlaying) stopPinkNoise();
-        else startPinkNoise(false);
-    });
+async function _populateDeviceList() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = devices.filter(device => device.kind === 'audioinput');
+        
+        if (micSelect) {
+            micSelect.innerHTML = '';
+            audioInputs.forEach(device => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.text = device.label || `Microfone ${micSelect.length + 1}`;
+                micSelect.appendChild(option);
+            });
+        }
+    } catch (err) {
+        console.error('[Analyzer] Erro ao listar dispositivos:', err);
+    }
 }
 
 // Ouvir evento do roteador
@@ -170,29 +207,67 @@ document.addEventListener('page-loaded', (e) => {
     if (e.detail.pageId === 'analyzer') {
         initAnalyzer();
     }
+    if (e.detail.pageId === 'rt60') {
+        // Inicializa controles de RT60 na página específica
+        document.getElementById('btn-trigger-pulse')?.addEventListener('click', () => {
+            window.SoundMasterAnalyzer.triggerImpulse();
+        });
+    }
 });
 
 async function startAnalyzer() {
     try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            alert('Acesso ao microfone bloqueado pelo navegador ou sistema. Verifique se está usando HTTPS ou localhost.');
-            throw new Error('navigator.mediaDevices.getUserMedia não disponível.');
-        }
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const deviceId = micSelect?.value || 'default';
+        const constraints = {
+            audio: {
+                deviceId: deviceId !== 'default' ? { exact: deviceId } : undefined,
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false,
+                channelCount: 1
+            }
+        };
+
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
         
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Carrega AudioWorklet para processamento em thread separada
+        try {
+            await audioCtx.audioWorklet.addModule('js/core/audio-processor.js');
+            audioWorkletNode = new AudioWorkletNode(audioCtx, 'soundmaster-processor');
+            audioWorkletNode.port.onmessage = (e) => {
+                if (e.data.type === 'analysis-data') {
+                    // Opcional: Processar dados do Worklet aqui
+                    // Atualmente usamos o AnalyserNode para visualização FFT simplificada
+                }
+            };
+        } catch (e) {
+            console.warn('[Analyzer] AudioWorklet falhou, usando fallback.', e);
+        }
+
         analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 8192;
-        analyser.smoothingTimeConstant = 0.85;
+        analyser.fftSize = 32768; // Alta resolução: ~1.3Hz por bin
+        analyser.smoothingTimeConstant = 0.8;
         analyser.minDecibels = -100;
         analyser.maxDecibels = -10;
         
         source = audioCtx.createMediaStreamSource(stream);
         source.connect(analyser);
+
+        if (audioWorkletNode) {
+            source.connect(audioWorkletNode);
+            audioWorkletNode.connect(audioCtx.destination); // Necessário para manter o clock, mas sem som
+            const silentGain = audioCtx.createGain();
+            silentGain.gain.value = 0;
+            audioWorkletNode.disconnect();
+            audioWorkletNode.connect(silentGain);
+            silentGain.connect(audioCtx.destination);
+        }
         
         isAnalyzing = true;
         document.getElementById('mic-status-dot').className = 'dot online';
-        document.getElementById('mic-status-text').innerText = 'Mic Online';
+        document.getElementById('mic-status-text').innerText = 'Mic Online (High-Res)';
         
         document.getElementById('btn-start-audio').disabled = true;
         document.getElementById('btn-stop-audio').disabled = false;
@@ -200,7 +275,7 @@ async function startAnalyzer() {
         analyze();
     } catch (err) {
         console.error("Erro ao acessar microfone:", err);
-        alert(`Erro ao acessar o microfone: ${err.name} - ${err.message}\nVerifique se há um microfone conectado e se o Windows permite o acesso.`);
+        alert(`Erro ao acessar o microfone: ${err.message}`);
     }
 }
 
@@ -692,10 +767,129 @@ async function sendAnalysisToAI() {
 window.SoundMasterAnalyzer = {
     getLastAnalysis: function () { return lastAnalysis; },
     getPinkReport: function () { return pinkReport; },
-    hasAnalysis: function () { return !!lastAnalysis; }
+    hasAnalysis: function () { return !!lastAnalysis; },
+    triggerImpulse: function () { triggerImpulseMeasure(); }
 };
 
-// --- Geradores de Sinais de Áudio (Alinhamento) ---
+// --- Geradores de Sinais de Áudio Avançados ---
+
+function startLogarithmicSweep() {
+    ensureAudioCtx();
+    const duration = 10;
+    const startFreq = 20;
+    const endFreq = 20000;
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(startFreq, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(endFreq, audioCtx.currentTime + duration);
+
+    gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.5, audioCtx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.5, audioCtx.currentTime + duration - 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+
+    if (pinkMeasureSummary) {
+        pinkMeasureSummary.innerText = 'Executando Sweep Logarítmico (20Hz - 20kHz)...';
+    }
+
+    osc.onended = () => {
+        if (pinkMeasureSummary) pinkMeasureSummary.innerText = 'Sweep concluído.';
+    };
+}
+
+/**
+ * RT60: Dispara um pulso (Burst de Ruído) e captura o decaimento
+ */
+async function triggerImpulseMeasure() {
+    ensureAudioCtx();
+    if (!isAnalyzing) {
+        alert('Ative o microfone primeiro para capturar o decaimento.');
+        return;
+    }
+
+    const duration = 0.05; // 50ms pulse
+    const captureDuration = 3.0; // 3 seconds of recording
+    
+    // 1. Criar o pulso
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square'; // Pulso com muito harmônico (bom para RT60)
+    osc.frequency.value = 1000;
+    
+    gain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0, audioCtx.currentTime + duration);
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    // 2. Preparar gravação do decaimento
+    const sampleRate = audioCtx.sampleRate;
+    const bufferSize = sampleRate * captureDuration;
+    const decayBuffer = new Float32Array(bufferSize);
+    let offset = 0;
+
+    // Usamos o Worklet para capturar o áudio puro
+    const captureHandler = (e) => {
+        if (e.data.type === 'analysis-data') {
+            const chunk = e.data.buffer;
+            if (offset + chunk.length < bufferSize) {
+                decayBuffer.set(chunk, offset);
+                offset += chunk.length;
+            }
+        }
+    };
+
+    if (audioWorkletNode) {
+        audioWorkletNode.port.onmessage = captureHandler;
+    }
+
+    osc.start();
+    console.log('[RT60] Pulso disparado...');
+
+    setTimeout(() => {
+        osc.stop();
+        console.log('[RT60] Processando decaimento via Worker...');
+        
+        // Desconecta o handler de captura
+        if (audioWorkletNode) {
+            audioWorkletNode.port.onmessage = null; 
+        }
+
+        // Envia para o Worker
+        acousticWorker.postMessage({
+            type: 'calculate-rt60-schroeder',
+            data: { buffer: decayBuffer, sampleRate: sampleRate }
+        });
+
+    }, captureDuration * 1000);
+}
+
+function _handleRT60Result(result) {
+    console.log('[RT60 Result]', result);
+    const resultEl = document.getElementById('rt60-result');
+    if (resultEl) {
+        resultEl.classList.remove('hidden');
+        resultEl.innerHTML = `
+            <div class="bg-cyan-900/40 border border-cyan-500/30 p-6 rounded-2xl shadow-xl">
+                <h4 class="text-xs font-black uppercase text-cyan-400 tracking-widest mb-4">Resultado RT60 (Schroeder)</h4>
+                <div class="flex items-baseline gap-2">
+                    <span class="text-5xl font-black text-white">${result.rt60}</span>
+                    <span class="text-xl font-bold text-cyan-300">segundos</span>
+                </div>
+                <p class="text-[10px] text-cyan-100/60 mt-2">Medição via T30 (-5dB a -35dB). Resposta integrada.</p>
+            </div>
+        `;
+    }
+}
 let pinkNoiseNode = null;
 let sineWaveNode = null;
 let isPinkNoisePlaying = false;

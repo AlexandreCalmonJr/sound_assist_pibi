@@ -10,9 +10,21 @@
     </div>
 
     <div id="analyzer-visual" class="analyzer-subtab active">
-        <div class="flex gap-4 mb-6">
-            <button id="btn-start-audio" class="flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-semibold transition-all shadow-lg shadow-cyan-900/20">Ativar Microfone</button>
-            <button id="btn-stop-audio" class="flex-1 py-3 bg-slate-700 text-slate-400 rounded-xl font-semibold cursor-not-allowed" disabled>Parar</button>
+        <div class="flex flex-col gap-4 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button id="btn-start-audio" class="py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-semibold transition-all shadow-lg shadow-cyan-900/20">Ativar Microfone</button>
+                <button id="btn-stop-audio" class="py-3 bg-slate-700 text-slate-400 rounded-xl font-semibold cursor-not-allowed" disabled>Parar</button>
+            </div>
+            
+            <!-- Microphone Selector -->
+            <div class="flex items-center gap-3 px-4 py-2 bg-black/40 border border-white/5 rounded-xl">
+                <span class="text-[10px] font-black uppercase text-slate-500 tracking-widest whitespace-nowrap">Hardware In:</span>
+                <select id="mic-select" class="flex-1 bg-transparent text-xs text-cyan-400 font-bold outline-none cursor-pointer">
+                    <option value="default">Microfone Padrão</option>
+                </select>
+                <div class="h-4 w-px bg-white/10"></div>
+                <div class="text-[9px] text-slate-500 font-mono">FFT: 32768 (1.3Hz res)</div>
+            </div>
         </div>
 
         <div class="relative bg-black rounded-2xl border border-white/10 p-4 mb-2">
@@ -147,6 +159,11 @@
                 <button id="btn-measure-pink" class="group flex flex-col items-center justify-center p-6 bg-cyan-900/20 border border-cyan-500/20 hover:border-cyan-500/50 rounded-2xl transition-all">
                     <span class="text-3xl mb-2 group-hover:scale-110 transition-transform">🎚️</span>
                     <span class="text-sm font-bold text-cyan-400">Medir Ruído Rosa</span>
+                </button>
+                <button id="btn-log-sweep" class="group flex flex-col items-center justify-center p-6 bg-purple-900/20 border border-purple-500/20 hover:border-purple-500/50 rounded-2xl transition-all">
+                    <span class="text-3xl mb-2 group-hover:scale-110 transition-transform">📈</span>
+                    <span class="text-sm font-bold text-purple-400">Sweep Logarítmico</span>
+                    <span class="text-[9px] text-purple-300 opacity-60 mt-1 uppercase">20Hz - 20kHz (10s)</span>
                 </button>
             </div>
             
