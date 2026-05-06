@@ -1,3 +1,10 @@
+/**
+ * SoundMaster Mobile JS
+ * Encapsulado em IIFE para não poluir o escopo global
+ */
+(function() {
+'use strict';
+
 const socket = io();
 
 // UI Elements - Navigation & Status
@@ -96,8 +103,7 @@ socket.on('pong_mixer', () => {
 });
 
 // Intervalo de latência (3s)
-setInterval(measureLatency, 3000);
-
+let latencyInterval = null;
 function updateConnectivityUI(connected) {
     if (!statusBar || !connectionIndicator) return;
     
@@ -127,11 +133,16 @@ socket.on('connect', () => {
     updateConnectivityUI(true);
     appendMobileLog('Conectado via SPA Bridge.');
     measureLatency();
+    if (!latencyInterval) latencyInterval = setInterval(measureLatency, 3000);
 });
 
 socket.on('disconnect', () => {
     updateConnectivityUI(false);
     appendMobileLog('Desconectado do servidor.');
+    if (latencyInterval) {
+        clearInterval(latencyInterval);
+        latencyInterval = null;
+    }
 });
 
 socket.on('mixer_status', (data) => {
@@ -157,12 +168,12 @@ if (btnTimbre) btnTimbre.onclick = analyzeTimbre;
 if (btnModeFFT) btnModeFFT.onclick = () => setMeasurementMode('fft');
 if (btnModePink) btnModePink.onclick = () => setMeasurementMode('pink');
 
-const micStatusText = document.getElementById('mobile-mic-status');
+// DOM Elements — Analysis Section
 const fftCanvas = document.getElementById('mobile-fft-canvas');
-const mobileLog = document.getElementById('mobile-log');
 const feedbackAlert = document.getElementById('mobile-feedback-alert');
 const rmsReadout = document.getElementById('mobile-rms-readout');
-const peakReadout = document.getElementById('mobile-peak-readout');
+
+// DOM Elements — Tools Section
 const mobileTargetChannel = document.getElementById('mobile-target-channel');
 const btnMobileCleanChannel = document.getElementById('mobile-clean-channel');
 const btnMobileHpf = document.getElementById('mobile-hpf-channel');
@@ -172,17 +183,13 @@ const btnMobileEqMud = document.getElementById('mobile-eq-mud');
 const btnMobileEqHarsh = document.getElementById('mobile-eq-harsh');
 const btnMobileAfsOn = document.getElementById('mobile-afs-on');
 const btnMobileAfsOff = document.getElementById('mobile-afs-off');
-const mobileMapLocation = document.getElementById('mobile-map-location');
-const btnMobileSavePeak = document.getElementById('mobile-save-peak');
-const btnMobileRefreshMaps = document.getElementById('mobile-refresh-maps');
-const mobileMappingList = document.getElementById('mobile-mapping-list');
-const btnAiAnalyze = document.getElementById('mobile-btn-ai-analyze');
+
+// DOM Elements — AI Chat Section
 const btnAiSend = document.getElementById('mobile-ai-send');
-const btnAiReset = document.getElementById('mobile-btn-ai-reset');
-const btnPinkNoise = document.getElementById('mobile-btn-pink-noise');
 const aiInput = document.getElementById('mobile-ai-input');
 const aiChatBox = document.getElementById('mobile-ai-chat');
 const aiQuickTags = document.querySelectorAll('.mobile-ai-suggest');
+
 
 let audioCtx;
 let analyser;
@@ -205,35 +212,13 @@ let suspectedFeedbackFrames = 0;
 let isPinkNoiseActive = false;
 
 function appendMobileLog(message) {
-    if (!mobileLog) return;
-    const entry = document.createElement('div');
-    entry.className = 'mixer-log-entry';
-    entry.innerText = `${new Date().toLocaleTimeString()} - ${message}`;
-    mobileLog.prepend(entry);
-    while (mobileLog.children.length > 20) {
-        mobileLog.removeChild(mobileLog.lastChild);
-    }
+    console.log(`[Mobile] ${message}`);
 }
 
 function setBusy(button, busy, label) {
     if (!button) return;
     button.disabled = busy;
     if (label) button.innerText = label;
-}
-
-function updateConnection(connected, msg) {
-    if (connectionBadge) {
-        if (connected) {
-            connectionBadge.className = 'px-2.5 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-[8px] font-black text-green-500 uppercase tracking-widest';
-            connectionBadge.innerText = 'Online';
-        } else {
-            connectionBadge.className = 'px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-[8px] font-black text-red-500 uppercase tracking-widest';
-            connectionBadge.innerText = 'Offline';
-        }
-    }
-    if (connectionText) connectionText.innerText = msg || (connected ? 'Mixer conectado.' : 'Mixer desconectado.');
-    setBusy(btnConnect, false, 'Conectar');
-    appendMobileLog(msg || (connected ? 'Conectado ao mixer.' : 'Desconectado do mixer.'));
 }
 
 function updateMasterDisplay(level, db) {
@@ -252,6 +237,7 @@ function setupMobileTouchFader() {
     if (!container) return;
 
     const handleTouch = (e) => {
+        e.preventDefault();
         const rect = container.getBoundingClientRect();
         const touchY = e.touches[0].clientY;
         
@@ -306,14 +292,13 @@ async function startMic() {
         source.connect(analyser);
         isMicActive = true;
         suspectedFeedbackFrames = 0;
-        micStatusText.innerText = 'Microfone ativo';
-        btnStartMic.classList.add('hidden');
-        btnStopMic.classList.remove('hidden');
-        btnCutFeedback.classList.add('hidden');
+        btnStartMic?.classList.add('hidden');
+        btnStopMic?.classList.remove('hidden');
+        btnCutFeedback?.classList.add('hidden');
         analyzeMic();
         appendMobileLog('Microfone do telefone ativado.');
     } catch (error) {
-        console.error(error);
+        console.error('[Mobile] Mic error:', error);
         alert('Não foi possível ativar o microfone. Verifique as permissões do navegador.');
     }
 }
@@ -331,15 +316,15 @@ function stopMic() {
     analyser = null;
     source = null;
     cancelAnimationFrame(animationId);
-    micStatusText.innerText = 'Microfone offline';
-    btnStartMic.classList.remove('hidden');
-    btnStopMic.classList.add('hidden');
-    btnCutFeedback.classList.add('hidden');
+    btnStartMic?.classList.remove('hidden');
+    btnStopMic?.classList.add('hidden');
+    btnCutFeedback?.classList.add('hidden');
     
-    feedbackAlert.className = 'p-4 rounded-2xl bg-slate-800/40 border border-white/5 text-slate-400 text-center font-bold mb-6';
-    feedbackAlert.innerText = 'Microfone parado.';
-    rmsReadout.innerText = '0%';
-    peakReadout.innerText = '-- Hz';
+    if (feedbackAlert) {
+        feedbackAlert.className = 'p-3.5 rounded-2xl glass-card text-slate-500 text-center text-[10px] font-bold mb-6 italic';
+        feedbackAlert.innerText = 'Microfone parado.';
+    }
+    if (rmsReadout) rmsReadout.innerText = '0%';
     appendMobileLog('Microfone do telefone parado.');
 }
 
@@ -386,17 +371,27 @@ function drawAnalyzer(canvasCtx, dataArray, bufferLength) {
     canvasCtx.globalAlpha = 1.0;
 }
 
+// Arrays globais (reaproveitados) para evitar GC pressure no loop 60fps
+let micDataArray = null;
+let micFreqDataArray = null;
+
 function analyzeMic() {
     if (!isMicActive || !analyser) return;
     animationId = requestAnimationFrame(analyzeMic);
 
     const canvasCtx = fftCanvas.getContext('2d');
     const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    analyser.getByteFrequencyData(dataArray);
-
-    const freqData = new Float32Array(bufferLength);
-    analyser.getFloatFrequencyData(freqData);
+    
+    // Aloca apenas 1x
+    if (!micDataArray || micDataArray.length !== bufferLength) {
+        micDataArray = new Uint8Array(bufferLength);
+        micFreqDataArray = new Float32Array(bufferLength);
+    }
+    
+    analyser.getByteFrequencyData(micDataArray);
+    analyser.getFloatFrequencyData(micFreqDataArray);
+    const dataArray = micDataArray;
+    const freqData = micFreqDataArray;
 
     let maxVal = 0;
     let maxIndex = 0;
@@ -469,27 +464,34 @@ function analyzeMic() {
     currentPeakHz = maxIndex * (audioCtx.sampleRate / analyser.fftSize);
     const peakRounded = Math.round(currentPeakHz);
 
-    rmsReadout.innerText = `${rmsPercent}%`;
-    peakReadout.innerText = peakRounded > 0 ? `${peakRounded} Hz` : '-- Hz';
+    if (rmsReadout) rmsReadout.innerText = `${rmsPercent}%`;
 
     const looksLikeFeedback = maxVal > 225 && currentPeakHz > 180 && currentPeakHz < 9000 && rmsPercent > 18;
     suspectedFeedbackFrames = looksLikeFeedback ? suspectedFeedbackFrames + 1 : Math.max(0, suspectedFeedbackFrames - 2);
 
     if (suspectedFeedbackFrames > 16) {
-        feedbackAlert.className = 'p-4 rounded-xl bg-red-900/20 border border-red-500/30 text-red-400 text-center font-bold mb-6 animate-pulse text-[11px]';
-        feedbackAlert.innerText = `⚠️ Atenção: pico sustentado em ${peakRounded} Hz.`;
-        btnCutFeedback.classList.remove('hidden');
+        if (feedbackAlert) {
+            feedbackAlert.className = 'p-3.5 rounded-2xl glass-card text-red-400 text-center text-[10px] font-bold mb-6 animate-pulse';
+            feedbackAlert.innerText = `⚠️ Atenção: pico sustentado em ${peakRounded} Hz.`;
+        }
+        btnCutFeedback?.classList.remove('hidden');
     } else if (rmsPercent > 75) {
-        feedbackAlert.className = 'p-4 rounded-xl bg-red-900/20 border border-red-500/30 text-red-400 text-center font-bold mb-6 text-[11px]';
-        feedbackAlert.innerText = '🔊 Nível muito alto! Risco de microfonia.';
-        btnCutFeedback.classList.add('hidden');
+        if (feedbackAlert) {
+            feedbackAlert.className = 'p-3.5 rounded-2xl glass-card text-red-400 text-center text-[10px] font-bold mb-6';
+            feedbackAlert.innerText = '🔊 Nível muito alto! Risco de microfonia.';
+        }
+        btnCutFeedback?.classList.add('hidden');
     } else if (isMeasuringPink) {
-        feedbackAlert.className = 'p-4 rounded-xl bg-cyan-900/20 border border-cyan-500/30 text-cyan-400 text-center font-bold mb-6 text-[11px]';
-        feedbackAlert.innerText = `Capturando Ruído Rosa (${pinkSampleCount}/100)...`;
+        if (feedbackAlert) {
+            feedbackAlert.className = 'p-3.5 rounded-2xl glass-card text-cyan-400 text-center text-[10px] font-bold mb-6';
+            feedbackAlert.innerText = `Capturando Ruído Rosa (${pinkSampleCount}/100)...`;
+        }
     } else {
-        feedbackAlert.className = 'p-4 rounded-xl bg-green-900/20 border border-green-500/30 text-green-400 text-center font-bold mb-6 text-[11px]';
-        feedbackAlert.innerText = `✅ Som Limpo. Pico: ${peakRounded} Hz.`;
-        btnCutFeedback.classList.add('hidden');
+        if (feedbackAlert) {
+            feedbackAlert.className = 'p-3.5 rounded-2xl glass-card text-emerald-400 text-center text-[10px] font-bold mb-6';
+            feedbackAlert.innerText = `✅ Som Limpo. Pico: ${peakRounded} Hz.`;
+        }
+        btnCutFeedback?.classList.add('hidden');
     }
 }
 
@@ -581,13 +583,13 @@ function setMasterLevel(value) {
     updateMasterDisplay(level, undefined);
     
     if (currentMix.type === 'master') {
-        socket.emit('set_master_level', { level });
+        emitMobileTool('set_master_level', { level });
     } else if (currentMix.type === 'aux') {
         const channel = getTargetChannel();
-        if (channel) socket.emit('set_aux_level', { channel, aux: currentMix.id, level });
+        if (channel) emitMobileTool('set_aux_level', { channel, aux: currentMix.id, level });
     } else if (currentMix.type === 'fx') {
         const channel = getTargetChannel();
-        if (channel) socket.emit('set_fx_level', { channel, fx: currentMix.id, level });
+        if (channel) emitMobileTool('set_fx_level', { channel, fx: currentMix.id, level });
     }
 }
 
@@ -602,7 +604,7 @@ function getTargetChannel() {
 
 function emitMobileTool(eventName, payload, label) {
     socket.emit(eventName, payload);
-    appendMobileLog(label);
+    if (label) appendMobileLog(label);
 }
 
 async function loadMobileMappings() {
@@ -727,8 +729,7 @@ async function askAI(text, includeAnalysis = false) {
         if (data.command) {
             const btnCmd = aiRow.querySelector('button');
             btnCmd.onclick = () => {
-                socket.emit('execute_ai_command', data.command);
-                appendMobileLog(`Executado via IA: ${data.command.desc}`);
+                emitMobileTool('execute_ai_command', data.command, `Executado via IA: ${data.command.desc}`);
                 btnCmd.disabled = true;
                 btnCmd.innerText = 'Aplicado ✅';
                 btnCmd.className = 'mt-3 w-full py-2 bg-green-500/20 text-green-400 border border-green-500/30 rounded-xl text-[10px] font-black uppercase tracking-widest';
@@ -746,25 +747,8 @@ async function askAI(text, includeAnalysis = false) {
     }
 }
 
-btnConnect?.addEventListener('click', () => {
-    const ip = mixerIpInput.value.trim();
-    if (!ip) {
-        alert('Informe o IP da mesa.');
-        return;
-    }
-    setBusy(btnConnect, true, 'Conectando...');
-    socket.emit('connect_mixer', ip);
-    appendMobileLog(`Tentando conectar em ${ip}.`);
-    connectionBadge.classList.remove('online');
-    connectionBadge.classList.add('offline');
-    connectionBadge.innerText = 'Conectando';
-    connectionText.innerText = 'Conectando...';
-});
-
-btnDisconnect?.addEventListener('click', () => {
-    socket.emit('disconnect_mixer');
-    appendMobileLog('Solicitando desconexão do mixer.');
-});
+// NOTA: O mobile não tem UI de conexão manual — o mixer é conectado via desktop.
+// Listeners removidos: btnConnect, btnDisconnect (elementos inexistentes no HTML).
 
 // Removidos listeners de input/change padrão para usar touch nativo
 setupMobileTouchFader();
@@ -793,8 +777,7 @@ btnStopMic?.addEventListener('click', stopMic);
 btnCutFeedback?.addEventListener('click', () => {
     if (!currentPeakHz) return;
     const hz = Math.round(currentPeakHz);
-    socket.emit('cut_feedback', { hz });
-    appendMobileLog(`Solicitado corte do pico em ${hz} Hz.`);
+    emitMobileTool('cut_feedback', { hz }, `Solicitado corte do pico em ${hz} Hz.`);
     btnCutFeedback.disabled = true;
 });
 
@@ -809,24 +792,22 @@ const mobileBtnPulse = document.getElementById('mobile-btn-pulse');
 mobilePinkToggle?.addEventListener('change', (e) => {
     const enabled = e.target.checked;
     const level = mobilePinkLevel ? mobilePinkLevel.value : -20;
-    socket.emit('set_oscillator', { enabled, type: 1, level });
-    appendMobileLog(`Ruído Rosa ${enabled ? 'LIGADO' : 'DESLIGADO'}.`);
+    emitMobileTool('set_oscillator', { enabled, type: 1, level }, `Ruído Rosa ${enabled ? 'LIGADO' : 'DESLIGADO'}.`);
 });
 
 mobilePinkLevel?.addEventListener('input', (e) => {
     const level = e.target.value;
     if (mobilePinkVal) mobilePinkVal.innerText = `${level}dB`;
     if (mobilePinkToggle?.checked) {
-        socket.emit('set_oscillator', { enabled: true, type: 1, level });
+        emitMobileTool('set_oscillator', { enabled: true, type: 1, level });
     }
 });
 
 mobileBtnPulse?.addEventListener('click', () => {
     triggerHaptic('medium');
-    appendMobileLog('Disparando pulso de medição manual...');
-    socket.emit('set_oscillator', { enabled: true, type: 1, level: -10 });
+    emitMobileTool('set_oscillator', { enabled: true, type: 1, level: -10 }, 'Disparando pulso de medição manual...');
     setTimeout(() => {
-        socket.emit('set_oscillator', { enabled: false, type: 1, level: -10 });
+        emitMobileTool('set_oscillator', { enabled: false, type: 1, level: -10 });
     }, 200);
 });
 
@@ -882,30 +863,11 @@ btnMobileAfsOff?.addEventListener('click', () => {
     emitMobileTool('set_afs_enabled', { enabled: 0 }, 'Solicitado AFS2 global desligado.');
 });
 
-btnMobileSavePeak?.addEventListener('click', saveCurrentPeak);
-btnMobileRefreshMaps?.addEventListener('click', loadMobileMappings);
-
-btnAiAnalyze?.addEventListener('click', () => {
-    if (!isMicActive) {
-        alert('Ative o microfone na aba "Microfone" primeiro!');
-        return;
-    }
-    askAI('', true);
-});
-
 btnAiSend?.addEventListener('click', () => {
-    const text = aiInput.value.trim();
+    const text = aiInput?.value?.trim();
     if (!text) return;
     askAI(text);
     aiInput.value = '';
-});
-
-btnPinkNoise?.addEventListener('click', () => {
-    isPinkNoiseActive = !isPinkNoiseActive;
-    socket.emit('set_oscillator', { enabled: isPinkNoiseActive, type: 1, level: -20 });
-    btnPinkNoise.classList.toggle('active', isPinkNoiseActive);
-    btnPinkNoise.innerText = isPinkNoiseActive ? 'Parar Ruído ⏹️' : 'Ruído Rosa 🔊';
-    appendMobileLog(isPinkNoiseActive ? 'Gerador de Ruído Rosa ativado.' : 'Gerador de Ruído Rosa desligado.');
 });
 
 aiQuickTags.forEach(tag => {
@@ -915,11 +877,6 @@ aiQuickTags.forEach(tag => {
     });
 });
 
-btnAiReset?.addEventListener('click', () => {
-    aiChatBox.innerHTML = '<div style="color: var(--text-muted);">Histórico limpo. Aguardando nova análise...</div>';
-    appendMobileLog('Sessão de IA reiniciada.');
-});
-
 aiInput?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') btnAiSend.click();
 });
@@ -927,8 +884,9 @@ aiInput?.addEventListener('keypress', (e) => {
 // Startup
 window.addEventListener('resize', resizeCanvasForDisplay);
 resizeCanvasForDisplay();
-loadMobileMappings();
 
 // Pre-nav setup
 setupMobileTouchFader();
 initMixSelector();
+
+})();
