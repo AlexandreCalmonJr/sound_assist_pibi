@@ -1,4 +1,6 @@
 (function () {
+    let tunnelPollCount = 0;
+
     async function loadConfig() {
         try {
             const res = await fetch('/api/config');
@@ -11,30 +13,38 @@
             const mobileLink = document.getElementById('mobile-open-link');
             const mobileQrCode = document.getElementById('mobile-qr-code');
 
-            console.log('[Config] Configuração recebida:', config);
-
+            if (ipCard) ipCard.style.display = 'block';
+            if (ipDisplay) ipDisplay.innerText = `http://${config.localIp}:${config.port}`;
+            
             if (config.localIp === '127.0.0.1' && !config.tunnelUrl) {
-                console.warn('[Config] Servidor ainda em localhost sem túnel.');
-                if (mobileUrl) mobileUrl.innerText = 'Aguardando túnel seguro...';
+                if (mobileUrl) mobileUrl.innerText = 'Aguardando rede...';
                 return;
             }
 
-            if (ipCard) ipCard.style.display = 'block';
-            
+            // Polling aguardando o Localtunnel gerar o link HTTPS (necessário pro Mic)
+            if (!config.tunnelUrl && tunnelPollCount < 10) {
+                tunnelPollCount++;
+                if (mobileUrl) mobileUrl.innerHTML = '<span style="color: var(--warning); animation: pulse 2s infinite;">Gerando túnel HTTPS (Necessário para Microfone)...</span>';
+                setTimeout(loadConfig, 2000);
+                return;
+            }
+
+            // Se o túnel subiu ou se desistimos após 20s
             const baseUrl = config.tunnelUrl || `http://${config.localIp}:${config.port}`;
             const mobileHref = `${baseUrl}/mobile/index.html`;
-            
-            console.log('[Config] URL Mobile:', mobileHref);
 
-            if (ipDisplay) ipDisplay.innerText = `http://${config.localIp}:${config.port}`;
-            if (mobileUrl) mobileUrl.innerText = mobileHref;
+            if (!config.tunnelUrl) {
+                if (mobileUrl) mobileUrl.innerHTML = `${mobileHref} <br><span style="color: var(--danger); font-size: 10px; font-weight: 800; text-transform: uppercase; margin-top: 4px; display: block;">Túnel Falhou: Microfone bloqueado no celular.</span>`;
+            } else {
+                if (mobileUrl) mobileUrl.innerHTML = `<span style="color: var(--success); font-weight: bold;">${mobileHref}</span>`;
+            }
+
             if (mobileLink) mobileLink.href = mobileHref;
             
             if (mobileQrCode) {
-                // Usando o serviço qrickit que é bem estável
                 const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(mobileHref)}`;
                 mobileQrCode.src = qrUrl;
-                console.log('[Config] QR Code setado:', qrUrl);
+                console.log('[Config] QR Code setado para:', mobileHref);
             }
         } catch (e) {
             console.error('[Config] Erro ao carregar config:', e);

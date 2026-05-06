@@ -272,7 +272,7 @@ function resizeCanvasForDisplay() {
 
 async function startMic() {
     if (!navigator.mediaDevices?.getUserMedia) {
-        alert('Este navegador não permite acesso ao microfone nesta página.');
+        alert('🔒 Acesso Negado pelo Navegador\n\nPara usar o microfone no celular, você DEVE acessar o aplicativo usando o link seguro (HTTPS / Túnel) gerado pelo SoundMaster.\n\nNavegadores bloqueiam o microfone se você acessar via IP local (HTTP).');
         return;
     }
 
@@ -448,11 +448,17 @@ function analyzeMic() {
                 document.getElementById('rt60-overlay').classList.add('hidden');
                 
                 // Calcula decaimento (Linear regression simplificada)
-                const first = rt60DecayLevels[0];
+                const maxLevel = Math.max(...rt60DecayLevels);
+                const maxIndex = rt60DecayLevels.indexOf(maxLevel);
                 const last = rt60DecayLevels[rt60DecayLevels.length - 1];
-                const drop = first - last;
-                const time = (rt60DecayLevels.length * 1000 / 60) / 1000; // segundos
-                const rt60 = drop > 10 ? (time * 60 / drop) : 0;
+                const drop = maxLevel - last;
+                
+                // Tempo do pico até o fim da janela (em segundos assumindo 60fps)
+                const framesDecay = rt60DecayLevels.length - maxIndex;
+                const time = (framesDecay * 1000 / 60) / 1000;
+                
+                // Extrapola para 60dB se houver um drop de pelo menos 5dB
+                const rt60 = drop > 5 ? (time * 60 / drop) : 0;
                 
                 document.getElementById('mobile-rt60-readout').innerText = rt60 > 0 ? `${rt60.toFixed(2)}s` : '--';
                 appendMobileLog(`RT60 Medido: ${rt60.toFixed(2)}s`);
@@ -501,16 +507,12 @@ function setMeasurementMode(mode) {
     const btnPink = document.getElementById('btn-mode-pink');
     
     if (mode === 'pink') {
-        btnFFT.classList.replace('bg-cyan-500', 'bg-slate-800');
-        btnFFT.classList.replace('text-black', 'text-slate-400');
-        btnPink.classList.replace('bg-slate-800', 'bg-cyan-500');
-        btnPink.classList.replace('text-slate-400', 'text-black');
+        btnFFT?.classList.remove('active-mode');
+        btnPink?.classList.add('active-mode');
         startPinkMeasurement();
     } else {
-        btnPink.classList.replace('bg-cyan-500', 'bg-slate-800');
-        btnPink.classList.replace('text-black', 'text-slate-400');
-        btnFFT.classList.replace('bg-slate-800', 'bg-cyan-500');
-        btnFFT.classList.replace('text-slate-400', 'text-black');
+        btnPink?.classList.remove('active-mode');
+        btnFFT?.classList.add('active-mode');
         isMeasuringPink = false;
     }
 }
