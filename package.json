@@ -31,7 +31,7 @@
   "type": "commonjs",
   "dependencies": {
     "@seald-io/nedb": "^4.1.2",
-    "@tensorflow/tfjs-node": "^4.22.0",
+    "@tensorflow/tfjs": "^4.22.0",
     "adm-zip": "^0.5.17",
     "axios": "^1.16.0",
     "cors": "^2.8.6",

@@ -74,7 +74,33 @@
             });
         });
 
-        // Accordions e Links
+        // --- Novo: Accordion da Sidebar ---
+        document.querySelectorAll('.menu-trigger').forEach(trigger => {
+            trigger.addEventListener('click', (e) => {
+                e.preventDefault();
+                const category = trigger.getAttribute('data-category');
+                const content = trigger.nextElementSibling;
+                const arrow = trigger.querySelector('.arrow-icon');
+                
+                // Fecha outros menus abertos (opcional, para manter limpo)
+                /*
+                document.querySelectorAll('.menu-content').forEach(c => {
+                    if (c !== content) c.classList.add('hidden');
+                });
+                */
+
+                const isHidden = content.classList.contains('hidden');
+                if (isHidden) {
+                    content.classList.remove('hidden');
+                    if (arrow) arrow.style.transform = 'rotate(180deg)';
+                } else {
+                    content.classList.add('hidden');
+                    if (arrow) arrow.style.transform = 'rotate(0deg)';
+                }
+            });
+        });
+
+        // Accordions genéricos e Links
         document.querySelectorAll('.accordion-header').forEach(header => {
             header.addEventListener('click', () => {
                 const content = header.nextElementSibling;
