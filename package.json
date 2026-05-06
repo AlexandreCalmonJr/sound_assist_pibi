@@ -14,7 +14,15 @@
     "appId": "com.soundmaster.app",
     "productName": "SoundMaster",
     "win": {
-      "target": "nsis"
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
     }
   },
   "keywords": [],
