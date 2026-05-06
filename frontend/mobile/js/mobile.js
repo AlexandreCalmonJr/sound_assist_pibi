@@ -81,8 +81,8 @@ function initMixSelector() {
             
             // Opcional: Atualizar cor do acento baseado no mix?
             const root = document.documentElement;
-            if (currentMix.type === 'aux') root.style.setProperty('--accent', '#a855f7'); // Roxo para Aux
-            else if (currentMix.type === 'fx') root.style.setProperty('--accent', '#ec4899'); // Rosa para FX
+            if (currentMix.type === 'aux') root.style.setProperty('--accent', '#14b8a6'); // Teal para Aux
+            else if (currentMix.type === 'fx') root.style.setProperty('--accent', '#f59e0b'); // Laranja para FX
             else root.style.setProperty('--accent', '#06b6d4'); // Ciano para Master
         });
     });
