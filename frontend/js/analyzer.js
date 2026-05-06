@@ -1,3 +1,18 @@
+/**
+ * SoundMaster — Analisador de Áudio em Tempo Real (Web Audio API)
+ * Encapsulado em IIFE para evitar poluição do escopo global.
+ *
+ * NOTA TÉCNICA: createScriptProcessor é deprecated (Web Audio API).
+ * O substituto recomendado é AudioWorklet, porém requer:
+ *   1. Arquivo separado para o processador (AudioWorkletProcessor)
+ *   2. Contexto seguro (HTTPS) em alguns navegadores
+ *   3. Suporte menor em Safari < 14.1
+ * Mantido createScriptProcessor como fallback funcional até que
+ * o app migre para uma build com bundler (Vite/Webpack).
+ */
+(function () {
+'use strict';
+
 // Analisador de Áudio em Tempo Real (Web Audio API)
 let audioCtx;
 let analyser;
@@ -110,10 +125,10 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
     btnSendAnalysis?.addEventListener('click', sendAnalysisToAI);
     btnMeasurePink?.addEventListener('click', startPinkNoiseMeasurement);
     
-    // Sinais
-    const btnPink = document.getElementById('btn-pink-noise');
-    const btnSine = document.getElementById('btn-sine-wave');
-    const sineFreqInput = document.getElementById('sine-freq');
+    // Sinais — capturar no escopo correto (DOM existe neste momento)
+    btnPink = document.getElementById('btn-pink-noise');
+    btnSine = document.getElementById('btn-sine-wave');
+    sineFreqInput = document.getElementById('sine-freq');
 
     btnPink?.addEventListener('click', () => {
         ensureAudioCtx();
@@ -608,10 +623,10 @@ function analyze() {
         feedbackAlert.className = 'alert danger';
         feedbackAlert.innerHTML = `⚠️ <strong>Microfonia DETECTADA</strong> em <strong>${Math.round(peakHz)} Hz</strong> sustentados. Diferença local: ${formatDb(peakDb - neighborAvg)} dB.`;
 
-        if (socket && typeof socket.emit === 'function') {
+        if (btnAutoCut) {
             btnAutoCut.style.display = 'block';
             btnAutoCut.onclick = () => {
-                socket.emit('cut_feedback', { hz: Math.round(peakHz) });
+                MixerService.cutFeedback(Math.round(peakHz));
                 btnAutoCut.innerText = 'Cortando...';
             };
         }
@@ -679,9 +694,11 @@ let sineWaveNode = null;
 let isPinkNoisePlaying = false;
 let isSineWavePlaying = false;
 
-const btnPink = document.getElementById('btn-pink-noise');
-const btnSine = document.getElementById('btn-sine-wave');
-const sineFreqInput = document.getElementById('sine-freq');
+// btnPink, btnSine, sineFreqInput são capturados dentro de initAnalyzer()
+// para evitar null (DOM das pages não existe no load global)
+let btnPink = null;
+let btnSine = null;
+let sineFreqInput = null;
 
 // Helper to ensure AudioContext
 function ensureAudioCtx() {
@@ -693,4 +710,4 @@ function ensureAudioCtx() {
     }
 }
 
-// Helpers (mantidos fora para serem reutilizados)
+})();

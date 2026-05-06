@@ -12,11 +12,13 @@ const localIp = getLocalIp();
 let pythonProcess = null;
 
 function createHttpServer() {
+    const dbDir = app.getPath('userData');
     return createAppServer({
         app,
         rootDir: ROOT_DIR,
         localIp,
-        port: PORT
+        port: PORT,
+        dbDir
     });
 }
 

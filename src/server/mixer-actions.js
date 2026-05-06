@@ -90,7 +90,8 @@ function createMixerActions(getMixer) {
     }
 
     function runCleanSoundPreset(channel, opts = {}) {
-        const ch = getInputIndex(channel);
+        // Validação de canal (getInputIndex é chamado internamente por cada ação)
+        getInputIndex(channel);
         const steps = [
             applyChannelHpf(channel, opts.hpf || 100),
             applyChannelGate(channel, 1, opts.gateThreshold || -52),

@@ -97,18 +97,20 @@
      * @returns {Promise<boolean>}
      */
     async function ping() {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(function () { controller.abort(); }, 2000);
         try {
-            const controller = new AbortController();
-            setTimeout(function () { controller.abort(); }, 2000);
             await fetch(AI_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: 'teste' }),
                 signal: controller.signal
             });
+            clearTimeout(timeoutId);
             AppStore.setState({ aiStatus: 'online' });
             return true;
         } catch (_) {
+            clearTimeout(timeoutId);
             AppStore.setState({ aiStatus: 'offline' });
             return false;
         }

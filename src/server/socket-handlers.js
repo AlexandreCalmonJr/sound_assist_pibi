@@ -6,6 +6,7 @@ function registerSocketHandlers(io) {
     let mixer = null;
     let historyStack = [];
     let redoStack = [];
+    let activeConnections = 0;
     
     // Cache de estado para simulação e presets
     let mixerState = {
@@ -20,11 +21,17 @@ function registerSocketHandlers(io) {
     function addToHistory(cmd) {
         historyStack.push(cmd);
         if (historyStack.length > 50) historyStack.shift();
-        redoStack = []; // Limpa redo ao fazer nova ação
+        redoStack = [];
     }
 
     io.on('connection', (socket) => {
-        console.log('Frontend conectado via Socket.io');
+        activeConnections++;
+        console.log(`[Socket] Frontend conectado (${activeConnections} cliente(s) ativo(s))`);
+
+        if (activeConnections > 1) {
+            console.warn('[Socket] ⚠️ Múltiplos clientes conectados — ações na mesa são compartilhadas!');
+            socket.emit('mixer_status', { connected: !!mixer, msg: '⚠️ Outro cliente já está conectado. Ações serão compartilhadas.' });
+        }
 
         socket.on('connect_mixer', async (ip) => {
             try {
@@ -159,12 +166,20 @@ function registerSocketHandlers(io) {
 
         socket.on('set_afs_enabled', (data) => {
             if (!actions.ensureMixer(socket)) return;
-            socket.emit('feedback_cut_success', { msg: actions.setAfs(data.enabled) });
+            try {
+                socket.emit('feedback_cut_success', { msg: actions.setAfs(data.enabled) });
+            } catch (error) {
+                socket.emit('mixer_status', { connected: true, msg: `Erro AFS: ${error.message}` });
+            }
         });
 
         socket.on('set_oscillator', (data) => {
             if (!actions.ensureMixer(socket)) return;
-            socket.emit('feedback_cut_success', { msg: actions.applyOscillator(data.enabled, data.type, data.level) });
+            try {
+                socket.emit('feedback_cut_success', { msg: actions.applyOscillator(data.enabled, data.type, data.level) });
+            } catch (error) {
+                socket.emit('mixer_status', { connected: true, msg: `Erro oscilador: ${error.message}` });
+            }
         });
 
         socket.on('set_aux_level', (data) => {
@@ -278,7 +293,8 @@ function registerSocketHandlers(io) {
         });
 
         socket.on('disconnect', () => {
-            console.log('Frontend desconectado.');
+            activeConnections--;
+            console.log(`[Socket] Frontend desconectado (${activeConnections} cliente(s) restante(s))`);
         });
     });
 }

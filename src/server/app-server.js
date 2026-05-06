@@ -3,13 +3,13 @@ const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
-const Datastore = require('@seald-io/nedb');
 const localtunnel = require('localtunnel');
 
+const db = require('./database');
 const { registerMappingsRoutes } = require('./mappings-routes');
 const { registerSocketHandlers } = require('./socket-handlers');
 
-function createAppServer({ app, rootDir, localIp, port }) {
+function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     const expressApp = express();
     const server = http.createServer(expressApp);
 
@@ -24,9 +24,15 @@ function createAppServer({ app, rootDir, localIp, port }) {
     });
 
     // Inicia o túnel HTTPS (importante para microfone no iOS/Android)
+    const MAX_TUNNEL_RETRIES = 10;
+
     async function startTunnel(retryCount = 0) {
+        if (retryCount >= MAX_TUNNEL_RETRIES) {
+            console.warn(`[Tunnel] Desistindo após ${MAX_TUNNEL_RETRIES} tentativas. Acesso remoto indisponível.`);
+            return;
+        }
+
         try {
-            // Tenta um subdomínio mais pessoal para evitar conflitos
             const sub = retryCount < 3 ? 'soundmaster-pibi' : `soundmaster-pro-${Math.random().toString(36).substring(2, 6)}`;
             
             const tunnel = await localtunnel({ 
@@ -41,28 +47,29 @@ function createAppServer({ app, rootDir, localIp, port }) {
             console.log('====================================');
 
             tunnel.on('close', () => {
-                console.log('Túnel fechado. Tentando reconectar...');
+                console.log('[Tunnel] Fechado. Reconectando em 5s...');
                 tunnelUrl = null;
                 setTimeout(() => startTunnel(0), 5000);
             });
             
             tunnel.on('error', (err) => {
-                console.error('Erro no túnel:', err.message);
+                console.error('[Tunnel] Erro:', err.message);
                 tunnelUrl = null;
-                setTimeout(() => startTunnel(retryCount + 1), 5000);
+                const delay = Math.min(5000 * Math.pow(2, retryCount), 60000);
+                setTimeout(() => startTunnel(retryCount + 1), delay);
             });
 
         } catch (err) {
-            console.error('Falha ao criar túnel seguro:', err.message);
-            // Se falhou (503), tenta novamente com um contador de retentativa
-            setTimeout(() => startTunnel(retryCount + 1), 10000);
+            console.error(`[Tunnel] Falha (tentativa ${retryCount + 1}/${MAX_TUNNEL_RETRIES}):`, err.message);
+            const delay = Math.min(5000 * Math.pow(2, retryCount), 60000);
+            setTimeout(() => startTunnel(retryCount + 1), delay);
         }
     }
     startTunnel();
 
-    const dbPath = path.join(app.getPath('userData'), 'mappings.db');
-    const db = new Datastore({ filename: dbPath, autoload: true });
-    registerMappingsRoutes(expressApp, db);
+    // Inicializa banco centralizado (presets + mappings no mesmo diretório)
+    db.initDatabase(dbDir);
+    registerMappingsRoutes(expressApp, db.mappings);
 
     // Proxy para IA (permite acesso mobile)
     expressApp.post('/api/ai', async (req, res) => {
