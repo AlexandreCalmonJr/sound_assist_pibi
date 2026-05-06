@@ -6,6 +6,9 @@ const { configureElectronSession, createWindow } = require('./server/electron-wi
 const { getLocalIp } = require('./server/network');
 const { startPythonAI, stopPythonAI } = require('./server/python-ai');
 const { setupUpdater } = require('./server/updater');
+const historyService = require('./server/history-service');
+const aiPredictor = require('./server/ai-predictor');
+const aes67Service = require('./server/aes67-service');
 
 let ROOT_DIR = path.join(__dirname, '..');
 const updateConfigPath = path.join(app.getPath('userData'), 'current_update.json');
@@ -56,6 +59,13 @@ app.whenReady().then(async () => {
     
     const mainWindow = createWindow(PORT);
     
+    // Inicializa Serviços de Engenharia
+    historyService.init(app.getPath('userData'));
+    await aiPredictor.init();
+    
+    // Inicia receptor de rede (opcional, configurável via UI futuramente)
+    // aes67Service.start(); 
+
     // Configura o sistema de update
     setupUpdater(mainWindow);
 

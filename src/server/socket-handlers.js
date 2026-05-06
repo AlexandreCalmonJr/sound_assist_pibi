@@ -1,6 +1,8 @@
 const { SoundcraftUI } = require('soundcraft-ui-connection');
 const { createMixerActions } = require('./mixer-actions');
 const db = require('./database');
+const historyService = require('./history-service');
+const aiPredictor = require('./ai-predictor');
 
 function registerSocketHandlers(io) {
     let mixer = null;
@@ -217,6 +219,49 @@ function registerSocketHandlers(io) {
                 socket.emit('feedback_cut_success', { msg: `Preset de som limpo aplicado no canal ${channel}: ${steps.join(' ')}` });
             } catch (error) {
                 socket.emit('mixer_status', { connected: true, msg: error.message });
+            }
+        });
+
+        // --- Histórico e IA Preditiva ---
+        socket.on('save_acoustic_snapshot', async (data) => {
+            try {
+                const doc = await historyService.saveSnapshot(data);
+                socket.emit('snapshot_saved', doc);
+            } catch (e) {
+                console.error('Erro ao salvar snapshot:', e.message);
+            }
+        });
+
+        socket.on('get_acoustic_history', async () => {
+            try {
+                const docs = await historyService.getComparison();
+                const benchmark = await historyService.getBenchmark();
+                socket.emit('acoustic_history_data', { history: docs, benchmark });
+            } catch (e) {
+                console.error('Erro ao buscar histórico:', e.message);
+            }
+        });
+
+        socket.on('analyze_feedback_risk', async (data) => {
+            try {
+                const risk = await aiPredictor.predictRisk(data.hz, data.db, data.prevDb, data.gain || 0);
+                socket.emit('feedback_risk_result', { hz: data.hz, risk });
+                
+                // Se o risco for altíssimo (> 0.9), podemos disparar um corte preventivo
+                if (risk > 0.9) {
+                    const msg = actions.applyEqCut('master', null, data.hz, -3, 10, 4);
+                    socket.emit('feedback_cut_success', { hz: data.hz, msg: `[IA Preditiva] Corte preventivo de -3dB: ${msg}` });
+                }
+            } catch (e) {
+                console.error('Erro na previsão de IA:', e.message);
+            }
+        });
+
+        socket.on('train_feedback_event', async (data) => {
+            try {
+                await aiPredictor.trainOnEvent(data.hz, data.db, data.prevDb, data.gain || 0, data.isFeedback);
+            } catch (e) {
+                console.error('Erro no treinamento de IA:', e.message);
             }
         });
 
