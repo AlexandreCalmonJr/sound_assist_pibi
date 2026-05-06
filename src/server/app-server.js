@@ -3,7 +3,7 @@ const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
-const localtunnel = require('localtunnel');
+// const localtunnel = require('localtunnel');
 
 const db = require('./database');
 const { registerMappingsRoutes } = require('./mappings-routes');
@@ -38,11 +38,8 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     const MAX_TUNNEL_RETRIES = 10;
 
     async function startTunnel(retryCount = 0) {
-        if (retryCount >= MAX_TUNNEL_RETRIES) {
-            console.warn(`[Tunnel] Desistindo após ${MAX_TUNNEL_RETRIES} tentativas. Acesso remoto indisponível.`);
-            return;
-        }
-
+        console.log('[Tunnel] O túnel está desativado para garantir a performance local.');
+        /*
         try {
             const sub = retryCount < 3 ? 'soundmaster-pibi' : `soundmaster-pro-${Math.random().toString(36).substring(2, 6)}`;
             
@@ -75,6 +72,7 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
             const delay = Math.min(5000 * Math.pow(2, retryCount), 60000);
             setTimeout(() => startTunnel(retryCount + 1), delay);
         }
+        */
     }
     // startTunnel(); // Comentado para não pesar o app no início
 

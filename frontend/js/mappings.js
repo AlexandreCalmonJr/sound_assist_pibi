@@ -21,11 +21,16 @@
                 return;
             }
 
-            // Polling aguardando o Localtunnel gerar o link HTTPS (necessário pro Mic)
-            if (!config.tunnelUrl && tunnelPollCount < 10) {
-                tunnelPollCount++;
-                if (mobileUrl) mobileUrl.innerHTML = '<span style="color: var(--warning); animation: pulse 2s infinite;">Gerando túnel HTTPS (Necessário para Microfone)...</span>';
-                setTimeout(loadConfig, 2000);
+            // Informativo sobre o Túnel
+            if (!config.tunnelUrl) {
+                if (mobileUrl) mobileUrl.innerHTML = '<span style="color: var(--slate-400); font-size: 9px; text-transform: uppercase;">Túnel HTTPS Desativado (Melhor Performance). Ative em "Sistemas" se precisar do Celular.</span>';
+                
+                const localHref = `http://${config.localIp}:${config.port}/mobile/index.html`;
+                if (mobileLink) mobileLink.href = localHref;
+                if (mobileQrCode) {
+                    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(localHref)}`;
+                    mobileQrCode.src = qrUrl;
+                }
                 return;
             }
 

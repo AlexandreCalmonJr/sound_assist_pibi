@@ -58,4 +58,52 @@
             </div>
         </div>
     </div>
-</section>
+<script>
+    (function() {
+        const btnToggle = document.getElementById('btn-toggle-tunnel');
+        const btnCopy = document.getElementById('btn-copy-link');
+        const statusText = document.getElementById('tunnel-status-text');
+        const led = document.getElementById('tunnel-led');
+        let currentUrl = '';
+
+        async function updateStatus() {
+            try {
+                const res = await fetch('/api/config');
+                const config = await res.json();
+                if (config.tunnelUrl) {
+                    currentUrl = config.tunnelUrl;
+                    statusText.innerText = currentUrl;
+                    statusText.classList.replace('text-slate-500', 'text-cyan-400');
+                    led.classList.replace('bg-slate-700', 'bg-green-500');
+                    led.classList.add('shadow-lg', 'shadow-green-900/50');
+                    btnToggle.innerText = 'Túnel Ativo';
+                    btnToggle.classList.replace('bg-cyan-600', 'bg-slate-700');
+                }
+            } catch (e) {}
+        }
+
+        btnToggle?.addEventListener('click', async () => {
+            btnToggle.innerText = 'Iniciando...';
+            try {
+                const res = await fetch('/api/tunnel/toggle', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    setTimeout(updateStatus, 3000);
+                }
+            } catch (e) {
+                btnToggle.innerText = 'Erro ao Ativar';
+            }
+        });
+
+        btnCopy?.addEventListener('click', () => {
+            if (currentUrl) {
+                navigator.clipboard.writeText(currentUrl);
+                alert('Link copiado: ' + currentUrl);
+            } else {
+                alert('Ative o túnel primeiro!');
+            }
+        });
+
+        updateStatus();
+    })();
+</script>

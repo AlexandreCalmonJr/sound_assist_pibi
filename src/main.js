@@ -55,7 +55,12 @@ function startServer() {
     });
 }
 
+let isInitialized = false;
+
 app.whenReady().then(async () => {
+    if (isInitialized) return;
+    isInitialized = true;
+    
     const aiPath = path.join(ROOT_DIR, 'backend', 'ai');
     pythonProcess = startPythonAI(aiPath);
     startServer();
@@ -76,11 +81,11 @@ app.whenReady().then(async () => {
     // Configura o sistema de update
     setupUpdater(mainWindow);
 
-    // Log de Performance (A cada 30s)
+    // Log de Performance (A cada 60s para não poluir)
     setInterval(() => {
         const usage = process.memoryUsage();
-        console.log(`[Status] Memória: ${Math.round(usage.heapUsed / 1024 / 1024)}MB | CPU: ${process.cpuUsage().user / 1000000}s`);
-    }, 30000);
+        console.log(`[Status] Memória: ${Math.round(usage.heapUsed / 1024 / 1024)}MB | CPU: ${Math.round(process.cpuUsage().user / 1000000)}s`);
+    }, 60000);
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {

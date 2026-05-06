@@ -13,16 +13,18 @@ class MultiChannelAnalyzer {
     init(io) {
         this.io = io;
         this.lastProcessTime = 0;
-        this.processInterval = 100; // Analisar apenas a cada 100ms (10 vezes por segundo)
+        this.processInterval = 100; // Analisar apenas a cada 100ms
         
         aes67.on('multi-channel-audio', (data) => {
+            if (!aes67.isStreaming) return; // Só processa se o stream estiver realmente ativo
+
             const now = Date.now();
             if (now - this.lastProcessTime > this.processInterval) {
                 this.processAudio(data);
                 this.lastProcessTime = now;
             }
         });
-        console.log('[Analyzer] Analisador Multi-Canal (AES67) Ativo [Modo Otimizado: 10Hz]');
+        console.log('[Analyzer] Analisador Multi-Canal (AES67) em espera.');
     }
 
     processAudio({ buffer, channels, bitDepth }) {
@@ -60,8 +62,10 @@ class MultiChannelAnalyzer {
             }
         }
 
-        // Emite níveis para o frontend (opcional, para visualização de meters)
-        // this.io.emit('multi_meter_update', this.channelStats.map(s => s.peak));
+        // Emite níveis para o frontend (visualização de meters em 10Hz)
+        if (this.io) {
+            this.io.emit('multi_meter_update', this.channelStats.map(s => Math.round(s.peak)));
+        }
     }
 
     async runAiDiagnosis(channelIdx, peakDb) {
