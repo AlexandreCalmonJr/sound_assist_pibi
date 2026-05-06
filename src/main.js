@@ -9,6 +9,7 @@ const { setupUpdater } = require('./server/updater');
 const historyService = require('./server/history-service');
 const aiPredictor = require('./server/ai-predictor');
 const aes67Service = require('./server/aes67-service');
+const multiChannelAnalyzer = require('./server/multi-channel-analyzer');
 
 let ROOT_DIR = path.join(__dirname, '..');
 const updateConfigPath = path.join(app.getPath('userData'), 'current_update.json');
@@ -63,8 +64,9 @@ app.whenReady().then(async () => {
     historyService.init(app.getPath('userData'));
     await aiPredictor.init();
     
-    // Inicia receptor de rede (opcional, configurável via UI futuramente)
-    // aes67Service.start(); 
+    // Inicia receptor de rede e analisador multi-canal
+    multiChannelAnalyzer.init(io);
+    // aes67Service.start(); // Descomentar quando o hardware AES67 estiver presente
 
     // Configura o sistema de update
     setupUpdater(mainWindow);

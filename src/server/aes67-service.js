@@ -20,14 +20,18 @@ class AES67Receiver extends EventEmitter {
         });
 
         this.server.on('message', (msg, rinfo) => {
-            // RTP Header tem 12 bytes. O payload é o PCM.
-            // Para AES67 puro, o payload geralmente é L24 (24-bit PCM) ou L16.
+            // RTP Header (12 bytes)
             const payload = msg.slice(12);
             
-            this.emit('audio-data', {
+            /**
+             * Na Ui24R via AES67, o áudio costuma ser L24 (3 bytes por amostra)
+             * e os canais são intercalados: [Ch1, Ch2, Ch3... ChN, Ch1, Ch2...]
+             */
+            this.emit('multi-channel-audio', {
                 buffer: payload,
-                from: rinfo.address,
-                timestamp: Date.now()
+                channels: 32, // Captura o mapa completo (Inputs + Bus)
+                bitDepth: 24,
+                sampleRate: 48000
             });
         });
 

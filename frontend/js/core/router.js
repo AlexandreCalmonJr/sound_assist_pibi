@@ -10,7 +10,10 @@ class Router {
             'eq': 'pages/eq.html',
             'rt60': 'pages/rt60.html',
             'mobile': 'pages/mobile.html',
-            'ai-chat': 'pages/ai-chat.html'
+            'ai-chat': 'pages/ai-chat.html',
+            'aes67': 'pages/aes67.html',
+            'systems': 'pages/systems.html',
+            'settings': 'pages/settings.html'
         };
         this.currentPage = null;
         
