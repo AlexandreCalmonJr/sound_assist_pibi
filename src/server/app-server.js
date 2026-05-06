@@ -23,6 +23,17 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
         res.json({ localIp, port, tunnelUrl });
     });
 
+    expressApp.post('/api/tunnel/toggle', async (req, res) => {
+        if (tunnelUrl) {
+            // No localtunnel as-is, we'd need to keep the tunnel instance to close it
+            // For now, let's just implement a simple start/stop logic
+            res.json({ success: false, message: 'Re-inicie o app para fechar o túnel ou aguarde implementação de close' });
+        } else {
+            startTunnel();
+            res.json({ success: true, message: 'Iniciando túnel...' });
+        }
+    });
+
     // Inicia o túnel HTTPS (importante para microfone no iOS/Android)
     const MAX_TUNNEL_RETRIES = 10;
 
@@ -65,7 +76,7 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
             setTimeout(() => startTunnel(retryCount + 1), delay);
         }
     }
-    startTunnel();
+    // startTunnel(); // Comentado para não pesar o app no início
 
     // Inicializa banco centralizado (presets + mappings no mesmo diretório)
     db.initDatabase(dbDir);

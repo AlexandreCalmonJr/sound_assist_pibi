@@ -43,16 +43,16 @@
                 <div class="flex items-center justify-between p-4 bg-black/40 rounded-xl border border-white/5">
                     <div>
                         <span class="text-xs text-slate-300 block font-bold mb-1">Acesso Externo (Túnel)</span>
-                        <span class="text-[10px] text-cyan-400 font-mono">https://soundmaster-church.loca.lt</span>
+                        <span id="tunnel-status-text" class="text-[10px] text-slate-500 font-mono">Desativado</span>
                     </div>
-                    <div class="w-3 h-3 rounded-full bg-green-500 shadow-lg shadow-green-900/50"></div>
+                    <div id="tunnel-led" class="w-3 h-3 rounded-full bg-slate-700"></div>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
-                    <button class="py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-white/5">
-                        Reiniciar Túnel
+                    <button id="btn-toggle-tunnel" class="py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-lg shadow-cyan-900/30">
+                        Ativar Túnel
                     </button>
-                    <button class="py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-white/5">
-                        Ver Log do Servidor
+                    <button id="btn-copy-link" class="py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-white/5">
+                        Copiar Link
                     </button>
                 </div>
             </div>

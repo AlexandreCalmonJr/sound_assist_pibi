@@ -12,8 +12,17 @@ class MultiChannelAnalyzer {
 
     init(io) {
         this.io = io;
-        aes67.on('multi-channel-audio', (data) => this.processAudio(data));
-        console.log('[Analyzer] Analisador Multi-Canal (AES67) vinculado à IA.');
+        this.lastProcessTime = 0;
+        this.processInterval = 100; // Analisar apenas a cada 100ms (10 vezes por segundo)
+        
+        aes67.on('multi-channel-audio', (data) => {
+            const now = Date.now();
+            if (now - this.lastProcessTime > this.processInterval) {
+                this.processAudio(data);
+                this.lastProcessTime = now;
+            }
+        });
+        console.log('[Analyzer] Analisador Multi-Canal (AES67) Ativo [Modo Otimizado: 10Hz]');
     }
 
     processAudio({ buffer, channels, bitDepth }) {

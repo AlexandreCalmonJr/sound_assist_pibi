@@ -42,8 +42,11 @@ function createHttpServer() {
     });
 }
 
+let ioInstance = null;
+
 function startServer() {
-    const server = createHttpServer();
+    const { server, io } = createHttpServer();
+    ioInstance = io;
     server.listen(PORT, () => {
         console.log('====================================');
         console.log('SoundMaster Backend Rodando!');
@@ -65,11 +68,19 @@ app.whenReady().then(async () => {
     await aiPredictor.init();
     
     // Inicia receptor de rede e analisador multi-canal
-    multiChannelAnalyzer.init(io);
-    // aes67Service.start(); // Descomentar quando o hardware AES67 estiver presente
+    if (ioInstance) {
+        multiChannelAnalyzer.init(ioInstance);
+    }
+    // aes67Service.start(); 
 
     // Configura o sistema de update
     setupUpdater(mainWindow);
+
+    // Log de Performance (A cada 30s)
+    setInterval(() => {
+        const usage = process.memoryUsage();
+        console.log(`[Status] Memória: ${Math.round(usage.heapUsed / 1024 / 1024)}MB | CPU: ${process.cpuUsage().user / 1000000}s`);
+    }, 30000);
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
