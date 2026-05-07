@@ -148,6 +148,12 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
             else startPinkNoise(false);
         });
 
+        btnDesktopPink?.addEventListener('click', () => {
+            ensureAudioCtx();
+            if (isPinkNoisePlaying) stopPinkNoise();
+            else startPinkNoise(false);
+        });
+
         btnSine?.addEventListener('click', () => {
             ensureAudioCtx();
             if (isSineWavePlaying && sineWaveNode) {
@@ -904,8 +910,19 @@ async function triggerImpulseMeasure() {
     if (!isAnalyzing) {
         console.log('[RT60] Microfone desligado. Ativando automaticamente...');
         await startAnalyzer();
-        // Espera um pouco para estabilizar o fluxo
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 1000));
+    }
+
+    if (!audioWorkletNode) {
+        console.warn('[Analyzer] AudioWorklet offline. Usando fallback de buffer limitado.');
+        // Fallback: Tenta capturar do analyser padrão se o worklet falhou
+        const buffer = new Float32Array(analyser.fftSize);
+        analyser.getFloatTimeDomainData(buffer);
+        if (acousticWorker) {
+            acousticWorker.postMessage({ type: 'calculate', buffer, sampleRate: audioCtx.sampleRate });
+            AppStore.addLog('Medição RT60 iniciada (Modo Fallback/Standard).');
+        }
+        return;
     }
 
     const duration = 0.05; // 50ms pulse
@@ -1010,7 +1027,16 @@ function ensureAudioCtx() {
         toggle: toggleAnalyzer,
         triggerImpulse: triggerImpulseMeasure,
         hasAnalysis: () => lastAnalysis !== null,
+        getFeedbackDetector: () => feedbackDetector,
+        isAnalyzing: () => isAnalyzing,
         getLastAnalysis: () => lastAnalysis
     };
+
+    // Ouvir eventos do roteador para Detector de Feedback
+    document.addEventListener('page-loaded', (e) => {
+        if (e.detail.pageId === 'feedback-detector') {
+            console.log('[Analyzer] Página de Feedback ativa. Vinculando monitoramento...');
+        }
+    });
 
 })();

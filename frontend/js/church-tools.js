@@ -214,7 +214,7 @@
 
     // Ouvir eventos do roteador
     document.addEventListener('page-loaded', (e) => {
-        if (e.detail.pageId === 'eq') {
+        if (e.detail.pageId === 'eq' || e.detail.pageId === 'eq-guide') {
             initEqGuide();
         } else if (e.detail.pageId === 'rt60') {
             initRt60Calculator();
