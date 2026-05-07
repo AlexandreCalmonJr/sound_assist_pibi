@@ -17,36 +17,10 @@
         </div>
     </header>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <!-- Exemplo de Auxiliar -->
-        <div class="bg-slate-900/60 border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-4">
-            <div class="flex items-center justify-between">
-                <h3 class="text-xs font-black uppercase tracking-widest text-slate-500">Aux 1: Pastor</h3>
-                <span class="px-2 py-1 bg-green-900/40 text-green-400 text-[9px] font-bold rounded border border-green-500/20">POST-FADER</span>
-            </div>
-            
-            <div class="h-32 bg-black/40 rounded-xl p-4 flex gap-3 items-end">
-                <div class="flex-1 w-2 bg-slate-800 rounded-full relative overflow-hidden">
-                    <div class="absolute bottom-0 w-full bg-purple-500 h-[70%]"></div>
-                </div>
-                <div class="flex-1 w-2 bg-slate-800 rounded-full relative overflow-hidden">
-                    <div class="absolute bottom-0 w-full bg-purple-500 h-[45%]"></div>
-                </div>
-                <div class="flex-1 w-2 bg-slate-800 rounded-full relative overflow-hidden">
-                    <div class="absolute bottom-0 w-full bg-purple-500 h-[60%]"></div>
-                </div>
-            </div>
-
-            <div class="flex gap-2">
-                <button class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-black rounded-lg transition-all">EDITAR MIX</button>
-                <button class="px-4 py-2 bg-red-900/40 text-red-500 text-[10px] font-black rounded-lg border border-red-500/20">MUTE</button>
-            </div>
-        </div>
-
-        <!-- Outros Auxiliares... -->
-        <div class="bg-slate-900/60 border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-4 opacity-50 border-dashed">
-            <h3 class="text-xs font-black uppercase tracking-widest text-slate-700">Demais Auxiliares (2-10)</h3>
-            <p class="text-[10px] text-slate-600 text-center py-12 italic">Sincronizando com a Ui24R...</p>
+    <div id="mixer-aux-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Auxiliares serão injetados dinamicamente via mixer-pages.ui.js -->
+        <div class="lg:col-span-3 py-20 flex flex-col items-center justify-center gap-4 opacity-30 italic text-slate-600">
+            <span>🎚️ Inicializando os 10 envios auxiliares...</span>
         </div>
     </div>
 </section>

@@ -8,53 +8,32 @@
             </div>
         </div>
 
-        <!-- Quick Tip -->
-        <div class="flex items-center gap-3 bg-amber-900/20 border border-amber-500/20 px-4 py-2 rounded-xl max-w-sm">
-            <span class="text-lg">💡</span>
-            <p class="text-[10px] text-amber-200/70 font-medium leading-tight">
-                <b>Dica:</b> Peça à IA: <i>"Limpar o som do canal 5"</i> para aplicar automaticamente gate e de-esser otimizados para voz.
-            </p>
+        <div class="flex items-center gap-4 bg-slate-900/60 p-4 rounded-2xl border border-white/10 shadow-xl">
+            <div class="flex flex-col">
+                <span class="text-[9px] uppercase font-black text-slate-500 mb-1">Alvo do Mix (Faders):</span>
+                <select id="mixer-target-select" class="bg-transparent text-cyan-400 font-black focus:outline-none cursor-pointer uppercase text-xs">
+                    <option value="master" class="bg-slate-900">PA / Master Mix</option>
+                    <option value="aux1" class="bg-slate-900">Monitor 1 (Pastor)</option>
+                    <option value="aux2" class="bg-slate-900">Monitor 2 (Líder)</option>
+                    <option value="aux3" class="bg-slate-900">Monitor 3 (Vocal 1)</option>
+                    <option value="aux4" class="bg-slate-900">Monitor 4 (Vocal 2)</option>
+                    <option value="aux5" class="bg-slate-900">Monitor 5 (Piano)</option>
+                    <option value="aux6" class="bg-slate-900">Monitor 6 (Bateria)</option>
+                    <option value="aux7" class="bg-slate-900">Monitor 7 (Guit 1)</option>
+                    <option value="aux8" class="bg-slate-900">Monitor 8 (Guit 2)</option>
+                    <option value="aux9" class="bg-slate-900">Monitor 9 (Side L)</option>
+                    <option value="aux10" class="bg-slate-900">Monitor 10 (Side R)</option>
+                </select>
+            </div>
         </div>
     </header>
 
     <!-- Console de Canais -->
     <div class="bg-slate-900/60 border border-white/10 rounded-3xl p-6 shadow-2xl overflow-x-auto">
-        <div class="flex gap-4 min-w-[1200px]">
-            <!-- Loop de Canais (Exemplos) -->
-            <div class="w-24 flex flex-col gap-4">
-                <div class="flex-1 bg-black/40 rounded-2xl p-3 flex flex-col items-center gap-4 border border-white/5 group hover:border-cyan-500/30 transition-all">
-                    <span class="text-[10px] font-black text-slate-500 uppercase">Ch 01</span>
-                    <!-- Meter -->
-                    <div class="flex-1 w-2 bg-slate-800 rounded-full relative overflow-hidden">
-                        <div class="absolute bottom-0 w-full bg-cyan-500 h-[65%] shadow-[0_0_10px_rgba(6,182,212,0.5)]"></div>
-                    </div>
-                    <!-- Gain Knob (Simulado) -->
-                    <div class="w-8 h-8 rounded-full border-2 border-slate-700 relative flex items-center justify-center">
-                        <div class="w-1 h-3 bg-cyan-500 absolute top-0 rounded-full"></div>
-                    </div>
-                    <span class="text-[9px] font-bold text-white">VOZ 01</span>
-                </div>
-                <button class="py-2 bg-red-900/40 text-red-500 text-[10px] font-black rounded-lg border border-red-500/20">MUTE</button>
-            </div>
-
-            <!-- Mais Canais... -->
-            <div class="w-24 flex flex-col gap-4">
-                <div class="flex-1 bg-black/40 rounded-2xl p-3 flex flex-col items-center gap-4 border border-white/5 group hover:border-cyan-500/30 transition-all">
-                    <span class="text-[10px] font-black text-slate-500 uppercase">Ch 02</span>
-                    <div class="flex-1 w-2 bg-slate-800 rounded-full relative overflow-hidden">
-                        <div class="absolute bottom-0 w-full bg-cyan-500 h-[40%]"></div>
-                    </div>
-                    <div class="w-8 h-8 rounded-full border-2 border-slate-700 relative flex items-center justify-center">
-                        <div class="w-1 h-3 bg-slate-500 absolute top-0 rounded-full"></div>
-                    </div>
-                    <span class="text-[9px] font-bold text-white">VOZ 02</span>
-                </div>
-                <button class="py-2 bg-slate-800 text-slate-500 text-[10px] font-black rounded-lg border border-white/5">MUTE</button>
-            </div>
-            
-            <!-- Canais vazios para demonstrar a grade -->
-            <div class="flex-1 flex gap-4 opacity-30 italic text-slate-600 items-center justify-center text-xs">
-                ... demais canais (3-24) sincronizados com a Ui24R ...
+        <div id="mixer-channels-container" class="flex gap-4 min-w-[1200px]">
+            <!-- Canais serão injetados dinamicamente via mixer-pages.ui.js -->
+            <div class="flex-1 flex gap-4 opacity-30 italic text-slate-600 items-center justify-center text-xs py-20">
+                🚀 Inicializando console de 24 canais...
             </div>
         </div>
     </div>

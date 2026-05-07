@@ -3,6 +3,7 @@ const path = require('path');
 
 let presetsDb = null;
 let mappingsDb = null;
+let settingsDb = null;
 
 /**
  * Inicializa os datastores com o diretório correto (userData do Electron).
@@ -12,6 +13,7 @@ let mappingsDb = null;
 function initDatabase(dataDir) {
     presetsDb = new Datastore({ filename: path.join(dataDir, 'presets.db'), autoload: true });
     mappingsDb = new Datastore({ filename: path.join(dataDir, 'mappings.db'), autoload: true });
+    settingsDb = new Datastore({ filename: path.join(dataDir, 'settings.db'), autoload: true });
 }
 
 module.exports = {
@@ -22,6 +24,10 @@ module.exports = {
     get mappings() {
         if (!mappingsDb) throw new Error('Database não inicializado. Chame initDatabase() primeiro.');
         return mappingsDb;
+    },
+    get settings() {
+        if (!settingsDb) throw new Error('Database não inicializado. Chame initDatabase() primeiro.');
+        return settingsDb;
     },
     initDatabase
 };

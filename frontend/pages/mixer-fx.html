@@ -17,50 +17,10 @@
         </div>
     </header>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <!-- Reverb 1 -->
-        <div class="bg-slate-900/60 border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-6">
-            <div class="flex items-center justify-between">
-                <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">FX 1</span>
-                <span class="text-[9px] font-bold text-slate-500">HALL REVERB</span>
-            </div>
-            
-            <!-- Fader Visual -->
-            <div class="h-48 w-12 bg-black/40 rounded-xl mx-auto p-2 relative flex items-end">
-                <div class="absolute inset-0 flex flex-col justify-between py-4 px-3 opacity-20">
-                    <span class="h-px bg-white w-full"></span>
-                    <span class="h-px bg-white w-full"></span>
-                    <span class="h-px bg-white w-full"></span>
-                    <span class="h-px bg-white w-full"></span>
-                </div>
-                <div class="w-full bg-indigo-500 rounded-lg h-[65%] relative">
-                    <div class="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-4 bg-white rounded shadow-lg"></div>
-                </div>
-            </div>
-
-            <div class="text-center">
-                <span class="text-xl font-black text-white">-12.4</span>
-                <span class="text-[10px] text-slate-500 ml-1">dB</span>
-            </div>
-        </div>
-
-        <!-- Delay 1 -->
-        <div class="bg-slate-900/60 border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-6">
-            <div class="flex items-center justify-between">
-                <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">FX 2</span>
-                <span class="text-[9px] font-bold text-slate-500">DIGITAL DELAY</span>
-            </div>
-            
-            <div class="h-48 w-12 bg-black/40 rounded-xl mx-auto p-2 relative flex items-end">
-                <div class="w-full bg-indigo-500 rounded-lg h-[40%] relative">
-                    <div class="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-4 bg-white rounded shadow-lg"></div>
-                </div>
-            </div>
-
-            <div class="text-center flex flex-col gap-2">
-                <span class="text-xl font-black text-white">420</span>
-                <span class="text-[10px] text-cyan-400 font-bold uppercase tracking-widest">ms (Sync)</span>
-            </div>
+    <div id="mixer-fx-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Engines de FX serão injetadas dinamicamente via mixer-pages.ui.js -->
+        <div class="lg:col-span-4 py-20 flex flex-col items-center justify-center gap-4 opacity-30 italic text-slate-600">
+            <span>✨ Inicializando os 4 engines Lexicon FX...</span>
         </div>
     </div>
 </section>

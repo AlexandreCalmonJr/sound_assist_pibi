@@ -294,6 +294,41 @@
         return _emit('send_raw_message', { message: message }, 'Comando RAW enviado: ' + message);
     }
 
+    /**
+     * Carrega os nomes personalizados dos canais e auxiliares do banco de dados.
+     */
+    async function loadNames() {
+        try {
+            const res = await fetch('/api/mixer/names');
+            const data = await res.json();
+            AppStore.setState({ mixerNames: data });
+            return data;
+        } catch (err) {
+            console.error('[MixerService] Erro ao carregar nomes:', err);
+            return { channels: {}, aux: {} };
+        }
+    }
+
+    /**
+     * Salva os nomes personalizados no banco de dados.
+     * @param {Object} names - { channels: {...}, aux: {...} }
+     */
+    async function saveNames(names) {
+        try {
+            const res = await fetch('/api/mixer/names', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(names)
+            });
+            AppStore.setState({ mixerNames: names });
+            AppStore.addLog('Etiquetas do mixer salvas com sucesso.');
+            return await res.json();
+        } catch (err) {
+            console.error('[MixerService] Erro ao salvar nomes:', err);
+            return null;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Exportação
     // -------------------------------------------------------------------------
@@ -318,6 +353,8 @@
         listPresets,
         loadPreset,
         undo,
-        sendRaw
+        sendRaw,
+        loadNames,
+        saveNames
     };
 })();

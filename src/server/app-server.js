@@ -109,6 +109,30 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
         }
     });
 
+    // Mapeamento de nomes de canais e auxiliares
+    expressApp.get('/api/mixer/names', async (req, res) => {
+        try {
+            db.settings.findOne({ type: 'mixer_names' }, (err, doc) => {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json(doc ? doc.names : { channels: {}, aux: {} });
+            });
+        } catch (error) {
+            res.status(500).json({ error: 'Falha ao ler nomes' });
+        }
+    });
+
+    expressApp.post('/api/mixer/names', async (req, res) => {
+        try {
+            const names = req.body; // { channels: {...}, aux: {...} }
+            db.settings.update({ type: 'mixer_names' }, { $set: { names: names } }, { upsert: true }, (err) => {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ success: true });
+            });
+        } catch (error) {
+            res.status(500).json({ error: 'Falha ao salvar nomes' });
+        }
+    });
+
     const io = new Server(server, {
         cors: {
             origin: '*',
