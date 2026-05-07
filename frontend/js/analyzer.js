@@ -36,8 +36,8 @@ let audioWorkletNode = null;
 
 // --- Novas Variáveis de Melhoria ---
 let peakHold = { hz: 0, db: -100, timer: 0 };
-let waterfallData = []; // Histórico de espectro
-const WATERFALL_DEPTH = 100; // Quantos frames guardar
+// Waterfall historico manual removido: usamos shift nativo do canvas para ultra-performance
+const WATERFALL_DEPTH = 100; // Quantos frames guardar na tela
 
 class FeedbackDetector {
     constructor(bufferSize = 10) {
@@ -106,80 +106,96 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
     }
 
     function initAnalyzer() {
-    console.log('[Analyzer] Inicializando elementos do DOM...');
-    canvas = document.getElementById('fft-canvas');
-    if (!canvas) return;
+        console.log('[Analyzer] Inicializando elementos do DOM...');
+        canvas = document.getElementById('fft-canvas');
+        if (!canvas) return;
 
-    canvasCtx = canvas.getContext('2d');
-    _initManualControls();
-    
-    // Captura de elementos
-    rmsBar = document.getElementById('rms-bar');
-    feedbackAlert = document.getElementById('feedback-alert');
-    analysisSummaryText = document.getElementById('acoustic-summary');
-    analysisDetailList = document.getElementById('acoustic-detail-list');
-    btnSendAnalysis = document.getElementById('btn-send-analysis');
-    btnMeasurePink = document.getElementById('btn-measure-pink');
-    btnDesktopPink = document.getElementById('btn-desktop-pink-noise');
-    btnLogSweep = document.getElementById('btn-log-sweep');
-    micSelect = document.getElementById('mic-select');
-    pinkMeasureSummary = document.getElementById('pink-measure-summary');
-    waterfallCanvasEl = document.getElementById('waterfall-canvas');
-    if (waterfallCanvasEl) waterfallCtx = waterfallCanvasEl.getContext('2d');
+        canvasCtx = canvas.getContext('2d');
+        _initManualControls();
+        
+        // Captura de elementos
+        rmsBar = document.getElementById('rms-bar');
+        feedbackAlert = document.getElementById('feedback-alert');
+        analysisSummaryText = document.getElementById('acoustic-summary');
+        analysisDetailList = document.getElementById('acoustic-detail-list');
+        btnSendAnalysis = document.getElementById('btn-send-analysis');
+        btnMeasurePink = document.getElementById('btn-measure-pink');
+        btnDesktopPink = document.getElementById('btn-desktop-pink-noise');
+        btnLogSweep = document.getElementById('btn-log-sweep');
+        micSelect = document.getElementById('mic-select');
+        pinkMeasureSummary = document.getElementById('pink-measure-summary');
+        waterfallCanvasEl = document.getElementById('waterfall-canvas');
+        if (waterfallCanvasEl) waterfallCtx = waterfallCanvasEl.getContext('2d');
 
-    // Inicializa Worker de Acústica
-    if (!acousticWorker) {
-        acousticWorker = new Worker('js/workers/acoustic.worker.js');
-        acousticWorker.onmessage = (e) => {
-            if (e.data.type === 'rt60-result') {
-                _handleRT60Result(e.data.result);
+        // Listeners locais da página de análise
+        document.getElementById('btn-start-audio')?.addEventListener('click', startAnalyzer);
+        document.getElementById('btn-stop-audio')?.addEventListener('click', stopAnalyzer);
+        btnSendAnalysis?.addEventListener('click', sendAnalysisToAI);
+        btnMeasurePink?.addEventListener('click', startPinkNoiseMeasurement);
+        btnLogSweep?.addEventListener('click', startLogarithmicSweep);
+        
+        // Popula lista de microfones
+        _populateDeviceList();
+
+        // Sinais
+        btnPink = document.getElementById('btn-pink-noise');
+        btnSine = document.getElementById('btn-sine-wave');
+        sineFreqInput = document.getElementById('sine-freq');
+
+        btnPink?.addEventListener('click', () => {
+            ensureAudioCtx();
+            if (isPinkNoisePlaying) stopPinkNoise();
+            else startPinkNoise(false);
+        });
+
+        btnSine?.addEventListener('click', () => {
+            ensureAudioCtx();
+            if (isSineWavePlaying && sineWaveNode) {
+                sineWaveNode.stop();
+                sineWaveNode.disconnect();
+                isSineWavePlaying = false;
+                btnSine.innerHTML = '🎵 Tom Senoidal';
+                return;
             }
-        };
+            const freq = parseFloat(sineFreqInput?.value) || 60;
+            sineWaveNode = audioCtx.createOscillator();
+            sineWaveNode.type = 'sine';
+            sineWaveNode.frequency.value = freq;
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.value = 0.1;
+            sineWaveNode.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            sineWaveNode.start();
+            isSineWavePlaying = true;
+            btnSine.innerHTML = '⏹ Parar Senoidal';
+        });
     }
 
-    // Listeners
-    document.getElementById('btn-start-audio')?.addEventListener('click', startAnalyzer);
-    document.getElementById('btn-stop-audio')?.addEventListener('click', stopAnalyzer);
-    btnSendAnalysis?.addEventListener('click', sendAnalysisToAI);
-    btnMeasurePink?.addEventListener('click', startPinkNoiseMeasurement);
-    btnLogSweep?.addEventListener('click', startLogarithmicSweep);
-    
-    // Popula lista de microfones
-    _populateDeviceList();
+    /**
+     * Inicialização Global (Botões do cabeçalho e Workers)
+     * Deve rodar apenas uma vez na carga do app.
+     */
+    function initGlobalAnalyzer() {
+        console.log('[Analyzer] Inicializando serviços globais de áudio...');
+        
+        // 1. Global Mic Toggle Header (Sempre presente no index.html)
+        document.getElementById('btn-toggle-mic')?.addEventListener('click', toggleAnalyzer);
 
-    // Sinais
-    btnPink = document.getElementById('btn-pink-noise');
-    btnSine = document.getElementById('btn-sine-wave');
-    sineFreqInput = document.getElementById('sine-freq');
-
-    btnPink?.addEventListener('click', () => {
-        ensureAudioCtx();
-        if (isPinkNoisePlaying) stopPinkNoise();
-        else startPinkNoise(false);
-    });
-
-    btnSine?.addEventListener('click', () => {
-        ensureAudioCtx();
-        if (isSineWavePlaying && sineWaveNode) {
-            sineWaveNode.stop();
-            sineWaveNode.disconnect();
-            isSineWavePlaying = false;
-            btnSine.innerHTML = '🎵 Tom Senoidal';
-            return;
+        // 2. Inicializa Worker de Acústica
+        if (!acousticWorker) {
+            acousticWorker = new Worker('js/workers/acoustic.worker.js');
+            acousticWorker.onmessage = (e) => {
+                if (e.data.type === 'rt60-result') {
+                    _handleRT60Result(e.data.result);
+                }
+            };
         }
-        const freq = parseFloat(sineFreqInput?.value) || 60;
-        sineWaveNode = audioCtx.createOscillator();
-        sineWaveNode.type = 'sine';
-        sineWaveNode.frequency.value = freq;
-        const gainNode = audioCtx.createGain();
-        gainNode.gain.value = 0.1;
-        sineWaveNode.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        sineWaveNode.start();
-        isSineWavePlaying = true;
-        btnSine.innerHTML = '⏹ Parar Senoidal';
-    });
-}
+
+        // 3. Listener global para garantir que o AudioContext seja retomado por interação do usuário
+        document.addEventListener('click', () => {
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        }, { once: false });
+    }
 
 async function _populateDeviceList() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
@@ -204,6 +220,9 @@ async function _populateDeviceList() {
 
 // Ouvir evento do roteador
 document.addEventListener('page-loaded', (e) => {
+    // Sempre inicializa os serviços globais se ainda não foram
+    if (!acousticWorker) initGlobalAnalyzer();
+
     if (e.detail.pageId === 'analyzer') {
         initAnalyzer();
     }
@@ -236,12 +255,6 @@ async function startAnalyzer() {
         try {
             await audioCtx.audioWorklet.addModule('js/core/audio-processor.js');
             audioWorkletNode = new AudioWorkletNode(audioCtx, 'soundmaster-processor');
-            audioWorkletNode.port.onmessage = (e) => {
-                if (e.data.type === 'analysis-data') {
-                    // Opcional: Processar dados do Worklet aqui
-                    // Atualmente usamos o AnalyserNode para visualização FFT simplificada
-                }
-            };
         } catch (e) {
             console.warn('[Analyzer] AudioWorklet falhou, usando fallback.', e);
         }
@@ -257,20 +270,25 @@ async function startAnalyzer() {
 
         if (audioWorkletNode) {
             source.connect(audioWorkletNode);
-            audioWorkletNode.connect(audioCtx.destination); // Necessário para manter o clock, mas sem som
             const silentGain = audioCtx.createGain();
             silentGain.gain.value = 0;
-            audioWorkletNode.disconnect();
             audioWorkletNode.connect(silentGain);
             silentGain.connect(audioCtx.destination);
         }
         
         isAnalyzing = true;
-        document.getElementById('mic-status-dot').className = 'dot online';
-        document.getElementById('mic-status-text').innerText = 'Mic Online (High-Res)';
         
-        document.getElementById('btn-start-audio').disabled = true;
-        document.getElementById('btn-stop-audio').disabled = false;
+        // Update UI - Header
+        const dot = document.getElementById('mic-status-dot');
+        const text = document.getElementById('mic-status-text');
+        if (dot) dot.classList.add('online');
+        if (text) text.innerText = 'Mic Online';
+
+        // Update UI - Page Buttons
+        const btnStart = document.getElementById('btn-start-audio');
+        const btnStop = document.getElementById('btn-stop-audio');
+        if (btnStart) btnStart.disabled = true;
+        if (btnStop) btnStop.disabled = false;
         
         analyze();
     } catch (err) {
@@ -289,17 +307,29 @@ function stopAnalyzer() {
     isAnalyzing = false;
     cancelAnimationFrame(animationId);
     
-    canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-    rmsBar.style.width = '0%';
+    if (canvasCtx && canvas) canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+    if (rmsBar) rmsBar.style.width = '0%';
     
-    document.getElementById('mic-status-dot').className = 'dot offline';
-    document.getElementById('mic-status-text').innerText = 'Mic Offline';
+    // Update UI - Header
+    const dot = document.getElementById('mic-status-dot');
+    const text = document.getElementById('mic-status-text');
+    if (dot) {
+        dot.classList.remove('online');
+    }
+    if (text) {
+        text.innerText = 'Mic Offline';
+    }
     
-    document.getElementById('btn-start-audio').disabled = false;
-    document.getElementById('btn-stop-audio').disabled = true;
+    // Update UI - Page Buttons
+    const btnStart = document.getElementById('btn-start-audio');
+    const btnStop = document.getElementById('btn-stop-audio');
+    if (btnStart) btnStart.disabled = false;
+    if (btnStop) btnStop.disabled = true;
     
-    feedbackAlert.className = 'alert safe';
-    feedbackAlert.innerHTML = 'Sem picos perigosos.';
+    if (feedbackAlert) {
+        feedbackAlert.className = 'alert safe';
+        feedbackAlert.innerHTML = 'Sem picos perigosos.';
+    }
     if (analysisSummaryText) {
         analysisSummaryText.innerText = 'Aguardando análise...';
     }
@@ -565,16 +595,10 @@ function analyze() {
     }
     
     analyser.getFloatTimeDomainData(timeData);
-    
-    canvasCtx.fillStyle = 'var(--bg-dark)';
-    canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    const barWidth = (canvas.width / bufferLength) * 2.5;
-    let x = 0;
-    
+
+    // --- Detecção de Pico Global (Necessário para Feedback e Peak Hold) ---
     let peakDb = -Infinity;
     let peakIndex = 0;
-    
     for (let i = 0; i < bufferLength; i++) {
         if (freqData[i] > peakDb) {
             peakDb = freqData[i];
@@ -593,30 +617,70 @@ function analyze() {
         peakHold.db = -100;
     }
 
-    // --- Renderização FFT ---
-    for (let i = 0; i < bufferLength; i++) {
-        const db = freqData[i];
-        const freq = i * audioCtx.sampleRate / analyser.fftSize;
-        let fillStyle = 'var(--text-muted)';
+    // --- Atualização Visual (Apenas se estivermos na aba de análise) ---
+    if (canvas && canvasCtx) {
+        // --- Renderização FFT Logarítmica (Padrão RTA Profissional) ---
+        const minFreq = 20;
+        const maxFreq = 20000;
+        const logMin = Math.log10(minFreq);
+        const logMax = Math.log10(maxFreq);
+        const logRange = logMax - logMin;
+
+        const barWidth = 2; // px
+        const spacing = 1; // px
+        const totalBars = Math.floor(canvas.width / (barWidth + spacing));
         
-        // Zonas frequenciais coloridas (Overlay)
-        if (freq < 100) fillStyle = '#3498db'; // Sub
-        else if (freq < 500) fillStyle = '#2ecc71'; // Low
-        else if (freq < 2000) fillStyle = '#f1c40f'; // Mid
-        else if (freq < 6000) fillStyle = '#e67e22'; // High-Mid
-        else fillStyle = '#e74c3c'; // High
+        canvasCtx.fillStyle = '#0f172a'; // Deep Slate Blue (Paleta SoundMaster)
+        canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        let x = 0;
+    
+    for (let i = 0; i < totalBars; i++) {
+        // Mapeia a barra atual para a frequência logarítmica correspondente
+        const xPercent = i / totalBars;
+        const freqStart = Math.pow(10, logMin + xPercent * logRange);
+        const nextXPercent = (i + 1) / totalBars;
+        const freqEnd = Math.pow(10, logMin + nextXPercent * logRange);
+
+        // Converte frequência para bins do buffer FFT
+        const binStart = Math.max(0, Math.floor(freqStart * analyser.fftSize / audioCtx.sampleRate));
+        const binEnd = Math.min(bufferLength, Math.ceil(freqEnd * analyser.fftSize / audioCtx.sampleRate));
+        
+        let maxDbInBin = -120;
+        // Se o bin for muito estreito (graves), garante que pegamos pelo menos 1 bin
+        if (binStart === binEnd) {
+            maxDbInBin = freqData[binStart] || -120;
+        } else {
+            for (let j = binStart; j < binEnd; j++) {
+                if (freqData[j] > maxDbInBin) maxDbInBin = freqData[j];
+            }
+        }
+        
+        const db = maxDbInBin;
+        const freq = freqStart; // Frequência de início da barra
+        
+        let fillStyle = '#64748b'; // Slate 500 default
+        if (freq < 60) fillStyle = '#3b82f6';        // Sub (Blue)
+        else if (freq < 250) fillStyle = '#10b981';  // Low (Emerald)
+        else if (freq < 2000) fillStyle = '#f59e0b'; // Mid (Amber)
+        else if (freq < 6000) fillStyle = '#f97316'; // High-Mid (Orange)
+        else fillStyle = '#ef4444';                  // High (Red)
 
         const normalized = Math.max(0, Math.min(1, (db - analyser.minDecibels) / (analyser.maxDecibels - analyser.minDecibels)));
         const barHeight = normalized * canvas.height;
 
         canvasCtx.fillStyle = fillStyle;
         canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-        x += barWidth + 1;
+        x += barWidth + spacing;
     }
 
-    // Desenhar Peak Hold Line
+    // Desenhar Peak Hold Line Corrigido
     if (peakHold.timer > 0) {
-        const peakX = (peakHold.hz * analyser.fftSize / audioCtx.sampleRate) * (barWidth + 1) / 2.5; // Ajuste simplificado
+        // Mapeamento logarítmico para a posição X do pico
+        const peakLog = Math.log10(Math.max(minFreq, peakHold.hz));
+        const peakXPercent = (peakLog - logMin) / logRange;
+        const peakX = peakXPercent * canvas.width;
+        
         const peakNormalized = Math.max(0, Math.min(1, (peakHold.db - analyser.minDecibels) / (analyser.maxDecibels - analyser.minDecibels)));
         const peakY = canvas.height - (peakNormalized * canvas.height);
         
@@ -624,37 +688,48 @@ function analyze() {
         canvasCtx.lineWidth = 2;
         canvasCtx.beginPath();
         canvasCtx.moveTo(peakX, peakY);
-        canvasCtx.lineTo(peakX + barWidth, peakY);
+        canvasCtx.lineTo(peakX + barWidth + spacing, peakY);
         canvasCtx.stroke();
     }
 
-    // --- Lógica de Waterfall (Histórico Visual) ---
-    waterfallData.unshift(new Float32Array(freqData));
-    if (waterfallData.length > WATERFALL_DEPTH) waterfallData.pop();
+    // --- Lógica de Waterfall (Histórico Visual Otimizado) ---
 
     if (waterfallCtx && waterfallCanvasEl) {
         const w = waterfallCanvasEl.width;
         const h = waterfallCanvasEl.height;
-        const rowHeight = h / WATERFALL_DEPTH;
+        const rowHeight = Math.max(1, h / WATERFALL_DEPTH);
         
-        waterfallCtx.drawImage(waterfallCanvasEl, 0, rowHeight); // Scroll down
+        // GPU Native Scroll: Desloca a imagem para baixo sem re-renderizar arrays pesados
+        waterfallCtx.drawImage(waterfallCanvasEl, 0, rowHeight);
         
-        const barW = w / bufferLength;
-        for (let i = 0; i < bufferLength; i++) {
-            const db = freqData[i];
+        // Otimização: desenha apenas 'w' retângulos na primeira linha (1px por bin agrupado)
+        const wfTotalBars = Math.floor(w);
+        const wfBinsPerBar = Math.floor(bufferLength / wfTotalBars);
+        
+        for (let i = 0; i < wfTotalBars; i++) {
+            const binStart = i * wfBinsPerBar;
+            const binEnd = Math.min(binStart + wfBinsPerBar, bufferLength);
+            
+            let maxDbInBin = -Infinity;
+            for (let j = binStart; j < binEnd; j++) {
+                if (freqData[j] > maxDbInBin) maxDbInBin = freqData[j];
+            }
+            
+            const db = maxDbInBin;
             const normalized = Math.max(0, Math.min(1, (db - analyser.minDecibels) / (analyser.maxDecibels - analyser.minDecibels)));
             
             // Cor baseada em intensidade (Heatmap)
             let color;
-            if (normalized < 0.2) color = `rgb(0, 0, ${normalized * 255})`;
-            else if (normalized < 0.5) color = `rgb(0, ${(normalized-0.2)*255}, 255)`;
-            else if (normalized < 0.8) color = `rgb(${(normalized-0.5)*255}, 255, 0)`;
-            else color = `rgb(255, ${(1-normalized)*255}, 0)`;
+            if (normalized < 0.2) color = `rgb(0, 0, ${Math.floor(normalized * 255)})`;
+            else if (normalized < 0.5) color = `rgb(0, ${Math.floor((normalized-0.2)*255)}, 255)`;
+            else if (normalized < 0.8) color = `rgb(${Math.floor((normalized-0.5)*255)}, 255, 0)`;
+            else color = `rgb(255, ${Math.floor((1-normalized)*255)}, 0)`;
             
             waterfallCtx.fillStyle = color;
-            waterfallCtx.fillRect(i * barW, 0, barW + 1, rowHeight);
+            waterfallCtx.fillRect(i, 0, 1, rowHeight);
         }
     }
+    } // Fim do if (canvas && canvasCtx)
 
     const peakHz = peakIndex * audioCtx.sampleRate / analyser.fftSize;
     const neighborLeft = freqData[Math.max(0, peakIndex - 1)] || analyser.minDecibels;
@@ -669,7 +744,7 @@ function analyze() {
     window.currentGlobalRMS = rms; // Expõe para a rotina de calibração
     const rmsDb = 20 * Math.log10(Math.max(rms, 1e-12));
     const rmsPercent = Math.min(100, Math.max(0, ((rmsDb - analyser.minDecibels) / (analyser.maxDecibels - analyser.minDecibels)) * 100));
-    rmsBar.style.width = `${rmsPercent}%`;
+    if (rmsBar) rmsBar.style.width = `${rmsPercent}%`;
     
     const summary = buildAcousticSummary(freqData, timeData);
     if (pinkMeasurementActive) {
@@ -702,8 +777,10 @@ function analyze() {
     const isFeedback = feedbackDetector.analyze(peakHz, peakDb, -20);
     
     if (isFeedback) {
-        feedbackAlert.className = 'alert danger';
-        feedbackAlert.innerHTML = `⚠️ <strong>Microfonia DETECTADA</strong> em <strong>${Math.round(peakHz)} Hz</strong> sustentados. Diferença local: ${formatDb(peakDb - neighborAvg)} dB.`;
+        if (feedbackAlert) {
+            feedbackAlert.className = 'alert danger';
+            feedbackAlert.innerHTML = `⚠️ <strong>Microfonia DETECTADA</strong> em <strong>${Math.round(peakHz)} Hz</strong> sustentados. Diferença local: ${formatDb(peakDb - neighborAvg)} dB.`;
+        }
 
         if (btnAutoCut) {
             btnAutoCut.style.display = 'block';
@@ -713,8 +790,10 @@ function analyze() {
             };
         }
     } else {
-        feedbackAlert.className = 'alert safe';
-        feedbackAlert.innerHTML = `Espectro estável. Pico dominante: ${Math.round(peakHz)} Hz (${formatDb(peakDb)} dB).`;
+        if (feedbackAlert) {
+            feedbackAlert.className = 'alert safe';
+            feedbackAlert.innerHTML = `Espectro estável. Pico dominante: ${Math.round(peakHz)} Hz (${formatDb(peakDb)} dB).`;
+        }
         if (btnAutoCut) {
             btnAutoCut.style.display = 'none';
             btnAutoCut.innerText = '🪄 Cortar Frequência na Mesa';
@@ -768,8 +847,17 @@ window.SoundMasterAnalyzer = {
     getLastAnalysis: function () { return lastAnalysis; },
     getPinkReport: function () { return pinkReport; },
     hasAnalysis: function () { return !!lastAnalysis; },
-    triggerImpulse: function () { triggerImpulseMeasure(); }
+    triggerImpulse: function () { triggerImpulseMeasure(); },
+    toggle: function () { toggleAnalyzer(); }
 };
+
+function toggleAnalyzer() {
+    if (isAnalyzing) {
+        stopAnalyzer();
+    } else {
+        startAnalyzer();
+    }
+}
 
 // --- Geradores de Sinais de Áudio Avançados ---
 
@@ -810,10 +898,14 @@ function startLogarithmicSweep() {
  * RT60: Dispara um pulso (Burst de Ruído) e captura o decaimento
  */
 async function triggerImpulseMeasure() {
+    console.log('[RT60] Iniciando medição de impulso...');
     ensureAudioCtx();
+    
     if (!isAnalyzing) {
-        alert('Ative o microfone primeiro para capturar o decaimento.');
-        return;
+        console.log('[RT60] Microfone desligado. Ativando automaticamente...');
+        await startAnalyzer();
+        // Espera um pouco para estabilizar o fluxo
+        await new Promise(r => setTimeout(r, 500));
     }
 
     const duration = 0.05; // 50ms pulse
@@ -839,7 +931,7 @@ async function triggerImpulseMeasure() {
 
     // Usamos o Worklet para capturar o áudio puro
     const captureHandler = (e) => {
-        if (e.data.type === 'analysis-data') {
+        if (e.data.type === 'raw-data') {
             const chunk = e.data.buffer;
             if (offset + chunk.length < bufferSize) {
                 decayBuffer.set(chunk, offset);
@@ -910,5 +1002,15 @@ function ensureAudioCtx() {
         audioCtx.resume();
     }
 }
+
+    // --- Exportação da API Pública ---
+    window.SoundMasterAnalyzer = {
+        start: startAnalyzer,
+        stop: stopAnalyzer,
+        toggle: toggleAnalyzer,
+        triggerImpulse: triggerImpulseMeasure,
+        hasAnalysis: () => lastAnalysis !== null,
+        getLastAnalysis: () => lastAnalysis
+    };
 
 })();

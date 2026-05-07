@@ -21,6 +21,12 @@ class SoundMasterProcessor extends AudioWorkletProcessor {
         if (input.length > 0) {
             const inputChannel = input[0];
             
+            // Envia o áudio bruto imediatamente (Essencial para captura de RT60 e decaimento real)
+            this.port.postMessage({
+                type: 'raw-data',
+                buffer: inputChannel
+            });
+
             for (let i = 0; i < inputChannel.length; i++) {
                 this._buffer[this._writeIndex] = inputChannel[i];
                 this._writeIndex++;
@@ -28,13 +34,12 @@ class SoundMasterProcessor extends AudioWorkletProcessor {
                 if (this._writeIndex >= this._bufferSize) {
                     this._writeIndex = 0;
                     
-                    // Aplica a Janela de Hann antes de enviar para análise
+                    // Aplica a Janela de Hann apenas para análise de espectro (FFT)
                     const windowedBuffer = new Float32Array(this._bufferSize);
                     for (let j = 0; j < this._bufferSize; j++) {
                         windowedBuffer[j] = this._buffer[j] * this._hannWindow[j];
                     }
 
-                    // Envia o buffer pronto para o Analisador no Main Thread
                     this.port.postMessage({
                         type: 'analysis-data',
                         buffer: windowedBuffer

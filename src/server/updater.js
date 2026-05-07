@@ -25,10 +25,14 @@ async function checkForUpdates() {
         if (latestVersion !== currentVersion) {
             // Procura pelo asset .zip que contém o bundle
             const asset = response.data.assets.find(a => a.name.endsWith('.zip'));
+            if (!asset) {
+                console.warn('[Updater] Nova versão encontrada, mas nenhum arquivo .zip está disponível no release.');
+                return { available: false };
+            }
             return {
                 available: true,
                 version: latestVersion,
-                downloadUrl: asset ? asset.browser_download_url : null,
+                downloadUrl: asset.browser_download_url,
                 notes: response.data.body
             };
         }

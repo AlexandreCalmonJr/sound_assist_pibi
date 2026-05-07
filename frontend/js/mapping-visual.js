@@ -15,52 +15,69 @@
         if (!canvas) return;
         ctx = canvas.getContext('2d');
 
-        // Ajustar resolução interna do canvas para evitar borrões
-        const dpr = window.devicePixelRatio || 1;
-        const rect = canvas.getBoundingClientRect();
-        canvas.width = rect.width * dpr;
-        canvas.height = (rect.width * (churchLength / churchWidth)) * dpr;
-        if (canvas.height > 600) canvas.height = 600; // Limite de segurança
+        // Observer para redimensionar o canvas se o container mudar (ex: abrir sidebar)
+        const resizeObserver = new ResizeObserver(() => _resizeCanvas());
+        resizeObserver.observe(canvas.parentElement);
 
+        _resizeCanvas();
+        
         canvas.addEventListener('click', _handleCanvasClick);
         
-        document.getElementById('btn-clear-mapping')?.addEventListener('click', () => {
-            measurements = [];
-            _drawMap();
-        });
+        // Reinicializa botões (redundância para SPA)
+        const btnClear = document.getElementById('btn-clear-mapping');
+        if (btnClear) {
+            btnClear.onclick = () => {
+                measurements = [];
+                _drawMap();
+            };
+        }
 
-        document.getElementById('btn-export-mapping')?.addEventListener('click', _exportMap);
-        
+        const btnExport = document.getElementById('btn-export-mapping');
+        if (btnExport) btnExport.onclick = _exportMap;
+
         const btnImport = document.getElementById('btn-import-floorplan');
         const inputFloorPlan = document.getElementById('input-floorplan');
-        
-        btnImport?.addEventListener('click', () => inputFloorPlan.click());
-        inputFloorPlan?.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        floorPlanImage = img;
-                        _drawMap();
+        if (btnImport && inputFloorPlan) {
+            btnImport.onclick = () => inputFloorPlan.click();
+            inputFloorPlan.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        floorPlanImage = new Image();
+                        floorPlanImage.onload = _drawMap;
+                        floorPlanImage.src = event.target.result;
                     };
-                    img.src = event.target.result;
-                };
-                reader.readAsDataURL(file);
-            }
-        });
+                    reader.readAsDataURL(file);
+                }
+            };
+        }
+    }
 
+    function _resizeCanvas() {
+        if (!canvas || !canvas.parentElement) return;
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.parentElement.getBoundingClientRect();
+        
+        if (rect.width < 10) return; // Evita erro se o container estiver oculto
+
+        canvas.width = rect.width * dpr;
+        // Mantém a proporção da igreja no canvas
+        const aspect = churchLength / churchWidth;
+        canvas.height = Math.min(rect.width * aspect, 600) * dpr;
+        
+        // Ajusta o estilo para ocupar o espaço correto
+        canvas.style.width = '100%';
+        canvas.style.height = 'auto';
+        
         _drawMap();
     }
 
     function updateDimensions(w, l) {
+        if (!w || !l || isNaN(w) || isNaN(l)) return;
         churchWidth = w;
         churchLength = l;
-        const dpr = window.devicePixelRatio || 1;
-        const rect = canvas.getBoundingClientRect();
-        canvas.height = (rect.width * (churchLength / churchWidth)) * dpr;
-        _drawMap();
+        _resizeCanvas();
     }
 
     function _drawHeatmap(offsetX, offsetY, drawW, drawL, scale) {
@@ -100,16 +117,22 @@
     function _drawMap() {
         if (!ctx) return;
         
-        const w = canvas.width;
-        const h = canvas.height;
+        const dpr = window.devicePixelRatio || 1;
+        const w = canvas.width / dpr;
+        const h = canvas.height / dpr;
         ctx.clearRect(0, 0, w, h);
 
-        const padding = 40;
+        const padding = 30;
         const availableW = w - padding * 2;
         const availableH = h - padding * 2;
-        const scale = Math.min(availableW / churchWidth, availableH / churchLength);
-        const drawW = churchWidth * scale;
-        const drawL = churchLength * scale;
+        
+        // Proteção contra divisão por zero
+        const safeWidth = Math.max(churchWidth, 1);
+        const safeLength = Math.max(churchLength, 1);
+        
+        const scale = Math.min(availableW / safeWidth, availableH / safeLength);
+        const drawW = safeWidth * scale;
+        const drawL = safeLength * scale;
         const offsetX = (w - drawW) / 2;
         const offsetY = (h - drawL) / 2;
 
@@ -124,11 +147,11 @@
         _drawHeatmap(offsetX, offsetY, drawW, drawL, scale);
 
         // 3. Desenha Contorno e Grid
-        ctx.strokeStyle = 'rgba(0, 207, 213, 0.3)';
+        ctx.strokeStyle = 'rgba(0, 207, 213, 0.6)'; // Aumentada visibilidade
         ctx.lineWidth = 2;
         ctx.strokeRect(offsetX, offsetY, drawW, drawL);
         
-        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)'; // Aumentada visibilidade do grid
         ctx.lineWidth = 1;
         for (let i = 1; i < churchWidth; i++) {
             let x = offsetX + (i * scale);
@@ -140,7 +163,7 @@
         }
 
         // 4. Palco
-        ctx.fillStyle = 'rgba(0, 207, 213, 0.1)';
+        ctx.fillStyle = 'rgba(0, 207, 213, 0.2)'; // Mais visível
         ctx.fillRect(offsetX, offsetY, drawW, drawL * 0.15);
         ctx.fillStyle = '#00cfd5';
         ctx.font = 'bold 12px Inter';
@@ -229,11 +252,25 @@
         }
     }
 
-    window.SoundMasterMapping = { init, updateDimensions };
+    window.SoundMasterMapping = { 
+        init, 
+        updateDimensions,
+        isInitialized: () => !!ctx
+    };
 
     document.addEventListener('page-loaded', (e) => {
+        console.log(`[Mapping] Page loaded: ${e.detail.pageId}`);
         if (e.detail.pageId === 'rt60') {
-            setTimeout(init, 100); // Delay para garantir que o DOM renderizou
+            setTimeout(() => {
+                console.log('[Mapping] Tentando inicializar mapa...');
+                init();
+            }, 200);
         }
     });
+
+    // Se o script carregar e já estivermos na página (F5), inicializa
+    if (document.getElementById('mapping-canvas')) {
+        console.log('[Mapping] Canvas detectado no load direto. Inicializando...');
+        init();
+    }
 })();

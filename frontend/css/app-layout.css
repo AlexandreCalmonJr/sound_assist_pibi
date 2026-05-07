@@ -330,11 +330,24 @@
 .header-status {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 6px 14px;
   background: rgba(0, 0, 0, 0.4);
   border-radius: 100px;
   border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  outline: none;
+}
+
+.header-status:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--border-hover);
+}
+
+.header-status:active {
+  transform: scale(0.96);
 }
 
 .status-dot {
