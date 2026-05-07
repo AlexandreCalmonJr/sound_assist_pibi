@@ -1,360 +1,289 @@
 <!DOCTYPE html>
 <html lang="pt-BR" class="dark">
-
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#08080a">
     <title>SoundMaster Mobile</title>
 
-    <!-- Tailwind CSS v4 (utilitários complementares) -->
+    <!-- Tailwind CSS (Gera os estilos da aplicação) -->
     <link rel="stylesheet" href="../css/styles.css">
-    <!-- Google Fonts via CSS -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400&display=swap" rel="stylesheet">
-    <!-- Nosso CSS principal -->
-    <link rel="stylesheet" href="css/mobile.css">
+    
+    <style>
+        /* CSS mínimo para pseudo-elementos e animações específicas (fader, etc) */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; box-shadow: 0 0 8px #06b6d4; }
+            50% { opacity: 0.6; box-shadow: 0 0 3px #06b6d4; }
+        }
+
+        .page-enter { animation: page-enter 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes page-enter {
+            from { opacity: 0; transform: translateY(12px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Fader Custom */
+        .fader-container::before {
+            content: ''; position: absolute; left: 50%; top: 12px; bottom: 12px; width: 2px;
+            transform: translateX(-50%); background: linear-gradient(to bottom, rgba(6, 182, 212, 0.15), transparent);
+            border-radius: 9999px;
+        }
+        .fader-container::after {
+            content: ''; position: absolute; right: 6px; top: 12px; bottom: 12px; width: 1px;
+            background: repeating-linear-gradient(to bottom, #222226 0px, #222226 1px, transparent 1px, transparent 22px);
+        }
+        .vertical-range {
+            appearance: none; width: 220px; height: 64px; background: transparent; transform: rotate(-90deg);
+            position: absolute; top: 78px; left: -78px; outline: none; cursor: pointer; padding: 12px 0; margin: -12px 0;
+        }
+        .vertical-range::-webkit-slider-runnable-track {
+            height: 3px; background: #222226; border-radius: 9999px;
+        }
+        .vertical-range::-webkit-slider-thumb {
+            appearance: none; width: 48px; height: 26px; 
+            background: linear-gradient(135deg, #222226 0%, #2a2a2f 100%);
+            border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; /* Formato Retangular/Técnico */
+            box-shadow: 0 4px 12px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.4);
+            margin-top: -12px;
+        }
+        
+        /* Estados manipulados via mobile.js */
+        .page-transition { display: flex !important; animation: page-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        
+        .tab-active { color: #06b6d4 !important; }
+        .tab-active svg { filter: drop-shadow(0 0 6px #06b6d4); }
+        .tab-active::after {
+            content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+            width: 24px; height: 2px; background: #06b6d4; box-shadow: 0 0 8px #06b6d4;
+        }
+        
+        .active-mix {
+            background-color: #06b6d4 !important; color: #000 !important; border-color: #06b6d4 !important;
+            box-shadow: 0 0 24px rgba(6, 182, 212, 0.25) !important;
+        }
+        .active-mode {
+            background-color: #06b6d4 !important; color: #000 !important;
+            box-shadow: 0 0 12px rgba(6, 182, 212, 0.25) !important;
+        }
+    </style>
 </head>
-
-<body class="h-screen flex flex-col overflow-hidden">
-
+<body class="bg-[#08080a] text-[#f0f0f2] h-screen flex flex-col overflow-hidden text-[14px]">
     <!-- ══ Barra de status (heartbeat) ══ -->
-    <div class="status-bar" role="status" aria-label="Status de conexão">
-        <div id="status-heartbeat" class="status-bar-inner status-offline"></div>
+    <div class="fixed top-0 w-full h-[3px] bg-[#1a1a1d] z-[200] overflow-hidden" role="status">
+        <div id="status-heartbeat" class="h-full w-0 transition-all duration-250 ease-out bg-[#f43f5e] shadow-[0_0_10px_rgba(244,63,94,0.4)]"></div>
     </div>
 
     <!-- ══ Header ══ -->
-    <header class="mobile-header">
-        <div class="header-logo">
-            <div class="header-dot" aria-hidden="true"></div>
-            <span class="header-title font-display">Console <span>Remote</span></span>
+    <header class="flex-shrink-0 z-[100] px-4 py-2 flex items-center justify-between bg-[#08080a]/85 backdrop-blur-[24px] border-b border-white/5">
+        <div class="flex items-center gap-2">
+            <div class="w-[7px] h-[7px] rounded-full bg-cyan-400 pulse-dot" aria-hidden="true"></div>
+            <span class="text-[11px] uppercase tracking-[0.25em] text-[#f0f0f2]">Console <span class="text-cyan-400">Remote</span></span>
         </div>
-        <div id="connection-indicator" class="text-label" style="color: var(--text-dim)">
+        <div id="connection-indicator" class="text-[9px] uppercase tracking-[0.12em] text-[#606068]">
             Mixer Offline
         </div>
     </header>
 
     <!-- ══ Mix Selector ══ -->
-    <div class="mix-selector-wrap no-scrollbar" role="tablist" aria-label="Seletor de mix">
-        <button class="mix-selector-btn active-mix" data-mix-type="master" role="tab" aria-selected="true">PA /
-            Master</button>
-        <button class="mix-selector-btn" data-mix-type="aux" data-mix-id="1" role="tab" aria-selected="false">AUX
-            1</button>
-        <button class="mix-selector-btn" data-mix-type="aux" data-mix-id="2" role="tab" aria-selected="false">AUX
-            2</button>
-        <button class="mix-selector-btn" data-mix-type="aux" data-mix-id="3" role="tab" aria-selected="false">AUX
-            3</button>
-        <button class="mix-selector-btn" data-mix-type="fx" data-mix-id="1" role="tab" aria-selected="false">REV
-            1</button>
-        <button class="mix-selector-btn" data-mix-type="fx" data-mix-id="2" role="tab" aria-selected="false">DLY
-            2</button>
+    <div class="flex-shrink-0 px-3 pt-2 pb-2 overflow-x-auto flex gap-1 snap-x snap-mandatory no-scrollbar border-b border-white/5">
+        <button class="mix-selector-btn active-mix shrink-0 snap-start px-3 py-1.5 min-h-[32px] bg-[#1a1a1d] border border-white/5 rounded-sm text-[#a0a0ab] text-[10px] uppercase tracking-[0.08em] whitespace-nowrap transition-all" data-mix-type="master">PA / Master</button>
+        <button class="mix-selector-btn shrink-0 snap-start px-3 py-1.5 min-h-[32px] bg-[#1a1a1d] border border-white/5 rounded-sm text-[#a0a0ab] text-[10px] uppercase tracking-[0.08em] whitespace-nowrap transition-all" data-mix-type="aux" data-mix-id="1">AUX 1</button>
+        <button class="mix-selector-btn shrink-0 snap-start px-3 py-1.5 min-h-[32px] bg-[#1a1a1d] border border-white/5 rounded-sm text-[#a0a0ab] text-[10px] uppercase tracking-[0.08em] whitespace-nowrap transition-all" data-mix-type="aux" data-mix-id="2">AUX 2</button>
+        <button class="mix-selector-btn shrink-0 snap-start px-3 py-1.5 min-h-[32px] bg-[#1a1a1d] border border-white/5 rounded-sm text-[#a0a0ab] text-[10px] uppercase tracking-[0.08em] whitespace-nowrap transition-all" data-mix-type="aux" data-mix-id="3">AUX 3</button>
+        <button class="mix-selector-btn shrink-0 snap-start px-3 py-1.5 min-h-[32px] bg-[#1a1a1d] border border-white/5 rounded-sm text-[#a0a0ab] text-[10px] uppercase tracking-[0.08em] whitespace-nowrap transition-all" data-mix-type="fx" data-mix-id="1">REV 1</button>
+        <button class="mix-selector-btn shrink-0 snap-start px-3 py-1.5 min-h-[32px] bg-[#1a1a1d] border border-white/5 rounded-sm text-[#a0a0ab] text-[10px] uppercase tracking-[0.08em] whitespace-nowrap transition-all" data-mix-type="fx" data-mix-id="2">DLY 2</button>
     </div>
 
     <!-- ══ SPA Root ══ -->
-    <main id="mobile-app-root" class="mobile-app-root no-scrollbar">
+    <main id="mobile-app-root" class="flex-1 overflow-y-auto no-scrollbar pt-2 pb-[80px] px-3">
 
-        <!-- ████████████████████████████████
-             SEÇÃO: MASTER
-             ████████████████████████████████ -->
-        <section id="mobile-master" class="mobile-page" aria-label="Controle Master">
-
-            <!-- Nível atual -->
-            <div class="master-level-display">
-                <p class="text-label" style="margin-bottom: 6px; letter-spacing: 0.3em">Nível de Saída</p>
-                <span id="mobile-master-level" class="text-huge"
-                    style="color: var(--accent); display: block; margin-bottom: 4px">0%</span>
-                <p id="mobile-master-db" class="master-db-label">-∞ dB</p>
+        <!-- SEÇÃO: MASTER -->
+        <section id="mobile-master" class="mobile-page flex-col">
+            <div class="text-center px-4 py-3">
+                <p class="text-[9px] uppercase tracking-[0.3em] text-[#606068] mb-1">Nível de Saída</p>
+                <span id="mobile-master-level" class="text-[clamp(2.5rem,10vw,4rem)] tracking-[-0.04em] leading-none text-cyan-400 block mb-1">0%</span>
+                <p id="mobile-master-db" class="text-[11px] tracking-[0.06em] text-[#606068]">-∞ dB</p>
             </div>
 
-            <!-- Fader tátil -->
-            <div style="display: flex; justify-content: center; margin-bottom: 28px">
-                <div class="fader-container" role="slider" aria-label="Fader de nível master" aria-valuemin="0"
-                    aria-valuemax="100">
-                    <input type="range" id="mobile-master-slider" min="0" max="100" value="0" class="vertical-range"
-                        aria-label="Volume master">
+            <div class="flex justify-center mb-4">
+                <div class="fader-container relative w-[64px] h-[220px] bg-[#040405] rounded-md border border-white/5 shadow-[inset_0_2px_12px_rgba(0,0,0,0.9),inset_0_0_0_1px_rgba(255,255,255,0.02)]">
+                    <input type="range" id="mobile-master-slider" min="0" max="100" value="0" class="vertical-range">
                 </div>
             </div>
 
-            <!-- Botões +/- -->
-            <div class="master-nudge-grid" style="margin-bottom: 20px">
-                <button id="mobile-master-down" class="nudge-btn" aria-label="Diminuir 1%">−1%</button>
-                <button id="mobile-master-up" class="nudge-btn" aria-label="Aumentar 1%">+1%</button>
+            <div class="grid grid-cols-2 gap-2 w-full max-w-[280px] mx-auto mb-4">
+                <button id="mobile-master-down" class="min-h-[44px] bg-[#1a1a1d] border border-white/5 rounded-md text-[#f0f0f2] text-[15px] flex items-center justify-center active:scale-95 active:bg-[#222226] transition-all">−1%</button>
+                <button id="mobile-master-up" class="min-h-[44px] bg-[#1a1a1d] border border-white/5 rounded-md text-[#f0f0f2] text-[15px] flex items-center justify-center active:scale-95 active:bg-[#222226] transition-all">+1%</button>
             </div>
 
-            <!-- Presets de cena -->
-            <div style="padding: 0 16px 24px">
-                <div class="preset-box">
-                    <span class="preset-box-label">Presets de Cena</span>
-                    <div class="preset-btns-row">
-                        <button class="mobile-preset-btn" data-master-preset="0" aria-label="Preset mudo">Muto</button>
-                        <button class="mobile-preset-btn" data-master-preset="35" aria-label="Preset soft">Soft</button>
-                        <button class="mobile-preset-btn" data-master-preset="55" aria-label="Preset voz">Voz</button>
-                        <button class="mobile-preset-btn" data-master-preset="68" aria-label="Preset show">Show</button>
-                    </div>
+            <div class="w-full bg-[#111113] border border-white/5 rounded-md p-3 shadow-[0_2px_16px_rgba(0,0,0,0.5)] mb-4">
+                <span class="text-[8px] uppercase tracking-[0.18em] text-[#606068] text-center block mb-2">Presets de Cena</span>
+                <div class="flex flex-wrap gap-1 justify-center">
+                    <button class="mobile-preset-btn flex-1 min-w-[60px] min-h-[36px] bg-[#1a1a1d] border border-white/5 rounded-sm text-[#a0a0ab] text-[9px] uppercase tracking-[0.1em] px-2 py-2 whitespace-nowrap active:scale-95 active:bg-cyan-500/15 active:text-cyan-400 transition-all" data-master-preset="0">Muto</button>
+                    <button class="mobile-preset-btn flex-1 min-w-[60px] min-h-[36px] bg-[#1a1a1d] border border-white/5 rounded-sm text-[#a0a0ab] text-[9px] uppercase tracking-[0.1em] px-2 py-2 whitespace-nowrap active:scale-95 active:bg-cyan-500/15 active:text-cyan-400 transition-all" data-master-preset="35">Soft</button>
+                    <button class="mobile-preset-btn flex-1 min-w-[60px] min-h-[36px] bg-[#1a1a1d] border border-white/5 rounded-sm text-[#a0a0ab] text-[9px] uppercase tracking-[0.1em] px-2 py-2 whitespace-nowrap active:scale-95 active:bg-cyan-500/15 active:text-cyan-400 transition-all" data-master-preset="55">Voz</button>
+                    <button class="mobile-preset-btn flex-1 min-w-[60px] min-h-[36px] bg-[#1a1a1d] border border-white/5 rounded-sm text-[#a0a0ab] text-[9px] uppercase tracking-[0.1em] px-2 py-2 whitespace-nowrap active:scale-95 active:bg-cyan-500/15 active:text-cyan-400 transition-all" data-master-preset="68">Show</button>
                 </div>
             </div>
-
         </section>
 
-        <!-- ████████████████████████████████
-             SEÇÃO: ANÁLISE ACÚSTICA
-             ████████████████████████████████ -->
-        <section id="mobile-mic" class="mobile-page hidden" style="padding: 0 16px" aria-label="Análise Acústica">
-
-            <!-- Cabeçalho -->
-            <div class="analyzer-header" style="padding-top: 4px">
-                <h2 class="section-title">Análise <span>Acústica</span></h2>
-                <div class="mode-toggle" role="group" aria-label="Modo de medição">
-                    <button id="btn-mode-fft" class="mode-btn active-mode" aria-pressed="true">Live</button>
-                    <button id="btn-mode-pink" class="mode-btn" aria-pressed="false">Rosa</button>
+        <!-- SEÇÃO: ANÁLISE -->
+        <section id="mobile-mic" class="mobile-page hidden flex-col">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-[16px] leading-none tracking-[-0.02em] text-[#f0f0f2]">Análise <span class="text-cyan-400 underline decoration-2 underline-offset-4">Acústica</span></h2>
+                <div class="flex bg-black/50 border border-white/5 rounded-sm p-[2px] gap-[2px]">
+                    <button id="btn-mode-fft" class="active-mode px-3 py-1.5 min-h-[28px] rounded-sm text-[9px] uppercase tracking-[0.08em] text-[#606068] flex items-center transition-all bg-transparent">Live</button>
+                    <button id="btn-mode-pink" class="px-3 py-1.5 min-h-[28px] rounded-sm text-[9px] uppercase tracking-[0.08em] text-[#606068] flex items-center transition-all bg-transparent">Rosa</button>
                 </div>
             </div>
 
-            <!-- Canvas do analisador -->
-            <div class="canvas-wrapper">
-                <canvas id="mobile-fft-canvas" aria-label="Visualizador de espectro"></canvas>
-                <!-- Overlay RT60 -->
-                <div id="rt60-overlay" class="rt60-overlay hidden" role="status">
-                    <div class="spinner"></div>
-                    <span class="text-label" style="color: var(--accent); letter-spacing: 0.2em">Escutando
-                        Impulso...</span>
-                    <div style="width: 160px" class="progress-bar">
-                        <div id="rt60-progress" class="progress-fill" style="width: 0%"></div>
+            <div class="relative bg-black/50 border border-white/5 rounded-md overflow-hidden mb-3 aspect-[16/9] w-full">
+                <canvas id="mobile-fft-canvas" class="w-full h-full block"></canvas>
+                <div id="rt60-overlay" class="absolute inset-0 bg-[#08080a]/95 backdrop-blur-md flex flex-col items-center justify-center gap-3 z-10 hidden">
+                    <div class="w-6 h-6 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin"></div>
+                    <span class="text-[9px] uppercase tracking-[0.2em] text-cyan-400">Escutando Impulso...</span>
+                    <div class="w-[160px] h-1 bg-[#1a1a1d] rounded-full overflow-hidden">
+                        <div id="rt60-progress" class="h-full bg-cyan-400 transition-all" style="width: 0%"></div>
                     </div>
                 </div>
             </div>
 
-            <!-- Métricas SPL / RT60 -->
-            <div style="display: flex; justify-content: center; margin-bottom: 12px;">
-                <div class="metric-card" style="width: 50%;">
-                    <span class="metric-label">SPL Est.</span>
-                    <strong id="mobile-rms-readout" class="metric-value">0%</strong>
+            <div class="flex justify-center mb-2">
+                <div class="bg-[#111113] border border-white/5 rounded-md p-3 text-center flex flex-col gap-1 w-[50%] shadow-[0_2px_16px_rgba(0,0,0,0.5)]">
+                    <span class="text-[8px] uppercase tracking-[0.14em] text-[#606068]">SPL Est.</span>
+                    <strong id="mobile-rms-readout" class="text-[20px] text-cyan-400 leading-none">0%</strong>
                 </div>
             </div>
 
-            <div style="background: rgba(0,0,0,0.2); border-radius: 16px; padding: 12px; margin-bottom: 24px;">
-                <span class="metric-label" style="text-align: center; display: block; margin-bottom: 8px;">RT60 Multibanda (Decay)</span>
-                <div class="metrics-grid" style="grid-template-columns: repeat(4, 1fr); gap: 6px;">
-                    <div class="metric-card" style="padding: 8px 4px;">
-                        <span class="metric-label" style="font-size: 9px; color: #3498db;">125 Hz</span>
-                        <strong id="mobile-rt60-125" class="metric-value" style="font-size: 13px;">--</strong>
-                    </div>
-                    <div class="metric-card" style="padding: 8px 4px;">
-                        <span class="metric-label" style="font-size: 9px; color: #2ecc71;">500 Hz</span>
-                        <strong id="mobile-rt60-500" class="metric-value" style="font-size: 13px;">--</strong>
-                    </div>
-                    <div class="metric-card" style="padding: 8px 4px;">
-                        <span class="metric-label" style="font-size: 9px; color: #f1c40f;">1 kHz</span>
-                        <strong id="mobile-rt60-1k" class="metric-value" style="font-size: 13px;">--</strong>
-                    </div>
-                    <div class="metric-card" style="padding: 8px 4px;">
-                        <span class="metric-label" style="font-size: 9px; color: #e74c3c;">4 kHz</span>
-                        <strong id="mobile-rt60-4k" class="metric-value" style="font-size: 13px;">--</strong>
-                    </div>
+            <div class="bg-black/20 border border-white/5 rounded-md p-2 mb-3">
+                <span class="text-[8px] uppercase tracking-[0.14em] text-[#606068] text-center block mb-2">RT60 Multibanda (Decay)</span>
+                <div class="grid grid-cols-4 gap-1">
+                    <div class="bg-[#111113] border border-white/5 rounded-sm p-2 text-center flex flex-col gap-1 shadow-[0_2px_16px_rgba(0,0,0,0.5)]"><span class="text-[8px] text-[#3498db]">125 Hz</span><strong id="mobile-rt60-125" class="text-[12px] text-cyan-400">--</strong></div>
+                    <div class="bg-[#111113] border border-white/5 rounded-sm p-2 text-center flex flex-col gap-1 shadow-[0_2px_16px_rgba(0,0,0,0.5)]"><span class="text-[8px] text-[#2ecc71]">500 Hz</span><strong id="mobile-rt60-500" class="text-[12px] text-cyan-400">--</strong></div>
+                    <div class="bg-[#111113] border border-white/5 rounded-sm p-2 text-center flex flex-col gap-1 shadow-[0_2px_16px_rgba(0,0,0,0.5)]"><span class="text-[8px] text-[#f1c40f]">1 kHz</span><strong id="mobile-rt60-1k" class="text-[12px] text-cyan-400">--</strong></div>
+                    <div class="bg-[#111113] border border-white/5 rounded-sm p-2 text-center flex flex-col gap-1 shadow-[0_2px_16px_rgba(0,0,0,0.5)]"><span class="text-[8px] text-[#e74c3c]">4 kHz</span><strong id="mobile-rt60-4k" class="text-[12px] text-cyan-400">--</strong></div>
                 </div>
             </div>
 
-            <!-- Ações rápidas -->
-            <div class="action-grid">
-                <button id="mobile-btn-measure-rt60" class="action-card" aria-label="Medir RT60">
-                    <div class="action-icon">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-width="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                    </div>
-                    <span class="action-label">Medir RT60</span>
+            <div class="grid grid-cols-2 gap-2 mb-3">
+                <button id="mobile-btn-measure-rt60" class="bg-[#111113] border border-white/5 rounded-md min-h-[64px] flex flex-col items-center justify-center gap-2 active:scale-95 active:bg-[#1a1a1d] transition-all shadow-[0_2px_16px_rgba(0,0,0,0.5)]">
+                    <div class="w-8 h-8 bg-cyan-400/15 border border-cyan-400/35 rounded-sm flex items-center justify-center text-cyan-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>
+                    <span class="text-[9px] uppercase tracking-[0.12em] text-[#a0a0ab]">Medir RT60</span>
                 </button>
-                <button id="mobile-btn-analyze-timbre" class="action-card" aria-label="Analisar timbre">
-                    <div class="action-icon">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-width="2.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2m6-7v-4" />
-                        </svg>
-                    </div>
-                    <span class="action-label">Timbre</span>
+                <button id="mobile-btn-analyze-timbre" class="bg-[#111113] border border-white/5 rounded-md min-h-[64px] flex flex-col items-center justify-center gap-2 active:scale-95 active:bg-[#1a1a1d] transition-all shadow-[0_2px_16px_rgba(0,0,0,0.5)]">
+                    <div class="w-8 h-8 bg-cyan-400/15 border border-cyan-400/35 rounded-sm flex items-center justify-center text-cyan-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2m6-7v-4" /></svg></div>
+                    <span class="text-[9px] uppercase tracking-[0.12em] text-[#a0a0ab]">Timbre</span>
                 </button>
             </div>
 
-            <!-- Alert de feedback -->
-            <div id="mobile-feedback-alert" class="feedback-alert" role="alert" aria-live="polite">
-                Microfone pronto para análise técnica.
+            <div id="mobile-feedback-alert" class="p-3 bg-[#111113] border border-white/5 rounded-md text-center text-[11px] text-[#606068] italic mb-3 min-h-[44px] flex items-center justify-center transition-all">Microfone pronto para análise técnica.</div>
+
+            <div class="flex flex-col gap-2 pb-3">
+                <button id="mobile-btn-start-mic" class="bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 text-[10px] uppercase tracking-[0.1em] py-3 rounded-md active:bg-cyan-500 active:text-black transition-all">Ativar Microfone</button>
+                <button id="mobile-btn-stop-mic" class="bg-red-500/20 border border-red-500/30 text-red-400 text-[10px] uppercase tracking-[0.1em] py-3 rounded-md hidden active:bg-red-500 active:text-black transition-all">Parar Captura</button>
+                <button id="mobile-btn-cut-feedback" class="bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[10px] uppercase tracking-[0.1em] py-3 rounded-md hidden active:bg-amber-500 active:text-black transition-all animate-pulse">⚠ Cortar Feedback</button>
             </div>
+        </section>
 
-            <!-- Painel técnico manual -->
-            <div class="tech-panel">
-                <h3 class="tech-panel-title">
-                    <span class="dot-live" aria-hidden="true"></span>
-                    Controle Técnico
-                </h3>
-
-                <!-- Ruído Rosa -->
-                <div class="toggle-row">
-                    <span class="toggle-label">Ruído Rosa</span>
-                    <label class="toggle-switch" aria-label="Ligar/desligar ruído rosa">
-                        <input type="checkbox" id="mobile-pink-toggle">
-                        <div class="toggle-track"></div>
-                    </label>
-                </div>
-
-                <div style="margin-bottom: 20px">
-                    <input type="range" id="mobile-pink-level" min="-60" max="0" value="-20" class="range-styled"
-                        aria-label="Nível do ruído rosa">
-                    <div class="range-labels">
-                        <span class="range-label">−60dB</span>
-                        <span id="mobile-pink-val" class="range-value">−20dB</span>
-                        <span class="range-label">0dB</span>
+        <!-- SEÇÃO: IA CHAT -->
+        <section id="mobile-ai" class="mobile-page hidden flex-col h-full relative">
+            <h2 class="text-[16px] leading-none tracking-[-0.02em] text-[#f0f0f2] mb-3 shrink-0">SoundMaster <span class="text-cyan-400 underline decoration-2 underline-offset-4">IA</span></h2>
+            
+            <div id="mobile-ai-chat" class="flex-1 overflow-y-auto no-scrollbar pb-[100px] flex flex-col gap-3">
+                <div class="flex justify-start">
+                    <div class="bg-[#1a1a1d]/80 backdrop-blur-md p-3 rounded-md border border-white/5 max-w-[85%] shadow-lg">
+                        <div class="text-[9px] text-cyan-400 uppercase tracking-[0.1em] mb-1">SoundMaster IA</div>
+                        <div class="text-xs text-[#a0a0ab] leading-relaxed">Olá! Como posso ajudar com o som hoje? Ative o microfone para análise.</div>
                     </div>
                 </div>
-
-                <!-- Pulso manual -->
-                <button id="mobile-btn-pulse" class="pulse-btn">
-                    <span aria-hidden="true">🔊</span> Disparar Pulso Manual
-                </button>
             </div>
 
-            <!-- Botões mic -->
-            <div style="display: flex; flex-direction: column; gap: 10px; padding-bottom: 12px">
-                <button id="mobile-btn-start-mic" class="mic-btn-primary btn-start">Ativar Microfone</button>
-                <button id="mobile-btn-stop-mic" class="mic-btn-primary btn-stop hidden">Parar Captura</button>
-                <button id="mobile-btn-cut-feedback" class="mic-btn-primary btn-cut hidden">⚠ Cortar Feedback</button>
-            </div>
-
-        </section>
-
-        <!-- ████████████████████████████████
-             SEÇÃO: IA CHAT
-             ████████████████████████████████ -->
-        <section id="mobile-ai" class="mobile-page hidden ai-section" aria-label="Assistente de IA">
-
-            <h2 class="section-title" style="flex-shrink: 0">SoundMaster <span>IA</span></h2>
-
-            <!-- Chat box -->
-            <div id="mobile-ai-chat" class="ai-chat-box no-scrollbar" aria-live="polite" aria-label="Histórico de chat">
-                <div class="chat-bubble-ai">
-                    <span class="chat-ai-label">SoundMaster IA</span>
-                    Olá! Como posso ajudar com o som hoje? Ative o microfone para uma análise automática do timbre ou
-                    reverberação.
+            <div class="absolute bottom-0 left-0 w-full pt-2 pb-2 bg-[#08080a] shrink-0">
+                <div class="flex gap-1 overflow-x-auto no-scrollbar mb-2 px-1">
+                    <button class="quick-tag mobile-ai-suggest shrink-0 px-3 py-1.5 bg-[#1a1a1d] border border-white/5 rounded-sm text-[#a0a0ab] text-[9px] uppercase tracking-[0.1em] active:bg-[#222226]" data-query="Como está o RT60?">RT60</button>
+                    <button class="quick-tag mobile-ai-suggest shrink-0 px-3 py-1.5 bg-[#1a1a1d] border border-white/5 rounded-sm text-[#a0a0ab] text-[9px] uppercase tracking-[0.1em] active:bg-[#222226]" data-query="Ajustar grave da bateria">Grave</button>
+                    <button class="quick-tag mobile-ai-suggest shrink-0 px-3 py-1.5 bg-[#1a1a1d] border border-white/5 rounded-sm text-[#a0a0ab] text-[9px] uppercase tracking-[0.1em] active:bg-[#222226]" data-query="Melhorar clareza da voz">Voz</button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input id="mobile-ai-input" type="text" placeholder="Dúvida técnica..." class="flex-1 bg-[#111113] border border-white/5 rounded-md px-3 py-2 text-[#f0f0f2] text-[12px] placeholder:text-[#3a3a42] outline-none focus:border-cyan-400/50 transition-colors">
+                    <button id="mobile-ai-send" class="w-10 h-10 bg-cyan-400/20 border border-cyan-400/30 rounded-md flex items-center justify-center text-cyan-400 active:bg-cyan-400 active:text-black shrink-0 transition-all">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                    </button>
                 </div>
             </div>
-
-            <!-- Quick tags -->
-            <div class="quick-tags no-scrollbar" role="group" aria-label="Sugestões rápidas" style="flex-shrink: 0">
-                <button class="quick-tag mobile-ai-suggest" data-query="Como está o RT60?">RT60</button>
-                <button class="quick-tag mobile-ai-suggest" data-query="Ajustar grave da bateria">Grave</button>
-                <button class="quick-tag mobile-ai-suggest" data-query="Melhorar clareza da voz">Voz</button>
-                <button class="quick-tag mobile-ai-suggest" data-query="Equalizar bateria">Bateria</button>
-                <button class="quick-tag mobile-ai-suggest"
-                    data-query="Verificar nível dos monitores">Monitores</button>
-            </div>
-
-            <!-- Input row -->
-            <div class="ai-input-row" style="flex-shrink: 0">
-                <input id="mobile-ai-input" type="text" placeholder="Dúvida técnica..." class="ai-text-input"
-                    autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="send"
-                    aria-label="Mensagem para o assistente">
-                <button id="mobile-ai-send" class="ai-send-btn" aria-label="Enviar mensagem">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                            d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                    </svg>
-                </button>
-            </div>
-
         </section>
 
-        <!-- ████████████████████████████████
-             SEÇÃO: FERRAMENTAS
-             ████████████████████████████████ -->
-        <section id="mobile-tools" class="mobile-page hidden tools-section" aria-label="Ferramentas do técnico">
-
-            <!-- Canal alvo -->
-            <div class="channel-card">
-                <div class="channel-header">
-                    <div class="channel-badge" aria-hidden="true">#<span id="mobile-target-display">1</span></div>
-                    <div class="channel-meta">
-                        <strong>Canal Alvo</strong>
-                        <span>Ajustes Diretos</span>
+        <!-- SEÇÃO: FERRAMENTAS -->
+        <section id="mobile-tools" class="mobile-page hidden flex-col">
+            <div class="bg-[#111113] border border-white/5 rounded-md p-3 mb-3 shadow-[0_2px_16px_rgba(0,0,0,0.5)]">
+                <div class="flex justify-between items-center mb-3">
+                    <div class="flex items-center gap-2">
+                        <div class="px-2 py-1 bg-cyan-400/10 text-cyan-400 text-[10px] rounded-sm">#<span id="mobile-target-display">1</span></div>
+                        <div class="flex flex-col">
+                            <strong class="text-[11px] text-[#f0f0f2]">Canal Alvo</strong>
+                            <span class="text-[9px] text-[#606068]">Ajustes Diretos</span>
+                        </div>
                     </div>
-                    <input id="mobile-target-channel" type="number" inputmode="numeric" min="1" max="24" value="1"
-                        class="channel-number-input" aria-label="Número do canal alvo">
+                    <input id="mobile-target-channel" type="number" min="1" max="24" value="1" class="w-12 h-8 bg-[#1a1a1d] border border-white/5 rounded-sm text-center text-[#f0f0f2] text-[12px] outline-none">
                 </div>
-
-                <div class="channel-actions-grid">
-                    <button id="mobile-clean-channel" class="channel-action-btn">Limpar</button>
-                    <button id="mobile-hpf-channel" class="channel-action-btn">HPF 100Hz</button>
-                    <button id="mobile-gate-channel" class="channel-action-btn">Gate</button>
-                    <button id="mobile-compressor-channel" class="channel-action-btn">Comp.</button>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="mobile-clean-channel" class="bg-[#1a1a1d] border border-white/5 py-2 rounded-sm text-[#a0a0ab] text-[10px] uppercase active:bg-[#222226]">Limpar</button>
+                    <button id="mobile-hpf-channel" class="bg-[#1a1a1d] border border-white/5 py-2 rounded-sm text-[#a0a0ab] text-[10px] uppercase active:bg-[#222226]">HPF 100Hz</button>
+                    <button id="mobile-gate-channel" class="bg-[#1a1a1d] border border-white/5 py-2 rounded-sm text-[#a0a0ab] text-[10px] uppercase active:bg-[#222226]">Gate</button>
+                    <button id="mobile-compressor-channel" class="bg-[#1a1a1d] border border-white/5 py-2 rounded-sm text-[#a0a0ab] text-[10px] uppercase active:bg-[#222226]">Comp.</button>
                 </div>
             </div>
 
-            <!-- EQ Emergencial -->
-            <div class="eq-card">
-                <span class="eq-card-label">Correção Crítica</span>
-                <div class="eq-grid">
-                    <button id="mobile-eq-mud" class="eq-btn">Cortar Mud 250Hz</button>
-                    <button id="mobile-eq-harsh" class="eq-btn">Cortar Harsh 3kHz</button>
+            <div class="bg-[#111113] border border-white/5 rounded-md p-3 mb-3 shadow-[0_2px_16px_rgba(0,0,0,0.5)]">
+                <span class="text-[8px] uppercase tracking-[0.14em] text-[#606068] block mb-2">Correção Crítica</span>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="mobile-eq-mud" class="bg-amber-500/10 border border-amber-500/20 py-2 rounded-sm text-amber-400 text-[10px] uppercase active:bg-amber-500/20">Cortar 250Hz</button>
+                    <button id="mobile-eq-harsh" class="bg-red-500/10 border border-red-500/20 py-2 rounded-sm text-red-400 text-[10px] uppercase active:bg-red-500/20">Cortar 3kHz</button>
                 </div>
             </div>
 
-            <!-- Anti-Feedback AFS2 -->
-            <div class="afs-card">
-                <span class="afs-card-label">Supressão AFS2</span>
-                <div class="afs-grid">
-                    <button id="mobile-afs-on" class="afs-btn-on">Ativar AFS2</button>
-                    <button id="mobile-afs-off" class="afs-btn-off">Desativar</button>
+            <div class="bg-[#111113] border border-white/5 rounded-md p-3 shadow-[0_2px_16px_rgba(0,0,0,0.5)]">
+                <span class="text-[8px] uppercase tracking-[0.14em] text-[#606068] block mb-2">Supressão AFS2</span>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="mobile-afs-on" class="bg-cyan-500/20 border border-cyan-500/30 py-2 rounded-sm text-cyan-400 text-[10px] uppercase active:bg-cyan-500 active:text-black">Ativar</button>
+                    <button id="mobile-afs-off" class="bg-[#1a1a1d] border border-white/5 py-2 rounded-sm text-[#a0a0ab] text-[10px] uppercase active:bg-[#222226]">Desativar</button>
                 </div>
             </div>
-
         </section>
-
     </main>
 
     <!-- ══ Bottom Nav ══ -->
-    <nav class="bottom-nav" role="navigation" aria-label="Navegação principal">
-
-        <button class="nav-item mobile-nav-btn tab-active" data-target="mobile-master" aria-label="Ir para Master"
-            aria-current="page">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                    d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-            </svg>
+    <nav class="fixed bottom-0 left-0 right-0 h-[60px] bg-[#08080a]/95 backdrop-blur-lg border-t border-white/5 flex items-center justify-between px-2 z-[150] pb-[env(safe-area-inset-bottom)]">
+        <button class="nav-item mobile-nav-btn tab-active flex flex-col items-center justify-center flex-1 h-full text-[#606068] text-[8px] uppercase tracking-[0.1em] gap-1 relative bg-transparent border-none p-0 cursor-pointer transition-colors" data-target="mobile-master">
+            <svg class="w-[20px] h-[20px] transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
             <span class="nav-label">Master</span>
         </button>
 
-        <button class="nav-item mobile-nav-btn" data-target="mobile-mic" aria-label="Ir para Análise">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
+        <button class="nav-item mobile-nav-btn flex flex-col items-center justify-center flex-1 h-full text-[#606068] text-[8px] uppercase tracking-[0.1em] gap-1 relative bg-transparent border-none p-0 cursor-pointer transition-colors" data-target="mobile-mic">
+            <svg class="w-[20px] h-[20px] transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
             <span class="nav-label">Análise</span>
         </button>
 
-        <button class="nav-item mobile-nav-btn" data-target="mobile-ai" aria-label="Ir para IA Chat">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-            </svg>
+        <button class="nav-item mobile-nav-btn flex flex-col items-center justify-center flex-1 h-full text-[#606068] text-[8px] uppercase tracking-[0.1em] gap-1 relative bg-transparent border-none p-0 cursor-pointer transition-colors" data-target="mobile-ai">
+            <svg class="w-[20px] h-[20px] transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
             <span class="nav-label">IA Chat</span>
         </button>
 
-        <button class="nav-item mobile-nav-btn" data-target="mobile-tools" aria-label="Ir para Ferramentas">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
+        <button class="nav-item mobile-nav-btn flex flex-col items-center justify-center flex-1 h-full text-[#606068] text-[8px] uppercase tracking-[0.1em] gap-1 relative bg-transparent border-none p-0 cursor-pointer transition-colors" data-target="mobile-tools">
+            <svg class="w-[20px] h-[20px] transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
             <span class="nav-label">Tools</span>
         </button>
-
     </nav>
 
-    <!-- Scripts -->
     <script src="/socket.io/socket.io.js"></script>
     <script src="js/mobile.js"></script>
-
 </body>
-
 </html>
