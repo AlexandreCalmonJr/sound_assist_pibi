@@ -4,12 +4,14 @@
 
     function initHeatmap() {
         const upload = document.getElementById('heatmap-image-upload');
+        const btnUpload = document.getElementById('btn-heatmap-upload');
         const container = document.getElementById('heatmap-container');
         const btnClear = document.getElementById('btn-clear-heatmap');
         
+        if(btnUpload && upload) btnUpload.onclick = () => upload.click();
         if(upload) upload.addEventListener('change', handleImageUpload);
-        if(container) container.addEventListener('click', handleContainerClick);
-        if(btnClear) btnClear.addEventListener('click', clearHeatmap);
+        if(container) container.onclick = handleContainerClick;
+        if(btnClear) btnClear.onclick = clearHeatmap;
         
         const savedImg = localStorage.getItem('heatmap_bg');
         if(savedImg) {
@@ -23,7 +25,7 @@
             setTimeout(() => {
                 renderHeatmap();
                 renderPins();
-            }, 100);
+            }, 300);
         }
     }
 
@@ -170,24 +172,14 @@
         });
     }
 
+
+
     document.addEventListener('page-loaded', (e) => {
-        if (e.detail.pageId === 'analyzer') {
-            initHeatmap();
+        console.log(`[Heatmap] Page loaded: ${e.detail.pageId}`);
+        if (e.detail.pageId === 'spl-heatmap' || e.detail.pageId === 'analyzer') {
+            setTimeout(initHeatmap, 200);
         }
     });
-    
-    // Observer para quando a aba for exibida, recalcular tamanho do canvas
-    const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-            if (mutation.target.id === 'analyzer-mappings' && !mutation.target.classList.contains('hidden')) {
-                setTimeout(renderHeatmap, 50);
-            }
-        });
-    });
 
-    document.addEventListener('DOMContentLoaded', () => {
-        const tab = document.getElementById('analyzer-mappings');
-        if(tab) observer.observe(tab, { attributes: true, attributeFilter: ['class'] });
-    });
-
+    // Observer removido: page-loaded é suficiente com setTimeout
 })();

@@ -19,16 +19,32 @@
             </div>
         </div>
 
+        <!-- Heatmap Tooling Controls -->
+        <div class="flex gap-2 mb-6">
+            <button id="btn-heatmap-upload" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border border-white/5">
+                🖼️ Planta Baixa
+            </button>
+            <button id="btn-clear-heatmap" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border border-white/5">
+                🧹 Limpar Mapa
+            </button>
+            <input type="file" id="heatmap-image-upload" class="hidden" accept="image/*">
+            <div class="ml-auto flex items-center gap-3">
+                <span class="text-[10px] text-slate-500 font-bold uppercase">Última Leitura:</span>
+                <span id="heatmap-last-val" class="text-lg font-black text-cyan-400">-- dB</span>
+            </div>
+        </div>
+
         <!-- Heatmap Container -->
-        <div class="aspect-video bg-black/40 rounded-2xl relative border border-white/5 flex items-center justify-center group">
-            <!-- Simulação de Heatmap -->
-            <div class="absolute inset-10 bg-gradient-to-br from-red-500/20 via-yellow-500/40 to-blue-500/10 rounded-full blur-3xl opacity-60"></div>
-            <div class="z-10 text-center space-y-4">
-                <div class="p-4 bg-slate-900/80 backdrop-blur-xl rounded-2xl border border-white/10">
-                    <p class="text-sm font-bold text-white mb-2">Simulação de Cobertura</p>
-                    <p class="text-[10px] text-slate-400 max-w-xs">Arraste os pontos para simular o posicionamento das caixas e a atenuação por distância.</p>
+        <div id="heatmap-container" class="aspect-video bg-black/40 rounded-2xl relative border border-white/5 overflow-hidden cursor-crosshair">
+            <img id="heatmap-bg" class="absolute inset-0 w-full h-full object-contain hidden" alt="Planta Baixa">
+            <div id="heatmap-placeholder" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div class="text-center opacity-40">
+                    <span class="text-4xl block mb-4">📍</span>
+                    <p class="text-xs font-bold text-white uppercase tracking-widest">Clique no mapa para medir SPL</p>
                 </div>
             </div>
+            <canvas id="heatmap-canvas" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
+            <div id="heatmap-pins-layer" class="absolute inset-0 w-full h-full pointer-events-none"></div>
         </div>
 
         <div class="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">

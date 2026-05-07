@@ -95,6 +95,20 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
         }
     });
 
+    expressApp.post('/api/acoustic_analysis', async (req, res) => {
+        try {
+            const aiRes = await fetch('http://127.0.0.1:3002/acoustic_analysis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(req.body)
+            });
+            const data = await aiRes.json();
+            res.json(data);
+        } catch (error) {
+            res.status(500).json({ error: 'Motor de Acústica offline' });
+        }
+    });
+
     const io = new Server(server, {
         cors: {
             origin: '*',

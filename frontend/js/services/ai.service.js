@@ -116,5 +116,23 @@
         }
     }
 
-    window.AIService = { ask, ping };
+    /**
+     * Envia dimensões para cálculo acústico avançado no Python (Eyring RT60).
+     */
+    async function calculateAcoustics(volume, surfaceArea, alpha) {
+        try {
+            const response = await fetch('/api/acoustic_analysis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ volume, surface_area: surfaceArea, alpha })
+            });
+            if (!response.ok) throw new Error('Falha no cálculo');
+            return await response.json();
+        } catch (err) {
+            console.error('[AIService] Erro no cálculo acústico:', err);
+            return null;
+        }
+    }
+
+    window.AIService = { ask, ping, calculateAcoustics };
 })();
