@@ -1,135 +1,77 @@
-<header class="agent-header p-4 border-b border-white/5">
-    <div class="logo flex items-center gap-2">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            class="text-cyan-400" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2v20M17 5v14M7 9v6M22 10v4M2 10v4" />
-        </svg>
-        <h1 class="text-lg font-black tracking-tighter text-white">SOUNDMASTER</h1>
-    </div>
-</header>
+<!-- Icon Rail -->
+<div class="icon-rail">
+    <div>
+        <div class="rail-logo">SM</div>
+        <nav>
+            <!-- Dashboard (direct link) -->
+            <button class="rail-btn active" data-target="home" data-direct="true" title="Dashboard">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                <span class="rail-tooltip">Dashboard</span>
+            </button>
 
-<nav class="agent-nav flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
-    <!-- DASHBOARD -->
-    <button class="nav-btn group flex items-center gap-3 w-full py-2 px-3 rounded-xl transition-all hover:bg-white/5" data-target="home">
-        <span class="nav-icon text-base transition-transform group-hover:scale-110">🏠</span>
-        <span class="nav-label font-bold text-[10px] text-slate-400 group-hover:text-white uppercase tracking-widest">Dashboard</span>
-    </button>
+            <!-- Treinamento (direct link) -->
+            <button class="rail-btn" data-target="tutorials" data-direct="true" title="Treinamento">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.1 2.7 2 6 2s6-.9 6-2v-5"/></svg>
+                <span class="rail-tooltip">Treinamento</span>
+            </button>
 
-    <!-- CATEGORIA: TUTORIAIS -->
-    <button class="nav-btn group flex items-center gap-3 w-full py-2 px-3 rounded-xl transition-all hover:bg-amber-900/20 border border-transparent hover:border-amber-500/30" data-target="tutorials">
-        <span class="nav-icon text-base transition-transform group-hover:scale-110">🎓</span>
-        <span class="nav-label font-bold text-[10px] text-amber-500 uppercase tracking-widest">Treinamento</span>
-    </button>
+            <div class="rail-divider"></div>
 
-    <div class="pt-1"></div>
+            <!-- Medir (category with submenu) -->
+            <button class="rail-btn" data-category="measure" title="Medir">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                <span class="rail-tooltip">Medir</span>
+            </button>
 
-    <!-- CATEGORIA: MEDIR -->
-    <div class="nav-category">
-        <button class="menu-trigger flex items-center justify-between w-full py-2 px-3 rounded-xl hover:bg-white/5 transition-all text-slate-500 hover:text-white group" data-category="measure">
-            <div class="flex items-center gap-3">
-                <span class="text-base group-hover:rotate-12 transition-transform">📊</span>
-                <span class="text-[10px] font-black uppercase tracking-widest">Medir</span>
-            </div>
-            <svg class="w-3 h-3 transition-transform arrow-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-        </button>
-        <div class="menu-content hidden pl-12 pr-2 space-y-1 mt-1 mb-2">
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="rt60">RT60 & Acústica</button>
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="benchmarking">Benchmarking</button>
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="spl-heatmap">Mapa de Calor SPL</button>
-        </div>
-    </div>
+            <!-- Análise (category with submenu) -->
+            <button class="rail-btn" data-category="analysis" title="Análise">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                <span class="rail-tooltip">Análise</span>
+            </button>
 
-    <!-- CATEGORIA: ANÁLISE DO SOM -->
-    <div class="nav-category">
-        <button class="menu-trigger flex items-center justify-between w-full py-2 px-3 rounded-xl hover:bg-white/5 transition-all text-slate-500 hover:text-white group" data-category="analysis">
-            <div class="flex items-center gap-3">
-                <span class="text-base group-hover:rotate-12 transition-transform">🔬</span>
-                <span class="text-[10px] font-black uppercase tracking-widest">Análise do Som</span>
-            </div>
-            <svg class="w-3 h-3 transition-transform arrow-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-        </button>
-        <div class="menu-content hidden pl-12 pr-2 space-y-1 mt-1 mb-2">
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="analyzer">FFT & Waterfall</button>
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="feedback-detector">Detector Feedback</button>
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="eq-guide">Guia de EQ</button>
-        </div>
+            <!-- Mixer (category with submenu) -->
+            <button class="rail-btn" data-category="mixer" title="Mixer">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+                <span class="rail-tooltip">Mixer</span>
+            </button>
+
+            <!-- Rede & Sistemas (category with submenu) -->
+            <button class="rail-btn" data-category="network" title="Rede & Sistemas">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                <span class="rail-tooltip">Rede</span>
+            </button>
+        </nav>
     </div>
 
-    <!-- CATEGORIA: CANAIS -->
-    <div class="nav-category">
-        <button class="menu-trigger flex items-center justify-between w-full py-2 px-3 rounded-xl hover:bg-white/5 transition-all text-slate-500 hover:text-white group" data-category="channels">
-            <div class="flex items-center gap-3">
-                <span class="text-base group-hover:rotate-12 transition-transform">🎤</span>
-                <span class="text-[10px] font-black uppercase tracking-widest">Canais</span>
-            </div>
-            <svg class="w-3 h-3 transition-transform arrow-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-        </button>
-        <div class="menu-content hidden pl-12 pr-2 space-y-1 mt-1 mb-2">
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="mixer-input">Mix de Entrada</button>
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="aes67">Saúde de Cabos (AES67)</button>
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="voice-presets">Presets de Voz</button>
-        </div>
-    </div>
+    <div class="rail-bottom">
+        <div class="rail-divider"></div>
 
-    <!-- CATEGORIA: AUXILIARES -->
-    <div class="nav-category">
-        <button class="menu-trigger flex items-center justify-between w-full py-2 px-3 rounded-xl hover:bg-white/5 transition-all text-slate-500 hover:text-white group" data-category="aux">
-            <div class="flex items-center gap-3">
-                <span class="text-base group-hover:rotate-12 transition-transform">🎚️</span>
-                <span class="text-[10px] font-black uppercase tracking-widest">Auxiliares</span>
-            </div>
-            <svg class="w-3 h-3 transition-transform arrow-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+        <!-- Assistente IA (direct link) -->
+        <button class="rail-btn" data-target="ai-chat" data-direct="true" title="Assistente IA" style="color: var(--accent);">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
+            <span class="rail-tooltip">Assistente IA</span>
         </button>
-        <div class="menu-content hidden pl-12 pr-2 space-y-1 mt-1 mb-2">
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="mixer-aux">Mix de Monitores</button>
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="mixer-fx">Envios de Efeito</button>
-        </div>
-    </div>
 
-    <!-- CATEGORIA: SISTEMAS -->
-    <div class="nav-category">
-        <button class="menu-trigger flex items-center justify-between w-full py-2 px-3 rounded-xl hover:bg-white/5 transition-all text-slate-500 hover:text-white group" data-category="systems">
-            <div class="flex items-center gap-3">
-                <span class="text-base group-hover:rotate-12 transition-transform">🌐</span>
-                <span class="text-[10px] font-black uppercase tracking-widest">Sistemas</span>
-            </div>
-            <svg class="w-3 h-3 transition-transform arrow-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+        <!-- Celular (direct link) -->
+        <button class="rail-btn" data-target="mobile" data-direct="true" title="Celular">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+            <span class="rail-tooltip">Celular</span>
         </button>
-        <div class="menu-content hidden pl-12 pr-2 space-y-1 mt-1 mb-2">
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="systems">Conexão Ui24R</button>
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="aes67">Rede AES67</button>
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="systems">Status do Túnel</button>
-        </div>
-    </div>
 
-    <!-- CATEGORIA: CONFIGURAÇÕES -->
-    <div class="nav-category">
-        <button class="menu-trigger flex items-center justify-between w-full py-2 px-3 rounded-xl hover:bg-white/5 transition-all text-slate-500 hover:text-white group" data-category="settings">
-            <div class="flex items-center gap-3">
-                <span class="text-base group-hover:rotate-12 transition-transform">⚙️</span>
-                <span class="text-[10px] font-black uppercase tracking-widest">Configurações</span>
-            </div>
-            <svg class="w-3 h-3 transition-transform arrow-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-        </button>
-        <div class="menu-content hidden pl-12 pr-2 space-y-1 mt-1 mb-2">
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="settings">Preferências</button>
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="settings">Sobre & Licença</button>
-            <button class="nav-btn w-full text-left py-2 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors" data-target="settings">Log de Erros</button>
-        </div>
-    </div>
-    
-    <div class="pt-2 mt-2 border-t border-white/5">
-        <button class="nav-btn group flex items-center gap-3 w-full py-2 px-3 rounded-xl transition-all hover:bg-cyan-900/20 border border-transparent hover:border-cyan-500/30" data-target="ai-chat">
-            <span class="nav-icon text-lg transition-transform group-hover:scale-110">🤖</span>
-            <span class="nav-label font-bold text-[10px] text-cyan-400 uppercase tracking-widest">Assistente IA</span>
-        </button>
-        <button class="nav-btn group flex items-center gap-3 w-full py-2 px-3 rounded-xl transition-all hover:bg-white/5" data-target="mobile">
-            <span class="nav-icon text-lg transition-transform group-hover:scale-110">📱</span>
-            <span class="nav-label font-bold text-[10px] text-slate-400 group-hover:text-white uppercase tracking-widest">Celular</span>
+        <!-- Configurações (category with submenu) -->
+        <button class="rail-btn" data-category="settings" title="Configurações">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span class="rail-tooltip">Configurações</span>
         </button>
     </div>
-</nav>
+</div>
 
-<footer class="p-6 border-t border-white/5 text-[10px] text-slate-500 font-bold uppercase tracking-widest text-center">
-    v1.5.0-ultra • Pro Edition
-</footer>
+<!-- Category Panel (Expandable flyout) -->
+<div class="category-panel" id="category-panel">
+    <div class="panel-header">
+        <h3 class="panel-title" id="panel-title">Medir</h3>
+    </div>
+    <nav class="panel-nav" id="panel-nav">
+        <!-- Items injected dynamically by layout.js -->
+    </nav>
+</div>
