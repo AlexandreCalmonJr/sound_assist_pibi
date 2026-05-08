@@ -100,10 +100,10 @@
     }
 
     function _getTargetChannel() {
-        const val = Number(els.aiTargetChannel && els.aiTargetChannel.value);
+        let val = Number(els.aiTargetChannel && els.aiTargetChannel.value);
         if (!Number.isInteger(val) || val < 1 || val > 24) {
-            alert('Informe um canal alvo entre 1 e 24.');
-            return null;
+            val = 1;
+            if (els.aiTargetChannel) els.aiTargetChannel.value = 1;
         }
         return val;
     }
@@ -161,12 +161,14 @@
     // Envio de mensagem para IA
     // -------------------------------------------------------------------------
     async function _sendMessage(text) {
-        console.log('[AIChatUI] Iniciando _sendMessage:', text);
         if (!text || !text.trim()) return;
 
         const channel = _getTargetChannel();
-        console.log('[AIChatUI] Canal alvo:', channel);
         if (!channel) return;
+
+        // Desabilitar UI durante o envio
+        if (els.chatInput) els.chatInput.disabled = true;
+        if (els.btnSend) els.btnSend.disabled = true;
 
         _appendBubble(text.trim(), true, null);
         if (els.chatInput) els.chatInput.value = '';
@@ -182,7 +184,13 @@
             _appendBubble(result.text, false, result.command);
         } catch (err) {
             const loadingBubble = document.getElementById(loadingId);
-            if (loadingBubble) loadingBubble.innerText = 'Erro na conexão com IA.';
+            if (loadingBubble) loadingBubble.innerText = 'Erro na conexão com IA. Verifique o servidor local.';
+        } finally {
+            if (els.chatInput) {
+                els.chatInput.disabled = false;
+                els.chatInput.focus();
+            }
+            if (els.btnSend) els.btnSend.disabled = false;
         }
     }
 
@@ -235,23 +243,47 @@
         function _quickAction(btn, fn) {
             btn && btn.addEventListener('click', function () {
                 const ch = _getTargetChannel();
-                if (ch !== null) fn(ch);
+                if (ch !== null) {
+                    const ok = fn(ch);
+                    if (ok === false) {
+                         _appendBubble('⚠️ Conecte-se à mesa antes de realizar ações rápidas.', false, null);
+                    }
+                }
             });
         }
 
         function _quickGlobal(btn, fn) {
-            btn && btn.addEventListener('click', fn);
+            btn && btn.addEventListener('click', function() {
+                const ok = fn();
+                if (ok === false) {
+                    _appendBubble('⚠️ Mixer não conectado.', false, null);
+                }
+            });
         }
 
-        _quickAction(els.btnCleanChannel, function (ch) { MixerService.runCleanSoundPreset(ch); });
-        _quickAction(els.btnHpf,          function (ch) { MixerService.applyHpf(ch, 100);       });
-        _quickAction(els.btnGate,         function (ch) { MixerService.applyGate(ch);            });
-        _quickAction(els.btnCompressor,   function (ch) { MixerService.applyCompressor(ch);      });
-        _quickAction(els.btnEqMud,        function (ch) { MixerService.applyEqCut('channel', ch, 250, -3, 1.1, 2); });
-        _quickAction(els.btnEqHarsh,      function (ch) { MixerService.applyEqCut('channel', ch, 3200, -2.5, 1.5, 3); });
+        _quickAction(els.btnCleanChannel, function (ch) { return MixerService.runCleanSoundPreset(ch); });
+        _quickAction(els.btnHpf,          function (ch) { return MixerService.applyHpf(ch, 100);       });
+        _quickAction(els.btnGate,         function (ch) { return MixerService.applyGate(ch);            });
+        _quickAction(els.btnCompressor,   function (ch) { return MixerService.applyCompressor(ch);      });
+        _quickAction(els.btnEqMud,        function (ch) { return MixerService.applyEqCut('channel', ch, 250, -3, 1.1, 2); });
+        _quickAction(els.btnEqHarsh,      function (ch) { return MixerService.applyEqCut('channel', ch, 3200, -2.5, 1.5, 3); });
 
-        _quickGlobal(els.btnAfsOn,  function () { MixerService.setAfs(true);  });
-        _quickGlobal(els.btnAfsOff, function () { MixerService.setAfs(false); });
+        _quickGlobal(els.btnAfsOn,  function () { 
+            const ok = MixerService.setAfs(true);
+            if (ok) {
+                els.btnAfsOn.classList.add('bg-cyan-500', 'text-white');
+                els.btnAfsOff.classList.remove('bg-red-500', 'text-white');
+            }
+            return ok;
+        });
+        _quickGlobal(els.btnAfsOff, function () { 
+            const ok = MixerService.setAfs(false);
+            if (ok) {
+                els.btnAfsOff.classList.add('bg-red-500', 'text-white');
+                els.btnAfsOn.classList.remove('bg-cyan-500', 'text-white');
+            }
+            return ok;
+        });
     }
 
     // -------------------------------------------------------------------------

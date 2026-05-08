@@ -170,6 +170,10 @@ function createMixerActions(getMixer) {
             return runCleanSoundPreset(cmd.channel || 1, cmd);
         }
 
+        if (cmd.action === 'log') {
+            return `INFO: ${cmd.desc}`;
+        }
+        
         throw new Error(`Acao nao suportada: ${cmd.action}`);
     }
 

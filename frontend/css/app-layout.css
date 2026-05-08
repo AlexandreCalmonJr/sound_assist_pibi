@@ -423,13 +423,16 @@
 #app-main::-webkit-scrollbar {
   width: 6px;
 }
+
 #app-main::-webkit-scrollbar-track {
   background: transparent;
 }
+
 #app-main::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.08);
   border-radius: 3px;
 }
+
 #app-main::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.15);
 }
@@ -451,6 +454,7 @@
     opacity: 0;
     transform: translateY(12px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -462,6 +466,7 @@
     opacity: 1;
     transform: translateY(0);
   }
+
   to {
     opacity: 0;
     transform: translateY(-8px);
@@ -517,9 +522,11 @@
 .panel-nav::-webkit-scrollbar {
   width: 4px;
 }
+
 .panel-nav::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .panel-nav::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.06);
   border-radius: 2px;
@@ -535,8 +542,79 @@
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* --- Vertical Fader Fix --- */
+.fader-vertical {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  appearance: slider-vertical;
+  width: 20px !important; /* Largura da área de toque */
+  height: 100% !important;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Chrome/Edge Track styling */
+.fader-vertical::-webkit-slider-runnable-track {
+  width: 4px; /* Largura do trilho */
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+/* Chrome/Edge Custom Thumb styling */
+.fader-vertical::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 12px; /* Altura do botão */
+  width: 20px;  /* Largura do botão */
+  background: currentColor;
+  border-radius: 3px;
+  box-shadow: 0 0 10px currentColor;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  margin-top: 0; /* Reseta desalinhamentos */
+  transform: translateX(0); /* Garante centralização */
+}
+
+/* --- Responsive Adjustments --- */
+@media (max-width: 1024px) {
+  .fader-vertical::-webkit-slider-thumb {
+    height: 16px;
+    width: 12px;
+  }
+}
+
+@media (max-height: 750px) {
+  .mixer-scroll-container {
+    padding-bottom: 8px;
+  }
+}
+
+/* Horizontal Scroll for Mixer */
+.mixer-scroll-container {
+  display: flex;
+  overflow-x: auto;
+  gap: 12px;
+  padding: 8px 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+.mixer-scroll-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.mixer-scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
 }

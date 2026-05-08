@@ -113,7 +113,7 @@ class AIEngine:
             
             return {
                 "text": "A sala apresenta bons tempos de reverberação para voz e música. Nenhuma correção grave necessária no momento.",
-                "command": None
+                "command": self.command("log", "RT60 em conformidade", target="master")
             }
 
         # 2. Respostas por Texto (Keywords)
@@ -136,6 +136,12 @@ class AIEngine:
                 "command": self.command("eq_cut", "Corte Vidro Master", target="master", hz=2500, gain=-3)
             }
 
+        if re.search(r'(aspero|harsh|metalico|dureza|ardido|estridente)', text):
+            return {
+                "text": f"Ouvindo o brilho excessivo no canal {channel}. Vou reduzir a aspereza nos médios-agudos para tornar o som mais suave.",
+                "command": self.command("eq_cut", f"Aspereza Ch {channel}", target="channel", channel=channel, hz=3200, gain=-3, q=1.5, band=3)
+            }
+
         if re.search(r'(delay|atraso|distancia|metros|fundo)', text):
             # Tenta extrair a distância em metros
             dist_match = re.search(r'(\d+(?:[.,]\d+)?)\s*(?:m|metro)', text)
@@ -144,8 +150,8 @@ class AIEngine:
             
             if dist_match:
                 meters = float(dist_match.group(1).replace(',', '.'))
-                # Cálculo básico: ~343 m/s -> 1 metro ≈ 2.9ms
-                ms = round(meters * 2.91, 1)
+                # Cálculo preciso: 343.2 m/s (20°C) -> 1 metro ≈ 2.915ms
+                ms = round(meters * 2.915, 1)
                 return {
                     "text": f"Para {meters} metros, o atraso ideal é de aproximadamente {ms}ms. Deseja aplicar este delay ao Auxiliar {aux_ch}?",
                     "command": self.command("set_delay", f"Ajustar Delay {meters}m", aux=aux_ch, ms=ms)

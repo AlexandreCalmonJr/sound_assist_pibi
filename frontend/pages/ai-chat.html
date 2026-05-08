@@ -12,7 +12,7 @@
                 <div class="flex items-center gap-3">
                     <input id="ai-target-channel" type="number" min="1" max="24" value="1"
                         class="bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-cyan-400 font-mono w-20 focus:border-cyan-500 outline-none">
-                    <span class="text-slate-400">canal selecionado</span>
+                    <span class="text-slate-400 text-sm">canal selecionado</span>
                 </div>
             </div>
 
@@ -24,15 +24,16 @@
                     <button class="sound-ai-prompt text-left p-3 rounded-xl bg-slate-700/50 hover:bg-cyan-900/30 border border-white/5 hover:border-cyan-500/50 text-xs transition-all" 
                         data-prompt="Microfonia ou apito no canal alvo. Quero cortar o pico sem estragar a voz.">Microfonia</button>
                     <button class="sound-ai-prompt text-left p-3 rounded-xl bg-slate-700/50 hover:bg-cyan-900/30 border border-white/5 hover:border-cyan-500/50 text-xs transition-all" 
-                        data-prompt="Som metalico e aspero no PA. Quero reduzir dureza nos medios-agudos.">Som aspero</button>
+                        data-prompt="Som metalico e aspero no PA. Quero reduzir dureza nos medios-agudos do canal alvo.">Som aspero</button>
                     <button class="sound-ai-prompt text-left p-3 rounded-xl bg-slate-700/50 hover:bg-cyan-900/30 border border-white/5 hover:border-cyan-500/50 text-xs transition-all" 
-                        data-prompt="Retorno alto vazando no altar. Quero HPF, gate e controle de ganho.">Retorno alto</button>
+                        data-prompt="Retorno alto vazando no altar no canal alvo. Quero HPF, gate e controle de ganho.">Retorno alto</button>
                 </div>
             </div>
 
             <div class="bg-slate-800/40 border border-white/10 rounded-2xl p-5">
                 <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4">Ações Rápidas Ui</h3>
                 <div class="grid grid-cols-2 gap-2">
+                    <button id="btn-ai-clean-channel" class="p-2 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/40 text-[10px] uppercase font-bold border border-cyan-500/30 text-cyan-400 transition-all">Som Limpo</button>
                     <button id="btn-ai-hpf" class="p-2 rounded-lg bg-slate-700/50 hover:bg-slate-600 text-[10px] uppercase font-bold border border-white/5 transition-all">HPF 100Hz</button>
                     <button id="btn-ai-gate" class="p-2 rounded-lg bg-slate-700/50 hover:bg-slate-600 text-[10px] uppercase font-bold border border-white/5 transition-all">Gate Leve</button>
                     <button id="btn-ai-eq-mud" class="p-2 rounded-lg bg-slate-700/50 hover:bg-slate-600 text-[10px] uppercase font-bold border border-white/5 transition-all">Cortar 250Hz</button>
@@ -48,17 +49,13 @@
             <div class="px-6 py-4 bg-slate-800/80 border-bottom border-white/10 flex justify-between items-center">
                 <div class="flex items-center gap-3">
                     <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                    <span class="text-sm font-bold">SoundMaster AI</span>
+                    <span id="chat-status" class="text-sm font-bold">SoundMaster AI</span>
                 </div>
                 <button id="btn-clear-chat" class="text-[10px] uppercase tracking-wider font-bold text-slate-500 hover:text-white transition-colors">Limpar Conversa</button>
             </div>
             
             <div id="chat-messages" class="flex-1 overflow-y-auto p-6 space-y-4">
-                <div class="flex justify-start">
-                    <div class="max-w-[80%] bg-slate-800 border border-white/5 p-4 rounded-2xl rounded-tl-none text-sm leading-relaxed text-slate-200 shadow-lg">
-                        Olá! Sou o SoundMaster IA. Conte o problema do som e eu sugiro ajustes práticos diretamente na sua Ui24R.
-                    </div>
-                </div>
+                <!-- Bolhas injetadas via JS para evitar duplicidade -->
             </div>
 
             <div class="p-4 bg-slate-800/40 border-t border-white/10">

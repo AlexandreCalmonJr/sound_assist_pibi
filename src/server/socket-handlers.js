@@ -46,12 +46,20 @@ function registerSocketHandlers(io) {
                             socket.emit('mixer_log', `CMD SIMULADO: ${msg}`);
                         }},
                         master: {
-                            setFaderLevel: (v) => { mixerState.master.level = v; socket.emit('master_level', v); },
-                            changeFaderLevelDB: (v) => { mixerState.master.levelDb += v; socket.emit('master_level_db', mixerState.master.levelDb); },
+                            setFaderLevel: (v) => { 
+                                mixerState.master.level = v; 
+                                socket.emit('master_level', v); 
+                            },
+                            changeFaderLevelDB: (v) => { 
+                                mixerState.master.levelDb += v; 
+                                socket.emit('master_level_db', mixerState.master.levelDb); 
+                                mixer.conn.sendMessage(`SETD^m.value^${v}dB (delta)`);
+                            },
                             input: (ch) => ({
                                 changeFaderLevelDB: (v) => { 
                                     const idx = ch - 1;
                                     if (mixerState.inputs[idx]) mixerState.inputs[idx].levelDb += v;
+                                    mixer.conn.sendMessage(`SETD^i.${idx}.value^${v}dB (delta)`);
                                     socket.emit('mixer_log', `Volume Ch${ch} alterado em ${v}dB (Simulado)`);
                                 }
                             }),
@@ -94,19 +102,32 @@ function registerSocketHandlers(io) {
             }
         });
 
+        let masterDebounceTimeout = null;
         socket.on('set_master_level', (data) => {
             if (!mixer) {
                 socket.emit('mixer_status', { connected: false, msg: 'Conecte-se a mesa primeiro!' });
                 return;
             }
-            try {
-                const targetValue = Number(data.level);
-                mixer.master.setFaderLevel(targetValue);
-                socket.emit('mixer_status', { connected: true, msg: `Master ajustado para ${Math.round(targetValue * 100)}%` });
-            } catch (error) {
-                console.error('Erro ao ajustar master:', error.message);
-                socket.emit('mixer_status', { connected: true, msg: `Falha ao ajustar Master: ${error.message}` });
-            }
+            
+            // Debounce para não sobrecarregar a mesa em movimentos rápidos
+            if (masterDebounceTimeout) clearTimeout(masterDebounceTimeout);
+            
+            masterDebounceTimeout = setTimeout(() => {
+                try {
+                    const targetValue = Number(data.level);
+                    mixer.master.setFaderLevel(targetValue);
+                    
+                    // Se for simulado, logamos o comando bruto manualmente aqui para manter consistência
+                    if (mixer.isSimulated) {
+                        mixer.conn.sendMessage(`SETD^m.value^${targetValue}`);
+                    }
+                    
+                    socket.emit('mixer_status', { connected: true, msg: `Master ajustado para ${Math.round(targetValue * 100)}%` });
+                } catch (error) {
+                    console.error('Erro ao ajustar master:', error.message);
+                    socket.emit('mixer_status', { connected: true, msg: `Falha ao ajustar Master: ${error.message}` });
+                }
+            }, 50); // 50ms de debounce é suficiente para suavizar sem perder percepção de tempo real
         });
 
         socket.on('cut_feedback', (data) => {

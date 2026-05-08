@@ -21,14 +21,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inicialização de Estado
-session = SessionContext()
-ai_engine = AIEngine(session)
+# Inicialização de Estado (Dicionário de sessões por ID)
+sessions: Dict[str, SessionContext] = {}
+
+def get_session(session_id: str = "default") -> SessionContext:
+    if session_id not in sessions:
+        sessions[session_id] = SessionContext()
+    return sessions[session_id]
 
 # Modelos de Dados
 class ChatRequest(BaseModel):
     message: str
     analysis: Optional[Dict[str, Any]] = None
+    session_id: Optional[str] = "default"
 
 class AcousticRequest(BaseModel):
     volume: float = 1000
@@ -37,12 +42,13 @@ class AcousticRequest(BaseModel):
 
 @app.get("/")
 async def root():
-    return {"status": "online", "engine": "SoundMaster Pro AI"}
+    return {"status": "online", "engine": "SoundMaster Pro AI", "active_sessions": len(sessions)}
 
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
     try:
-        # Aqui o processamento já é assíncrono por natureza do FastAPI
+        session = get_session(request.session_id)
+        ai_engine = AIEngine(session)
         result = ai_engine.process(request.message, request.analysis)
         return result
     except Exception as e:
@@ -62,12 +68,14 @@ async def acoustic_analysis_endpoint(request: AcousticRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/diagnose")
-async def diagnose_endpoint():
+async def diagnose_endpoint(session_id: str = "default"):
     try:
+        session = get_session(session_id)
         patterns = AcousticProcessor.diagnose_patterns(session.analyses_history)
         return {
             "patterns": patterns,
-            "totalMeasurements": len(session.analyses_history)
+            "totalMeasurements": len(session.analyses_history),
+            "session_id": session_id
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

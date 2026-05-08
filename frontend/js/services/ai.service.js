@@ -100,15 +100,16 @@
         const controller = new AbortController();
         const timeoutId = setTimeout(function () { controller.abort(); }, 2000);
         try {
-            await fetch(AI_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: 'teste' }),
+            const response = await fetch('/api/ai/health', {
+                method: 'GET',
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
-            AppStore.setState({ aiStatus: 'online' });
-            return true;
+            if (response.ok) {
+                AppStore.setState({ aiStatus: 'online' });
+                return true;
+            }
+            throw new Error('Offline');
         } catch (_) {
             clearTimeout(timeoutId);
             AppStore.setState({ aiStatus: 'offline' });

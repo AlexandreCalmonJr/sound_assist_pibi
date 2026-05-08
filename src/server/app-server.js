@@ -82,12 +82,31 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
 
     // Proxy para IA (permite acesso mobile)
     expressApp.post('/api/ai', async (req, res) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
         try {
             const aiRes = await fetch('http://127.0.0.1:3002/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(req.body)
+                body: JSON.stringify(req.body),
+                signal: controller.signal
             });
+            clearTimeout(timeout);
+            const data = await aiRes.json();
+            res.json(data);
+        } catch (error) {
+            clearTimeout(timeout);
+            if (error.name === 'AbortError') {
+                res.status(504).json({ error: 'IA demorou demais para responder (timeout)' });
+            } else {
+                res.status(500).json({ error: 'IA offline' });
+            }
+        }
+    });
+
+    expressApp.get('/api/ai/health', async (req, res) => {
+        try {
+            const aiRes = await fetch('http://127.0.0.1:3002/');
             const data = await aiRes.json();
             res.json(data);
         } catch (error) {
@@ -96,16 +115,25 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     });
 
     expressApp.post('/api/acoustic_analysis', async (req, res) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
         try {
             const aiRes = await fetch('http://127.0.0.1:3002/acoustic_analysis', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(req.body)
+                body: JSON.stringify(req.body),
+                signal: controller.signal
             });
+            clearTimeout(timeout);
             const data = await aiRes.json();
             res.json(data);
         } catch (error) {
-            res.status(500).json({ error: 'Motor de Acústica offline' });
+            clearTimeout(timeout);
+            if (error.name === 'AbortError') {
+                res.status(504).json({ error: 'Motor de Acústica demorou demais (timeout)' });
+            } else {
+                res.status(500).json({ error: 'Motor de Acústica offline' });
+            }
         }
     });
 

@@ -40,11 +40,10 @@
                     <div class="flex-1 w-2 bg-slate-800 rounded-full relative overflow-hidden">
                         <div id="meter-ch-${i}" class="absolute bottom-0 w-full bg-cyan-500 h-[0%] transition-all duration-200"></div>
                     </div>
-                    <!-- Gain Knob -->
-                    <div class="w-8 h-16 relative">
+                    <!-- Gain Fader Container -->
+                    <div class="w-6 h-20 relative flex items-center justify-center bg-black/20 rounded-xl border border-white/5 overflow-hidden">
                          <input type="range" id="gain-ch-${i}" min="0" max="100" value="75" 
-                                class="absolute top-0 left-0 w-16 h-8 -rotate-90 origin-bottom-left accent-cyan-500 cursor-pointer"
-                                style="margin-top: 32px; width: 64px;">
+                                class="fader-vertical text-cyan-500" orient="vertical">
                     </div>
                     <!-- Nome Editável -->
                     <input type="text" id="name-ch-${i}" value="${chName}" 
@@ -57,7 +56,7 @@
             // Listeners
             $(`mute-ch-${i}`).onclick = () => {
                 const isMuted = AppStore.getState()[`mute_ch_${i}`];
-                MixerService.sendRaw(`SETD|c|${i-1}|mute|${isMuted ? 0 : 1}`);
+                MixerService.sendRaw(`SETD|c|${i - 1}|mute|${isMuted ? 0 : 1}`);
                 AppStore.setState({ [`mute_ch_${i}`]: !isMuted });
                 updateMuteUI(i, !isMuted);
             };
@@ -65,7 +64,7 @@
             $(`gain-ch-${i}`).oninput = (e) => {
                 const val = e.target.value / 100;
                 if (currentTarget === 'master') {
-                    MixerService.sendRaw(`SETD|c|${i-1}|mix|${val}`);
+                    MixerService.sendRaw(`SETD|c|${i - 1}|mix|${val}`);
                 } else if (currentTarget.startsWith('aux')) {
                     const auxIdx = parseInt(currentTarget.replace('aux', ''));
                     MixerService.setAuxLevel(i, auxIdx, val);
@@ -107,9 +106,9 @@
 
         container.innerHTML = '';
         const defaultNames = ['Pastor', 'Líder', 'Vocal 1', 'Vocal 2', 'Piano', 'Bateria', 'Guit 1', 'Guit 2', 'Side L', 'Side R'];
-        
+
         for (let i = 1; i <= 10; i++) {
-            const auxName = auxNamesMap[i] || defaultNames[i-1] || `AUX ${i}`;
+            const auxName = auxNamesMap[i] || defaultNames[i - 1] || `AUX ${i}`;
             const auxCard = document.createElement('div');
             auxCard.className = 'bg-slate-900/60 border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-4';
             auxCard.innerHTML = `
@@ -119,17 +118,19 @@
                     <span class="px-2 py-1 bg-green-900/40 text-green-400 text-[9px] font-bold rounded border border-green-500/20">POST-FADER</span>
                 </div>
                 
-                <div class="h-32 bg-black/40 rounded-xl p-4 flex flex-col gap-4 justify-center">
-                    <div class="flex flex-col gap-1">
-                        <span class="text-[9px] text-slate-500 uppercase font-black">Nível de Envio</span>
-                        <input type="range" id="aux-level-${i}" min="0" max="100" value="70" class="w-full accent-purple-500 cursor-pointer">
-                    </div>
-                    <div class="flex flex-col gap-1">
-                        <span class="text-[9px] text-slate-500 uppercase font-black">Delay de Saída (ms)</span>
+                <div class="h-20 bg-black/40 rounded-xl p-4 flex flex-col gap-4 items-center">
+                    <div class="flex flex-col gap-2 h-full items-center">
+                        <span class="text-[9px] text-slate-500 uppercase font-black">Nível Envio</span>
+                        <div class="flex-1 w-12 flex justify-center">
+                            <input type="range" id="aux-level-${i}" min="0" max="100" value="70" 
+                                   class="fader-vertical text-purple-500" orient="vertical">
+                        </div>
+                    <div class="flex flex-col gap-1 w-full">
+                        <span class="text-[9px] text-slate-500 uppercase font-black">Delay</span>
                         <input type="range" id="aux-delay-${i}" min="0" max="500" value="0" class="w-full accent-cyan-500 cursor-pointer">
                     </div>
                 </div>
-
+ 
                 <div class="flex gap-2">
                     <button id="btn-aux-mute-${i}" class="flex-1 py-2 bg-slate-800 text-slate-500 text-[10px] font-black rounded-lg border border-white/5">MUTE AUX</button>
                 </div>
@@ -138,7 +139,7 @@
 
             $(`aux-level-${i}`).oninput = (e) => {
                 const val = e.target.value / 100;
-                MixerService.sendRaw(`SETD|a|${i-1}|mix|${val}`);
+                MixerService.sendRaw(`SETD|a|${i - 1}|mix|${val}`);
             };
 
             $(`aux-delay-${i}`).oninput = (e) => {
@@ -163,22 +164,21 @@
 
         container.innerHTML = '';
         const fxTypes = ['HALL REVERB', 'ROOM REVERB', 'DIGITAL DELAY', 'CHORUS'];
-        
+
         for (let i = 1; i <= 4; i++) {
             const fxCard = document.createElement('div');
             fxCard.className = 'bg-slate-900/60 border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-6';
             fxCard.innerHTML = `
                 <div class="flex items-center justify-between">
                     <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">FX ${i}</span>
-                    <span class="text-[9px] font-bold text-slate-500">${fxTypes[i-1]}</span>
+                    <span class="text-[9px] font-bold text-slate-500">${fxTypes[i - 1]}</span>
                 </div>
                 
-                <div class="h-48 w-12 bg-black/40 rounded-xl mx-auto p-2 relative flex flex-col items-center justify-between">
+                <div class="h-64 w-16 bg-black/40 rounded-2xl mx-auto relative flex items-center justify-center border border-white/5 overflow-hidden">
                     <input type="range" id="fx-level-${i}" min="0" max="100" value="50" 
-                           class="w-32 h-8 -rotate-90 accent-indigo-500 cursor-pointer"
-                           style="margin-top: 80px;">
+                           class="fader-vertical text-indigo-500" orient="vertical">
                 </div>
-
+ 
                 <div class="text-center">
                     <span id="fx-val-${i}" class="text-xl font-black text-white">50</span>
                     <span class="text-[10px] text-slate-500 ml-1">%</span>
@@ -189,7 +189,7 @@
             $(`fx-level-${i}`).oninput = (e) => {
                 const val = e.target.value;
                 $(`fx-val-${i}`).innerText = val;
-                MixerService.sendRaw(`SETD|f|${i-1}|mix|${val/100}`);
+                MixerService.sendRaw(`SETD|f|${i - 1}|mix|${val / 100}`);
             };
         }
     }
@@ -217,7 +217,7 @@
             btn.onclick = () => {
                 const ch = select.value;
                 const type = btn.closest('.bg-slate-900\\/60, .bg-cyan-900\\/20').querySelector('h3').innerText;
-                
+
                 let opts = {};
                 if (type.includes('Barítono')) opts = { hpf: 120, low: -2 };
                 if (type.includes('Soprano')) opts = { hpf: 150, high: 2 };
@@ -225,7 +225,7 @@
 
                 MixerService.runCleanSoundPreset(ch, opts);
                 AppStore.addLog(`IA: Aplicando preset [${type}] ao canal ${ch}`);
-                
+
                 const originalText = btn.innerText;
                 btn.innerText = 'APLICADO ✓';
                 btn.classList.add('bg-green-600');
