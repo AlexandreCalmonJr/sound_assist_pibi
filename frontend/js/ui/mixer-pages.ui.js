@@ -101,6 +101,9 @@
         const container = $('mixer-aux-container');
         if (!container) return;
 
+        // Configura container para scroll horizontal conforme relatório
+        container.className = 'mixer-scroll-container pb-6';
+
         const savedNames = await MixerService.loadNames();
         const auxNamesMap = savedNames.aux || {};
 
@@ -110,32 +113,50 @@
         for (let i = 1; i <= 10; i++) {
             const auxName = auxNamesMap[i] || defaultNames[i - 1] || `AUX ${i}`;
             const auxCard = document.createElement('div');
-            auxCard.className = 'bg-slate-900/60 border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-4';
+            auxCard.className = 'bg-slate-900/60 border border-white/10 rounded-3xl p-6 shadow-2xl flex flex-col gap-6 min-w-[300px] min-h-[350px] flex-shrink-0 relative overflow-hidden';
             auxCard.innerHTML = `
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between border-b border-white/5 pb-4">
                     <input type="text" id="name-aux-${i}" value="${auxName}" 
-                           class="bg-transparent text-xs font-black uppercase tracking-widest text-slate-500 focus:outline-none focus:text-white transition-colors">
-                    <span class="px-2 py-1 bg-green-900/40 text-green-400 text-[9px] font-bold rounded border border-green-500/20">POST-FADER</span>
+                           class="bg-transparent text-sm font-black uppercase tracking-widest text-cyan-400 focus:outline-none focus:text-white transition-colors w-40">
+                    <span class="px-2 py-1 bg-green-900/30 text-green-400 text-[8px] font-black rounded-md border border-green-500/20 uppercase">Post-Fader</span>
                 </div>
                 
-                <div class="h-20 bg-black/40 rounded-xl p-4 flex flex-col gap-4 items-center">
-                    <div class="flex flex-col gap-2 h-full items-center">
-                        <span class="text-[9px] text-slate-500 uppercase font-black">Nível Envio</span>
-                        <div class="flex-1 w-12 flex justify-center">
+                <div class="flex-1 flex flex-col gap-4 items-center justify-between bg-black/40 rounded-2xl p-4 border border-white/5 shadow-inner">
+                    <div class="flex flex-col gap-2 w-full items-center">
+                        <span class="text-[9px] text-slate-500 uppercase font-black tracking-widest">Nível Envio</span>
+                        <div class="h-32 w-12 flex justify-center bg-black/20 rounded-xl py-3 border border-white/5 relative">
                             <input type="range" id="aux-level-${i}" min="0" max="100" value="70" 
-                                   class="fader-vertical text-purple-500" orient="vertical">
+                                   class="fader-vertical text-cyan-500" orient="vertical">
                         </div>
-                    <div class="flex flex-col gap-1 w-full">
-                        <span class="text-[9px] text-slate-500 uppercase font-black">Delay</span>
-                        <input type="range" id="aux-delay-${i}" min="0" max="500" value="0" class="w-full accent-cyan-500 cursor-pointer">
                     </div>
-                </div>
- 
-                <div class="flex gap-2">
-                    <button id="btn-aux-mute-${i}" class="flex-1 py-2 bg-slate-800 text-slate-500 text-[10px] font-black rounded-lg border border-white/5">MUTE AUX</button>
+
+                    <div class="w-full space-y-3">
+                        <div class="flex flex-col gap-1 w-full">
+                            <div class="flex justify-between items-center px-1">
+                                <span class="text-[8px] text-slate-500 uppercase font-black">Delay</span>
+                                <span class="text-[9px] text-cyan-500 font-bold">0ms</span>
+                            </div>
+                            <input type="range" id="aux-delay-${i}" min="0" max="500" value="0" class="w-full accent-cyan-500 cursor-pointer h-1.5 bg-slate-800 rounded-full appearance-none">
+                        </div>
+                        
+                        <button id="btn-aux-mute-${i}" class="w-full py-2.5 bg-slate-800 text-slate-500 text-[9px] font-black rounded-xl border border-white/5 hover:bg-red-900/20 hover:text-red-500 transition-all active:scale-95 uppercase tracking-tighter">Mute Auxiliar</button>
+                    </div>
                 </div>
             `;
             container.appendChild(auxCard);
+
+            $(`btn-aux-mute-${i}`).onclick = () => {
+                const stateKey = `mute_aux_${i}`;
+                const isMuted = AppStore.getState()[stateKey] || false;
+                
+                // Comando para a mesa: 'a' para auxiliar, i-1 para index 0-based
+                MixerService.sendRaw(`SETD|a|${i-1}|mute|${isMuted ? 0 : 1}`);
+                
+                AppStore.setState({ [stateKey]: !isMuted });
+                updateAuxMuteUI(i, !isMuted);
+                
+                AppStore.addLog(`AUX ${i}: ${!isMuted ? 'MUTADO' : 'ATIVO'}`);
+            };
 
             $(`aux-level-${i}`).oninput = (e) => {
                 const val = e.target.value / 100;
@@ -152,6 +173,21 @@
                 newNames.aux[i] = e.target.value;
                 MixerService.saveNames(newNames);
             };
+        }
+    }
+
+    function updateAuxMuteUI(auxIdx, isMuted) {
+        const btn = $(`btn-aux-mute-${auxIdx}`);
+        if (!btn) return;
+        
+        if (isMuted) {
+            btn.classList.remove('bg-slate-800', 'text-slate-500');
+            btn.classList.add('bg-red-600', 'text-white', 'border-red-400');
+            btn.innerText = 'MUTADO';
+        } else {
+            btn.classList.add('bg-slate-800', 'text-slate-500');
+            btn.classList.remove('bg-red-600', 'text-white', 'border-red-400');
+            btn.innerText = 'MUTE AUXILIAR';
         }
     }
 

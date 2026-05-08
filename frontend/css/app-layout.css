@@ -551,12 +551,12 @@
   }
 }
 
-/* --- Vertical Fader Fix --- */
+/* --- Vertical Fader Fix (Ergonomic Update) --- */
 .fader-vertical {
   writing-mode: vertical-lr;
   direction: rtl;
   appearance: slider-vertical;
-  width: 20px !important; /* Largura da área de toque */
+  width: 40px !important; /* Área de toque aumentada para 40px conforme relatório */
   height: 100% !important;
   cursor: pointer;
   background: transparent;
@@ -567,23 +567,29 @@
 
 /* Chrome/Edge Track styling */
 .fader-vertical::-webkit-slider-runnable-track {
-  width: 4px; /* Largura do trilho */
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
+  width: 6px; /* Trilho mais visível */
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
 }
 
-/* Chrome/Edge Custom Thumb styling */
+/* Chrome/Edge Custom Thumb styling - Ergonomia Pro */
 .fader-vertical::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  height: 12px; /* Altura do botão */
-  width: 20px;  /* Largura do botão */
-  background: currentColor;
-  border-radius: 3px;
-  box-shadow: 0 0 10px currentColor;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  margin-top: 0; /* Reseta desalinhamentos */
-  transform: translateX(0); /* Garante centralização */
+  height: 24px; /* Altura aumentada conforme relatório */
+  width: 32px;  /* Largura aumentada conforme relatório */
+  background: #22d3ee; /* Cyan-500 fixo para destaque */
+  border-radius: 4px;
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.6), 0 4px 8px rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  margin-top: 0;
+  transform: translateX(0);
+  transition: transform 0.1s ease;
+}
+
+.fader-vertical::-webkit-slider-thumb:active {
+  transform: scale(1.1);
+  background: #fff;
 }
 
 /* --- Responsive Adjustments --- */
