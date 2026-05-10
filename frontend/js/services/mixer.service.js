@@ -28,6 +28,20 @@
     }
 
     /**
+     * ✅ Novo: Converte valor linear de VU (0..1) para altura percentual baseada em dB logarítmico.
+     * Escala interna da mesa: 0 = -80dB, 1 = 0dB.
+     */
+    function vuToHeight(linearValue) {
+        const val = Number(linearValue) || 0;
+        const db = -80 + (val * 80); // Mapeia 0..1 para -80..0 dB
+        const minDb = -60; // Piso visual do medidor
+        const maxDb = 0;   // Teto visual
+        
+        const percent = ((db - minDb) / (maxDb - minDb)) * 100;
+        return _clamp(percent, 0, 100);
+    }
+
+    /**
      * Emite um evento para o servidor e registra no log.
      * @param {string} event
      * @param {Object} data
@@ -315,13 +329,20 @@
      */
     async function saveNames(names) {
         try {
+            // ✅ Sincroniza cada nome com a mesa física
+            if (names.channels) {
+                Object.keys(names.channels).forEach(ch => {
+                    setChannelName(ch, names.channels[ch]);
+                });
+            }
+
             const res = await fetch('/api/mixer/names', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(names)
             });
             AppStore.setState({ mixerNames: names });
-            AppStore.addLog('Etiquetas do mixer salvas com sucesso.');
+            AppStore.addLog('Etiquetas do mixer salvas e sincronizadas.');
             return await res.json();
         } catch (err) {
             console.error('[MixerService] Erro ao salvar nomes:', err);
@@ -362,6 +383,23 @@
         return _emit('fade_channel', { channel: ch, level: level, time: time }, 'Fade Canal ' + ch + ' iniciado...');
     }
 
+    function setPhantomPower(hwInput, enabled) {
+        return _emit('set_phantom_power', { input: Number(hwInput), enabled: !!enabled }, 
+            'Phantom Power (48V) na entrada ' + hwInput + ': ' + (enabled ? 'ON' : 'OFF'));
+    }
+
+    function setHwGain(hwInput, gain) {
+        const val = _clamp(gain, 0, 1);
+        return _emit('set_hw_gain', { input: Number(hwInput), val: val }, 
+            'Ganho de Hardware na entrada ' + hwInput + ' ajustado.');
+    }
+
+    function setChannelName(channel, name) {
+        const ch = _validateChannel(channel);
+        const cleanName = String(name || '').substring(0, 20);
+        return _emit('set_channel_name', { channel: ch, name: cleanName });
+    }
+
     // -------------------------------------------------------------------------
     // Exportação
     // -------------------------------------------------------------------------
@@ -395,6 +433,10 @@
         showControl,
         automixControl,
         fadeMaster,
-        fadeChannel
+        fadeChannel,
+        setPhantomPower,
+        setHwGain,
+        setChannelName,
+        vuToHeight
     };
 })();

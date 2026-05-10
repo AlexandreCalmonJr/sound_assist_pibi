@@ -156,13 +156,21 @@ socket.on('mixer_status', (data) => {
     updateConnectivityUI(data.connected);
 });
 
+function vuToHeight(linearValue) {
+    const val = Number(linearValue) || 0;
+    const db = -80 + (val * 80); // 0..1 -> -80..0 dB
+    const minDb = -60, maxDb = 0;
+    const percent = ((db - minDb) / (maxDb - minDb)) * 100;
+    return Math.min(100, Math.max(0, percent));
+}
+
 // Listener de VU Meters
 socket.on('vu_data', (data) => {
     if (data && data.master) {
         const vuMaster = document.getElementById('vu-master');
         if (vuMaster) {
-            // master.vuPostFader é o valor linear 0-1
-            const height = (data.master.vuPostFader || 0) * 100;
+            // ✅ Correção Auditoria: Usar escala logarítmica (dB)
+            const height = vuToHeight(data.master.vuPostFader || 0);
             vuMaster.style.height = `${height}%`;
         }
     }

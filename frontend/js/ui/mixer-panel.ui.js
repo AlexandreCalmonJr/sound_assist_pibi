@@ -365,8 +365,22 @@
 
         AppStore.subscribe('vuData', function (data) {
             if (data && data.master && els.meterMaster) {
-                const height = (data.master.vuPostFader || 0) * 100;
+                // ✅ Correção Auditoria: Usar escala logarítmica (dB) para altura do VU
+                const height = MixerService.vuToHeight(data.master.vuPostFader || 0);
                 els.meterMaster.style.height = height + '%';
+            }
+            if (data && data.channels) {
+                for (let i = 1; i <= 24; i++) {
+                    const meter = document.getElementById(`meter-ch-${i}`);
+                    if (meter) {
+                        const chData = data.channels[i];
+                        if (chData) {
+                            // ✅ Correção Auditoria: Usar escala logarítmica (dB)
+                            const height = MixerService.vuToHeight(chData.vuPostFader || 0);
+                            meter.style.height = height + '%';
+                        }
+                    }
+                }
             }
         });
 

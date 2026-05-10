@@ -320,7 +320,8 @@
             if (meter) {
                 const chData = data.channels[i];
                 if (chData) {
-                    const height = (chData.vuPostFader || 0) * 100;
+                    // ✅ Correção Auditoria: Usar escala logarítmica (dB)
+                    const height = MixerService.vuToHeight(chData.vuPostFader || 0);
                     meter.style.height = height + '%';
                 }
             }

@@ -1,4 +1,4 @@
-const { Easings } = require('soundcraft-ui-connection');
+const { Easings, vuValueToDB } = require('soundcraft-ui-connection');
 
 function createMixerActions(getMixer) {
     function clamp(value, min, max) {
@@ -109,12 +109,14 @@ function createMixerActions(getMixer) {
     }
 
     function fadeMaster(level, time) {
-        getMixer().master.fadeTo(clamp(level, 0, 1), time, Easings.EaseInOut);
+        // ✅ Correção Auditoria: fadeTo aceita apenas 2 argumentos (valor e tempo)
+        getMixer().master.fadeTo(clamp(level, 0, 1), time);
         return `Fade do Master para ${Math.round(level * 100)}% em ${time}ms iniciado.`;
     }
 
     function fadeChannel(channel, level, time) {
-        getMixer().input(channel).fadeTo(clamp(level, 0, 1), time, Easings.EaseInOut);
+        // ✅ Correção Auditoria: fadeTo aceita apenas 2 argumentos
+        getMixer().input(channel).fadeTo(clamp(level, 0, 1), time);
         return `Fade do canal ${channel} para ${Math.round(level * 100)}% em ${time}ms iniciado.`;
     }
 
@@ -128,16 +130,25 @@ function createMixerActions(getMixer) {
         return `Parâmetro ${param} do processador de efeito ${fx} ajustado para ${Math.round(value * 100)}%.`;
     }
 
-    function setHwGain(input, gain) {
-        getMixer().hw(input).setGain(clamp(gain, 0, 1));
-        return `Ganho de Hardware (Pré-amp) da entrada ${input} ajustado para ${Math.round(gain * 100)}%.`;
+    function setHwGain(hwInput, gain) {
+        // ✅ Correção Auditoria: hw() refere-se à ENTRADA FÍSICA (Hardware Input), não ao canal de software.
+        // O valor 0..1 mapeia para o range total de ganho da mesa (-6 a +57dB)
+        getMixer().hw(hwInput).setGain(clamp(gain, 0, 1));
+        return `Ganho de Hardware (Entrada Física ${hwInput}) ajustado para ${Math.round(gain * 100)}%.`;
     }
 
-    function setPhantom(input, enabled) {
-        const hw = getMixer().hw(input);
+    function setPhantom(hwInput, enabled) {
+        const hw = getMixer().hw(hwInput);
         if (enabled) hw.phantomOn();
         else hw.phantomOff();
-        return `Phantom Power (48V) da entrada ${input} ${enabled ? 'LIGADO ⚠️' : 'DESLIGADO'}.`;
+        return `Phantom Power (48V) da Entrada Física ${hwInput} ${enabled ? 'LIGADO ⚠️' : 'DESLIGADO'}.`;
+    }
+
+    function setChannelName(channel, name) {
+        const input = getMixer().input(channel);
+        const cleanName = name.substring(0, 20); // Máximo 20 caracteres conforme doc
+        input.setName(cleanName);
+        return `Nome do canal ${channel} alterado para "${cleanName}" e sincronizado com a mesa.`;
     }
 
     function setMonitorVolume(target, level) {
@@ -247,14 +258,13 @@ function createMixerActions(getMixer) {
 
     function automixControl(action, value = null) {
         const am = getMixer().automix;
-        switch (action) {
-            case 'enable_a': am.groups.a.enable(); break;
-            case 'disable_a': am.groups.a.disable(); break;
-            case 'enable_b': am.groups.b.enable(); break;
-            case 'disable_b': am.groups.b.disable(); break;
-            case 'set_response': am.setResponseTimeMs(clamp(value, 20, 4000)); break;
-            default: return `Ação Automix desconhecida: ${action}`;
-        }
+        const groupKey = action.endsWith('_a') ? 'a' : 'b';
+        const group = am.groups[groupKey];
+
+        if (action.startsWith('enable')) group.enable();
+        else if (action.startsWith('disable')) group.disable();
+        else if (action === 'set_response') am.setResponseTimeMs(clamp(value, 20, 4000));
+        
         return `Automix: comando ${action} executado.`;
     }
 
@@ -301,9 +311,11 @@ function createMixerActions(getMixer) {
         const osc = mixer.hw().oscillator();
         if (enabled) osc.enable();
         else osc.disable();
-        osc.setType(type === 0 ? 'sine' : (type === 1 ? 'pink' : 'white'));
+        
+        const typeStr = type === 0 ? 'sine' : (type === 1 ? 'pink' : 'white');
+        osc.setType(typeStr);
         osc.setFaderLevel(clamp(level, -100, 0));
-        return `Gerador de ruído ${enabled ? 'ligado' : 'desligado'}.`;
+        return `Gerador de ruído (${typeStr}) ${enabled ? 'ligado' : 'desligado'}.`;
     }
 
     function setDelay(target, id, ms) {
@@ -388,6 +400,7 @@ function createMixerActions(getMixer) {
                 getMixer().input(ch).aux(cmd.aux || 1).setPan(clamp(cmd.val || 0.5, 0, 1));
                 return `Pan do AUX ${cmd.aux} (Canal ${ch}) ajustado para ${cmd.val}`;
             }
+            case 'set_channel_name': return setChannelName(cmd.channel || 1, cmd.name || '');
             case 'set_fx_level': return setFxLevel(cmd.channel || 1, cmd.fx || 1, cmd.level || 0);
             case 'set_fx_post': return setFxPost(cmd.channel || 1, cmd.fx || 1, cmd.enabled !== 0);
             case 'set_fx_bpm': return setFxBpm(cmd.fx || 1, cmd.val || 120);
@@ -423,7 +436,8 @@ function createMixerActions(getMixer) {
     return {
         applyChannelCompressor, applyChannelGate, applyChannelHpf, applyEqCut,
         applyOscillator, ensureMixer, executeMixerCommand, setAfs,
-        setAuxLevel, setFxLevel, setDelay, runCleanSoundPreset
+        setAuxLevel, setFxLevel, setDelay, runCleanSoundPreset,
+        setPhantom, setChannelName
     };
 }
 
