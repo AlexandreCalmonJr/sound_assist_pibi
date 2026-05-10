@@ -271,6 +271,26 @@ function registerSocketHandlers(io, appDataDir = './logs') {
                 mixer.player.state$.subscribe(state => socket.emit('player_status', { state }));
                 mixer.player.track$.subscribe(track => socket.emit('player_track', { track }));
 
+                // ✅ Correção Auditoria: Sincronização de Shows, Snapshots e Cues
+                mixer.shows.currentShow$.subscribe(show => socket.emit('show_status', { show }));
+                mixer.shows.currentSnapshot$.subscribe(snapshot => socket.emit('snapshot_status', { snapshot }));
+                mixer.shows.currentCue$.subscribe(cue => socket.emit('cue_status', { cue }));
+
+                // ✅ Correção Auditoria: Sincronização de nomes (para detectar alterações externas)
+                for (let i = 1; i <= 24; i++) {
+                    mixer.input(i).name$.subscribe(name => socket.emit('channel_name_update', { channel: i, name }));
+                }
+
+                // ✅ Correção Auditoria: Sincronização de Mute Groups
+                [1, 2, 3, 4, 5, 6, 'fx', 'all'].forEach(groupId => {
+                    mixer.muteGroup(groupId).state$.subscribe(state => socket.emit('mute_group_state', { groupId, enabled: !!state }));
+                });
+
+                // ✅ Correção Auditoria: Sincronização de Channel Sync
+                mixer.channelSync.getSelectedChannel('SYNC_ID').subscribe(selection => {
+                    socket.emit('channel_selected_external', selection);
+                });
+
             } catch (error) {
                 logger.error(socket.id, 'MIXER_CONNECT_ERROR', { error: error.message });
                 socket.emit('mixer_status', { connected: false, msg: `Erro de conexao: ${error.message}` });

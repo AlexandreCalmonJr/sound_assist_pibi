@@ -66,6 +66,49 @@
             AppStore.setState({ deviceInfo: info });
         });
 
+        _socket.on('automix_state', function (data) {
+            AppStore.setState({ automix: Object.assign({}, AppStore.getState().automix || {}, { [data.group]: data.enabled }) });
+        });
+
+        _socket.on('automix_response_time', function (data) {
+            AppStore.setState({ automixResponseTime: data.ms });
+        });
+
+        _socket.on('player_status', function (data) {
+            AppStore.setState({ playerState: data.state });
+        });
+
+        _socket.on('player_track', function (data) {
+            AppStore.setState({ playerTrack: data.track });
+        });
+
+        _socket.on('show_status', function (data) {
+            AppStore.setState({ currentShow: data.show });
+        });
+
+        _socket.on('snapshot_status', function (data) {
+            AppStore.setState({ currentSnapshot: data.snapshot });
+        });
+
+        _socket.on('cue_status', function (data) {
+            AppStore.setState({ currentCue: data.cue });
+        });
+
+        _socket.on('channel_name_update', function (data) {
+            const names = Object.assign({}, AppStore.getState().mixerNames || { channels: {}, aux: {} });
+            names.channels[data.channel] = data.name;
+            AppStore.setState({ mixerNames: names });
+        });
+
+        _socket.on('mute_group_state', function (data) {
+            const mg = Object.assign({}, AppStore.getState().muteGroups || {}, { [data.groupId]: data.enabled });
+            AppStore.setState({ muteGroups: mg });
+        });
+
+        _socket.on('channel_selected_external', function (selection) {
+            AppStore.addLog(`Canal selecionado externamente: ${selection.type} ${selection.number}`);
+        });
+
         _socket.on('feedback_cut_success', function (data) {
             if (data && data.msg) AppStore.addLog(data.msg);
         });

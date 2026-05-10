@@ -190,6 +190,43 @@ socket.on('recorder_status', (data) => {
     }
 });
 
+// ✅ Novo: Sincronização de Shows e Snapshots no Mobile
+socket.on('show_status', (data) => {
+    appendMobileLog(`Show carregado: ${data.show}`);
+});
+socket.on('snapshot_status', (data) => {
+    appendMobileLog(`Snapshot atual: ${data.snapshot}`);
+});
+
+// ✅ Novo: Sincronização de nomes (etiquetas) no Mobile
+socket.on('channel_name_update', (data) => {
+    // Se estivermos vendo este canal no mobileTargetChannel, poderíamos atualizar um label de nome.
+    // Por enquanto apenas logamos.
+    appendMobileLog(`Canal ${data.channel} renomeado para: ${data.name}`);
+});
+
+// ✅ Novo: Sincronização de Mute Groups no Mobile
+socket.on('mute_group_state', (data) => {
+    if (data.enabled) {
+        appendMobileLog(`Mute Group ${data.groupId} ATIVADO.`);
+        if (data.groupId === 'all') {
+            document.body.classList.add('panic-active');
+        }
+    } else {
+        if (data.groupId === 'all') {
+            document.body.classList.remove('panic-active');
+        }
+    }
+});
+
+// ✅ Novo: Sincronização de seleção externa de canal
+socket.on('channel_selected_external', (data) => {
+    if (data.type === 'i') {
+        if (mobileTargetChannel) mobileTargetChannel.value = data.number;
+        appendMobileLog(`Seguindo seleção externa: Canal ${data.number}`);
+    }
+});
+
 // Initialize Router
 MobileRouter.init();
 

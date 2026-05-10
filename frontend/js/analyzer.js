@@ -445,24 +445,73 @@ async function stopAnalyzer() {
 function formatDb(value) {
     return value.toFixed(1);
 }
-
 function getBandAverage(freqData, sampleRate, minHz, maxHz, fftSize) {
     let sum = 0;
     let count = 0;
-    
-    // ✅ Correção Auditoria: Ponderação por largura de banda (oitavas)
-    // Evita que bandas com mais bins (agudos) tenham médias artificialmente diluídas
-    const bandwidthInOctaves = Math.log2(maxHz / minHz);
-    const weightPerBin = 1.0 / bandwidthInOctaves;
+    const hzPerBin = sampleRate / fftSize;
 
     for (let i = 0; i < freqData.length; i++) {
-        const freq = i * sampleRate / fftSize;
+        const freq = i * hzPerBin;
         if (freq >= minHz && freq < maxHz) {
-            sum += freqData[i] * weightPerBin;
-            count += weightPerBin;
+            // ✅ Correção Auditoria: Ponderação Logarítmica (1/f)
+            const weight = 1.0 / Math.max(freq, 20);
+            sum += freqData[i] * weight;
+            count += weight;
         }
     }
     return count ? sum / count : -100;
+}
+
+/**
+ * ✅ Correção Auditoria: Ponderação-A (A-Weighting) conforme IEC 61672:2003.
+ * Essencial para medições de SPL que refletem a audição humana.
+ */
+function getAWeighting(freq) {
+    if (freq < 1) return -100;
+    const f2 = freq * freq;
+    const f4 = f2 * f2;
+    
+    const rA = (Math.pow(12194, 2) * f4) /
+        ((f2 + Math.pow(20.6, 2)) * Math.sqrt((f2 + Math.pow(107.7, 2)) * (f2 + Math.pow(737.9, 2))) * (f2 + Math.pow(12194, 2)));
+    
+    return 20 * Math.log10(rA) + 2.00;
+}
+
+/**
+ * ✅ Novo: Calcula RMS Ponderado (A-Weighted) e Crest Factor
+ */
+function calculateAcousticMetrics(timeData, freqData, sampleRate) {
+    let sumSqA = 0;
+    let peak = 0;
+    const hzPerBin = sampleRate / (freqData.length * 2);
+
+    // 1. RMS Ponderado via Domínio da Frequência
+    for (let i = 0; i < freqData.length; i++) {
+        const freq = i * hzPerBin;
+        const db = freqData[i];
+        const weight = getAWeighting(freq);
+        const weightedDb = db + weight;
+        
+        // Converte dB para potência linear (10^(dB/10))
+        sumSqA += Math.pow(10, weightedDb / 10);
+    }
+    
+    // 2. Pico Real (Domínio do Tempo) para Clipping e Crest Factor
+    for (let i = 0; i < timeData.length; i++) {
+        const val = Math.abs(timeData[i]);
+        if (val > peak) peak = val;
+    }
+
+    const rmsA = 10 * Math.log10(sumSqA + 1e-12);
+    const peakDb = 20 * Math.log10(peak + 1e-12);
+    const crestFactor = peakDb - rmsA;
+
+    return {
+        rmsA: rmsA,
+        peakDb: peakDb,
+        crestFactor: crestFactor,
+        isClipping: peak > 0.98
+    };
 }
 
 function formatBandLabel(hz) {

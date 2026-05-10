@@ -12,12 +12,13 @@ class AcousticProcessor:
 
     @staticmethod
     def classify_room(rt60):
-        # ✅ Correção Auditoria: Gradação mais justa para igrejas e salas maiores
+        # ✅ Correção Auditoria: Gradação mais justa e precisa para grandes espaços (Igrejas/Auditórios)
         if rt60 < 0.3: return {"status": "Sala morta", "desc": "Excesso de absorção. O som pode parecer sem vida.", "rating": 2}
-        if 0.3 <= rt60 <= 0.8: return {"status": "Ideal para Voz", "desc": "Inteligibilidade máxima para pregação.", "rating": 5}
-        if 0.8 < rt60 <= 1.6: return {"status": "Ideal para Música", "desc": "Boa sustentação para louvor congregacional.", "rating": 4}
-        if 1.6 < rt60 <= 2.5: return {"status": "Desafiadora", "desc": "Sala reverberante. Requer cuidado com posicionamento de caixas.", "rating": 3}
-        return {"status": "Crítico", "desc": "Baixa inteligibilidade. Requer tratamento acústico ou eletrônico agressivo.", "rating": 1}
+        if 0.3 <= rt60 <= 0.8: return {"status": "Ideal para Voz", "desc": "Inteligibilidade máxima para pregação e palestras.", "rating": 5}
+        if 0.8 < rt60 <= 1.6: return {"status": "Ideal para Música", "desc": "Boa sustentação harmônica para louvor congregacional.", "rating": 4}
+        if 1.6 < rt60 <= 2.4: return {"status": "Desafiadora", "desc": "Sala reverberante. Requer cuidado extremo com o volume e delays.", "rating": 3}
+        if 2.4 < rt60 <= 3.2: return {"status": "Muito Reverberante", "desc": "Baixa inteligibilidade. Considere tratamento acústico nas superfícies paralelas.", "rating": 2}
+        return {"status": "Crítico", "desc": "Ambiente extremamente reflexivo. Inteligibilidade comprometida.", "rating": 1}
 
     @staticmethod
     def estimate_sti(rt60, snr=25):
@@ -31,15 +32,18 @@ class AcousticProcessor:
         return round(max(0, min(1, sti)), 2)
 
     @staticmethod
-    def calculate_critical_distance(volume, rt60, q=2):
+    def calculate_critical_distance(volume, rt60, q=None):
         """
         Calcula a Distância Crítica (Dc) - onde o som direto é igual ao reverberante.
-        q=2 para caixas direcionais (padrão)
-        q=5 para caixas de alta diretividade
-        q=8-12 para Line Arrays ou caixas cardioides
+        Parâmetros de Q (Diretividade):
+        - Q=2: Caixas convencionais / Point Source
+        - Q=5: Caixas de alta diretividade (Horns estreitos)
+        - Q=8-12: Line Arrays ou Colunas de som
         """
         if rt60 <= 0: return 0
-        dc = 0.057 * math.sqrt((q * volume) / rt60)
+        # Q default se não fornecido
+        q_val = q if q is not None else 2
+        dc = 0.057 * math.sqrt((q_val * volume) / rt60)
         return round(dc, 2)
 
     @staticmethod
