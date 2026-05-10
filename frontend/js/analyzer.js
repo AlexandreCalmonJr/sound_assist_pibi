@@ -103,8 +103,6 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
                 console.log('[Analyzer] Diagnóstico Manual disparado.');
             });
         }
-            });
-        }
     }
 
     function _initAutomixControls() {
