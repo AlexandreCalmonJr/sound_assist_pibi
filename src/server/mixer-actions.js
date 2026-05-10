@@ -114,13 +114,18 @@ function createMixerActions(getMixer) {
 
     function setDelay(target, id, ms) {
         const mixer = getMixer();
-        const delayValue = clamp(ms, 0, 500);
+        const delayValue = clamp(ms, 0, 500); // Master/Aux 500ms, Input 250ms
+        
         if (target === 'master') {
-            mixer.master.setDelay(delayValue);
+            mixer.master.setDelayL(delayValue);
+            mixer.master.setDelayR(delayValue);
         } else if (target === 'aux') {
             mixer.aux(id).setDelay(delayValue);
+        } else if (target === 'channel' || target === 'input') {
+            const chDelay = clamp(ms, 0, 250);
+            mixer.input(id || 1).setDelay(chDelay);
         }
-        return `Delay de ${delayValue}ms aplicado no ${target} ${id || ''}.`;
+        return `Delay de ${ms}ms solicitado para ${target} ${id || ''}.`;
     }
 
     function executeMixerCommand(cmd) {
@@ -160,11 +165,36 @@ function createMixerActions(getMixer) {
                 mixer.input(ch).setFaderLevel(clamp(cmd.level || 0.7, 0, 1));
                 return `Canal ${ch} ajustado para ${Math.round((cmd.level || 0.7) * 100)}%`;
             }
+            case 'toggle_dim': {
+                mixer.master.toggleDim();
+                return 'Função DIM alternada no Master.';
+            }
+            case 'set_master_pan': {
+                mixer.master.setPan(clamp(cmd.val || 0.5, 0, 1));
+                return `Pan do Master ajustado para ${cmd.val}`;
+            }
+            case 'set_channel_pan': {
+                const ch = cmd.channel || cmd.ch || 1;
+                mixer.input(ch).setPan(clamp(cmd.val || 0.5, 0, 1));
+                return `Pan do Canal ${ch} ajustado para ${cmd.val}`;
+            }
+            case 'toggle_solo': {
+                const ch = cmd.channel || cmd.ch || 1;
+                mixer.input(ch).toggleSolo();
+                return `Solo do Canal ${ch} alternado.`;
+            }
+            case 'fade_master': {
+                mixer.master.fadeTo(clamp(cmd.level || 0, 0, 1), cmd.time || 2000);
+                return `Fazendo fade do Master para ${cmd.level} em ${cmd.time || 2000}ms`;
+            }
             case 'set_oscillator': return applyOscillator(cmd.enabled !== 0, cmd.type, cmd.level);
             case 'set_aux_level': return setAuxLevel(cmd.channel || 1, cmd.aux || 1, cmd.level || 0);
             case 'set_fx_level': return setFxLevel(cmd.channel || 1, cmd.fx || 1, cmd.level || 0);
             case 'run_clean_sound_preset': return runCleanSoundPreset(cmd.channel || 1, cmd);
-            case 'set_delay': return setDelay(cmd.target || 'aux', cmd.aux || 1, cmd.ms || 0);
+            case 'set_delay': {
+                const id = cmd.channel || cmd.ch || cmd.aux || cmd.id || 1;
+                return setDelay(cmd.target || 'aux', id, cmd.ms || 0);
+            }
             case 'set_room_profile': {
                 return `Perfil acústico alterado para: ${cmd.profile}`;
             }
