@@ -247,6 +247,8 @@ let rt60Bands = {
     '1k': { hz: 1000, filter: null, analyser: null, data: null, decay: [] },
     '4k': { hz: 4000, filter: null, analyser: null, data: null, decay: [] }
 };
+let rt60BackgroundLevel = -60;
+let rt60BackgroundSamples = 0;
 
 function setupMultibandFilters() {
     if (!audioCtx || !source) return;
@@ -495,9 +497,16 @@ function analyzeMic() {
     const rmsDb = 20 * Math.log10(rms + 1e-6);
 
     // Lógica de Medição de RT60 (Multibanda Schroeder-inspired)
-    if (isMeasuringRT60) {
+        // ✅ Correção Auditoria: Calibração de ruído de fundo (primeiros 30 frames ~500ms)
+        if (rt60StartTime === 0 && rt60BackgroundSamples < 30) {
+            rt60BackgroundLevel = Math.max(rt60BackgroundLevel, rmsDb);
+            rt60BackgroundSamples++;
+            return;
+        }
+
         let isImpulseDetected = false;
-        
+        const impulseThreshold = rt60BackgroundLevel + 12; // Threshold dinâmico
+
         // Coleta RMS de todas as bandas
         Object.keys(rt60Bands).forEach(key => {
             let band = rt60Bands[key];
@@ -508,23 +517,24 @@ function analyzeMic() {
             let bandRmsDb = 20 * Math.log10(Math.sqrt(sq / band.data.length) + 1e-6);
             
             if (rt60StartTime === 0) {
-                if (bandRmsDb > -20) isImpulseDetected = true;
+                // Impulso detectado se ultrapassar o threshold dinâmico
+                if (bandRmsDb > impulseThreshold) isImpulseDetected = true;
             } else {
                 band.decay.push(bandRmsDb);
             }
         });
 
         if (rt60StartTime === 0) {
-            if (isImpulseDetected || rmsDb > -20) {
+            if (isImpulseDetected || rmsDb > impulseThreshold) {
                 rt60StartTime = Date.now();
                 Object.keys(rt60Bands).forEach(k => rt60Bands[k].decay = []);
             }
         } else {
-            const frames = rt60Bands['1k'].decay.length;
-            const progress = (frames / 60) * 100;
+            const elapsed = Date.now() - rt60StartTime;
+            const progress = Math.min(100, (elapsed / 3000) * 100); // ✅ Correção Auditoria: Baseado em tempo real
             document.getElementById('rt60-progress').style.width = `${progress}%`;
             
-            if (frames > 60) { // ~1s de captura
+            if (elapsed > 3000) { // 3 segundos reais de captura
                 isMeasuringRT60 = false;
                 document.getElementById('rt60-overlay').classList.add('hidden');
                 
@@ -625,6 +635,8 @@ function startRT60Measurement() {
     overlay.classList.remove('hidden');
     isMeasuringRT60 = true;
     rt60StartTime = 0;
+    rt60BackgroundLevel = -60;
+    rt60BackgroundSamples = 0;
     Object.keys(rt60Bands).forEach(k => rt60Bands[k].decay = []);
     
     appendMobileLog('Iniciando medição de RT60. Faça um estalo ou barulho seco.');

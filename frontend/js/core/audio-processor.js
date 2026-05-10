@@ -14,6 +14,11 @@ class SoundMasterProcessor extends AudioWorkletProcessor {
         for (let i = 0; i < this._bufferSize; i++) {
             this._hannWindow[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (this._bufferSize - 1)));
         }
+
+        // ✅ Correção Auditoria: Acumular amostras para reduzir o volume de postMessage (throttle nativo)
+        this._accBufferSize = 4096;
+        this._accBuffer = new Float32Array(this._accBufferSize);
+        this._accIdx = 0;
     }
 
     process(inputs, outputs, parameters) {
@@ -21,11 +26,18 @@ class SoundMasterProcessor extends AudioWorkletProcessor {
         if (input.length > 0) {
             const inputChannel = input[0];
             
-            // Envia o áudio bruto imediatamente (Essencial para captura de RT60 e decaimento real)
-            this.port.postMessage({
-                type: 'raw-data',
-                buffer: inputChannel
-            });
+            // ✅ Correção Auditoria: Envia áudio bruto acumulado em vez de bloco a bloco (128 samples)
+            // Isso reduz de ~375 msgs/sec para ~11 msgs/sec, melhorando muito a performance.
+            for (let i = 0; i < inputChannel.length; i++) {
+                this._accBuffer[this._accIdx++] = inputChannel[i];
+                if (this._accIdx >= this._accBufferSize) {
+                    this.port.postMessage({
+                        type: 'raw-data',
+                        buffer: this._accBuffer.slice()
+                    });
+                    this._accIdx = 0;
+                }
+            }
 
             for (let i = 0; i < inputChannel.length; i++) {
                 this._buffer[this._writeIndex] = inputChannel[i];

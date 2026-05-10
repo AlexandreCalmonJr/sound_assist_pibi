@@ -20,6 +20,7 @@ window.SoundMasterAnalyzerInitialized = true;
 // Analisador de Áudio em Tempo Real (Web Audio API)
 let audioCtx;
 let analyser;
+let analyserFast; // Novo: Analisador rápido para detecção técnica
 let source;
 let stream;
 let isAnalyzing = false;
@@ -58,7 +59,12 @@ class FeedbackDetector {
         if (recentPeaks.length < this.peakHistory.length) return false;
 
         const avgHz = recentPeaks.reduce((s, p) => s + p.hz, 0) / recentPeaks.length;
-        const allSimilarFreq = recentPeaks.every(p => Math.abs(p.hz - avgHz) < 50);
+        
+        // ✅ Correção Auditoria: Tolerância proporcional (razão de freq) em vez de absoluta (Hz)
+        // ±1/6 de oitava é musicalmente preciso para identificar a mesma nota/ressonância
+        const allSimilarFreq = recentPeaks.every(p => 
+            Math.abs(Math.log2(p.hz / avgHz)) < 1/6
+        );
         const allAboveThreshold = recentPeaks.every(p => p.db > threshold);
         
         return allSimilarFreq && allAboveThreshold;
@@ -336,6 +342,14 @@ async function startAnalyzer() {
             audioWorkletNode.connect(silentGain);
             silentGain.connect(audioCtx.destination);
         }
+
+        // ✅ Novo: Analisador rápido para detecção de feedback (baixa latência)
+        analyserFast = audioCtx.createAnalyser();
+        analyserFast.fftSize = 4096;
+        analyserFast.smoothingTimeConstant = 0.1;
+        analyserFast.minDecibels = -100;
+        analyserFast.maxDecibels = -10;
+        source.connect(analyserFast);
         
         isAnalyzing = true;
         
@@ -389,6 +403,7 @@ async function stopAnalyzer() {
 
     // Limpeza de nós específicos
     analyser = null;
+    analyserFast = null;
     source = null;
     audioWorkletNode = null;
     if (pinkNoiseNode) {
@@ -428,14 +443,20 @@ function formatDb(value) {
     return value.toFixed(1);
 }
 
-function getBandAverage(freqData, sampleRate, minHz, maxHz) {
+function getBandAverage(freqData, sampleRate, minHz, maxHz, fftSize) {
     let sum = 0;
     let count = 0;
+    
+    // ✅ Correção Auditoria: Ponderação por largura de banda (oitavas)
+    // Evita que bandas com mais bins (agudos) tenham médias artificialmente diluídas
+    const bandwidthInOctaves = Math.log2(maxHz / minHz);
+    const weightPerBin = 1.0 / bandwidthInOctaves;
+
     for (let i = 0; i < freqData.length; i++) {
-        const freq = i * sampleRate / analyser.fftSize;
+        const freq = i * sampleRate / fftSize;
         if (freq >= minHz && freq < maxHz) {
-            sum += freqData[i];
-            count += 1;
+            sum += freqData[i] * weightPerBin;
+            count += weightPerBin;
         }
     }
     return count ? sum / count : -100;
@@ -455,7 +476,11 @@ function getPinkReference(freq, referenceDb) {
 
 function buildPinkNoiseReport(avgSpectrum, sampleRate) {
     const bands = [63, 125, 250, 500, 1000, 2000, 4000, 8000];
-    const referenceDb = avgSpectrum[0] || -60;
+    
+    // ✅ Correção Auditoria: Usar 1kHz como referência em vez de 0Hz (DC)
+    const refBin = Math.round(1000 * analyser.fftSize / sampleRate);
+    const referenceDb = avgSpectrum[refBin] || -60;
+    
     const report = [];
     const deviations = {};
     let lowSum = 0;
@@ -520,10 +545,10 @@ function buildAcousticSummary(freqData, timeData) {
     const rmsDb = 20 * Math.log10(Math.max(rms, 1e-12));
 
     const peakHz = peak.index * audioCtx.sampleRate / analyser.fftSize;
-    const lowAvg = getBandAverage(freqData, audioCtx.sampleRate, 20, 250);
-    const lowMidAvg = getBandAverage(freqData, audioCtx.sampleRate, 250, 800);
-    const midAvg = getBandAverage(freqData, audioCtx.sampleRate, 800, 3000);
-    const highAvg = getBandAverage(freqData, audioCtx.sampleRate, 3000, 12000);
+    const lowAvg = getBandAverage(freqData, audioCtx.sampleRate, 20, 250, analyser.fftSize);
+    const lowMidAvg = getBandAverage(freqData, audioCtx.sampleRate, 250, 800, analyser.fftSize);
+    const midAvg = getBandAverage(freqData, audioCtx.sampleRate, 800, 3000, analyser.fftSize);
+    const highAvg = getBandAverage(freqData, audioCtx.sampleRate, 3000, 12000, analyser.fftSize);
 
     const notes = [];
     if (lowAvg > midAvg + 6) notes.push('grave muito presente');
@@ -672,12 +697,13 @@ function analyze() {
     
     animationId = requestAnimationFrame(analyze);
     
-    const bufferLength = analyser.frequencyBinCount;
-    const freqData = new Float32Array(bufferLength);
-    const timeData = new Float32Array(analyser.fftSize);
-
     analyser.getFloatFrequencyData(freqData);
     
+    // ✅ Novo: Captura dados do analisador rápido para detecção técnica/feedback
+    const fastBufferLength = analyserFast.frequencyBinCount;
+    const fastFreqData = new Float32Array(fastBufferLength);
+    analyserFast.getFloatFrequencyData(fastFreqData);
+
     // Aplica correção de microfone e calibração SPL
     if (window.AcousticCalibration) {
         window.AcousticCalibration.applyCalibration(freqData, audioCtx.sampleRate);
@@ -685,20 +711,21 @@ function analyze() {
     
     analyser.getFloatTimeDomainData(timeData);
 
-    // --- Detecção de Pico Global (Necessário para Feedback e Peak Hold) ---
+    // --- Detecção de Pico Global (Usando analyserFast para precisão temporal) ---
     let peakDb = -Infinity;
     let peakIndex = 0;
-    for (let i = 0; i < bufferLength; i++) {
-        if (freqData[i] > peakDb) {
-            peakDb = freqData[i];
+    for (let i = 0; i < fastBufferLength; i++) {
+        if (fastFreqData[i] > peakDb) {
+            peakDb = fastFreqData[i];
             peakIndex = i;
         }
     }
+    const currentFastPeakHz = peakIndex * audioCtx.sampleRate / analyserFast.fftSize;
 
     // --- Lógica de Peak Hold ---
     if (peakDb > peakHold.db) {
         peakHold.db = peakDb;
-        peakHold.hz = peakIndex * audioCtx.sampleRate / analyser.fftSize;
+        peakHold.hz = currentFastPeakHz;
         peakHold.timer = 120; // ~2 segundos a 60fps
     } else if (peakHold.timer > 0) {
         peakHold.timer--;
@@ -863,7 +890,8 @@ function analyze() {
     
     const btnAutoCut = document.getElementById('btn-auto-cut');
     
-    const isFeedback = feedbackDetector.analyze(peakHz, peakDb, -20);
+    // ✅ Correção Auditoria: Feedback detectado no analisador rápido (latência mínima)
+    const isFeedback = feedbackDetector.analyze(currentFastPeakHz, peakDb, -20);
     
     if (isFeedback) {
         if (feedbackAlert) {
@@ -1008,20 +1036,25 @@ async function triggerImpulseMeasure() {
         return;
     }
 
-    const duration = 0.05; // 50ms pulse
-    const captureDuration = 3.0; // 3 seconds of recording
+    const duration = 0.1; // 100ms white noise burst
+    const captureDuration = 5.0; // ✅ Correção Auditoria: Aumentado para 5s (suporte a grandes igrejas)
     
-    // 1. Criar o pulso
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'square'; // Pulso com muito harmônico (bom para RT60)
-    osc.frequency.value = 1000;
+    // 1. Criar Burst de Ruído Branco com Envelope (Mais preciso que senoide)
+    const bufferSizeBurst = Math.ceil(audioCtx.sampleRate * 0.15); // 150ms total
+    const impulseBuffer = audioCtx.createBuffer(1, bufferSizeBurst, audioCtx.sampleRate);
+    const impulseData = impulseBuffer.getChannelData(0);
     
-    gain.gain.setValueAtTime(0.8, audioCtx.currentTime);
-    gain.gain.setValueAtTime(0, audioCtx.currentTime + duration);
-    
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
+    for (let i = 0; i < bufferSizeBurst; i++) {
+        const white = Math.random() * 2 - 1;
+        const t = i / bufferSizeBurst;
+        // Envelope: Fade-in rápido (5ms) e Fade-out exponencial suave
+        const env = t < 0.05 ? t / 0.05 : Math.exp(-12 * (t - 0.05));
+        impulseData[i] = white * env * 0.8; 
+    }
+
+    const impulseSource = audioCtx.createBufferSource();
+    impulseSource.buffer = impulseBuffer;
+    impulseSource.connect(audioCtx.destination);
 
     // 2. Preparar gravação do decaimento
     const sampleRate = audioCtx.sampleRate;
@@ -1044,11 +1077,11 @@ async function triggerImpulseMeasure() {
         audioWorkletNode.port.onmessage = captureHandler;
     }
 
-    osc.start();
-    console.log('[RT60] Pulso disparado...');
+    impulseSource.start();
+    console.log('[RT60] Burst de ruído branco disparado...');
 
     setTimeout(() => {
-        osc.stop();
+        impulseSource.stop();
         console.log('[RT60] Processando decaimento via Worker...');
         
         // Desconecta o handler de captura

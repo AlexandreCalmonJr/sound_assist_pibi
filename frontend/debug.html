@@ -45,10 +45,17 @@
                     </li>
                     <li class="flex justify-between items-start">
                         <div>
-                            <p class="text-sm font-medium">Granularidade Graves</p>
-                            <p class="text-xs text-slate-500">Baldes de 10Hz para freq < 100Hz</p>
+                            <p class="text-sm font-medium">RT60 Schroeder (Peak Fix)</p>
+                            <p class="text-xs text-slate-500">Detecção de pico e integração reversa corrigida</p>
                         </div>
-                        <span id="check-python-grain" class="status-pill status-ok">Corrigido</span>
+                        <span id="check-python-rt60" class="status-pill status-ok">Corrigido</span>
+                    </li>
+                    <li class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium">Q-Factor Variável</p>
+                            <p class="text-xs text-slate-500">Suporte a Line Array (Q=8-12) em Dc</p>
+                        </div>
+                        <span id="check-python-qfactor" class="status-pill status-ok">Ativo</span>
                     </li>
                 </ul>
                 <button onclick="testPython()" class="mt-6 w-full bg-cyan-600 hover:bg-cyan-500 py-2 rounded-lg text-sm font-bold transition">Testar Conexão AI</button>
@@ -103,10 +110,24 @@
                     </li>
                     <li class="flex justify-between items-start">
                         <div>
-                            <p class="text-sm font-medium">Sync de Contexto IA</p>
-                            <p class="text-xs text-slate-500">Session_id (Mobile + Desktop)</p>
+                            <p class="text-sm font-medium">Analisador Fast (0.1s)</p>
+                            <p class="text-xs text-slate-500">Detecção de feedback em tempo real</p>
                         </div>
-                        <span id="check-fe-session" class="status-pill status-ok">Sincronizado</span>
+                        <span id="check-fe-fast" class="status-pill status-ok">Ativo</span>
+                    </li>
+                    <li class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium">Interpolação Linear (.cal)</p>
+                            <p class="text-xs text-slate-500">Resposta suave entre pontos de calibração</p>
+                        </div>
+                        <span id="check-fe-interp" class="status-pill status-ok">Implementado</span>
+                    </li>
+                    <li class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium">AudioWorklet Throttle</p>
+                            <p class="text-xs text-slate-500">Buffer de 4096 samples (redução de overhead)</p>
+                        </div>
+                        <span id="check-fe-worklet" class="status-pill status-ok">Otimizado</span>
                     </li>
                 </ul>
             </div>

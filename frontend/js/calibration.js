@@ -66,20 +66,23 @@
                 continue;
             }
 
-            // Find closest frequency point
-            let closest = calibrationData[0];
-            let minDist = Math.abs(hz - closest.hz);
-            for(let j=1; j<calibrationData.length; j++) {
-                let dist = Math.abs(hz - calibrationData[j].hz);
-                if(dist < minDist) {
-                    minDist = dist;
-                    closest = calibrationData[j];
+            // ✅ Correção Auditoria: Interpolação Linear entre os pontos do arquivo .cal
+            // Ordenar pontos por frequência caso não estejam
+            const sorted = [...calibrationData].sort((a, b) => a.hz - b.hz);
+            
+            if (hz <= sorted[0].hz) {
+                offsetCache[i] = sorted[0].offset;
+            } else if (hz >= sorted[sorted.length - 1].hz) {
+                offsetCache[i] = sorted[sorted.length - 1].offset;
+            } else {
+                for (let j = 0; j < sorted.length - 1; j++) {
+                    if (hz >= sorted[j].hz && hz <= sorted[j + 1].hz) {
+                        const t = (hz - sorted[j].hz) / (sorted[j + 1].hz - sorted[j].hz);
+                        offsetCache[i] = sorted[j].offset + t * (sorted[j + 1].offset - sorted[j].offset);
+                        break;
+                    }
                 }
             }
-            // Geralmente arquivos .cal já indicam o valor de *correção* a ser somado.
-            // Se o arquivo indica a Resposta (ex: +2dB em 10k), a correção seria -2dB.
-            // Para arquivos padrão Dayton/Sonarworks, assume-se que é o Fator de Correção (+).
-            offsetCache[i] = closest.offset;
         }
     }
 

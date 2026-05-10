@@ -24,27 +24,39 @@ function calculateSchroederRT60(buffer, sampleRate) {
         energy[i] = buffer[i] * buffer[i];
     }
 
-    // 2. Integração reversa (Schroeder)
-    const schroeder = new Float32Array(n);
-    let sum = 0;
-    for (let i = n - 1; i >= 0; i--) {
-        sum += energy[i];
-        schroeder[i] = sum;
+    // ✅ Correção Auditoria: 1.1 Encontrar o pico real do impulso (chegada do som)
+    let peakEnergy = 0;
+    let peakIdx = 0;
+    for (let i = 0; i < n; i++) {
+        if (energy[i] > peakEnergy) {
+            peakEnergy = energy[i];
+            peakIdx = i;
+        }
     }
 
-    // 3. Converte para dB
-    const schroederDb = new Float32Array(n);
+    // 2. Integração reversa (Schroeder) SÓ a partir do pico
+    const schroederLen = n - peakIdx;
+    const schroeder = new Float32Array(schroederLen);
+    let sum = 0;
+    for (let i = n - 1; i >= peakIdx; i--) {
+        sum += energy[i];
+        schroeder[i - peakIdx] = sum;
+    }
+
+    // 3. Normalizar e converter para dB
+    const schroederDb = new Float32Array(schroederLen);
     const maxVal = schroeder[0] || 1e-12;
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < schroederLen; i++) {
+        // Normalização: o início da curva de Schroeder deve ser 0dB
         schroederDb[i] = 10 * Math.log10(Math.max(schroeder[i] / maxVal, 1e-12));
     }
 
-    // 4. Regressão Linear entre -5dB e -35dB (T30)
+    // 4. Extração de T20 (-5dB a -25dB) para maior estabilidade em ambientes ruidosos
     let startIdx = -1;
     let endIdx = -1;
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < schroederLen; i++) {
         if (startIdx === -1 && schroederDb[i] <= -5) startIdx = i;
-        if (endIdx === -1 && schroederDb[i] <= -35) endIdx = i;
+        if (endIdx === -1 && schroederDb[i] <= -25) endIdx = i;
     }
 
     if (startIdx === -1 || endIdx === -1 || startIdx >= endIdx) {
@@ -52,8 +64,8 @@ function calculateSchroederRT60(buffer, sampleRate) {
     }
 
     const durationSeconds = (endIdx - startIdx) / sampleRate;
-    const decayPerSecond = 30 / durationSeconds; // T30 -> RT60 (30dB de queda extrapolado para 60dB)
-    const rt60 = 60 / decayPerSecond;
+    // RT60 = T20 * 3 (extrapolando queda de 20dB para 60dB)
+    const rt60 = durationSeconds * 3;
 
     return {
         rt60: rt60.toFixed(2),
