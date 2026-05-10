@@ -247,7 +247,8 @@ async function runTestbed() {
         { action: 'automix_cmd', action_type: 'enable_a' },
         { action: 'automix_assign', channel: 1, group: 'a', weight: 0.8 },
         { action: 'get_device_info' },
-        { action: 'fade_channel', channel: 3, level: 0, time: 5000 }
+        { action: 'fade_channel', channel: 3, level: 0, time: 5000 },
+        { action: 'send_raw', msg: 'SETD^m.mix^0.75' }
     ];
 
     tests.forEach(t => {

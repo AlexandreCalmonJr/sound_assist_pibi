@@ -275,6 +275,16 @@ function createMixerActions(getMixer) {
         };
     }
 
+    function sendRawCommand(msg) {
+        const mixer = getMixer();
+        if (mixer.isSimulated) {
+            mixer.conn.sendMessage(msg);
+            return `[SIM] Raw: ${msg} enviado.`;
+        }
+        mixer.conn.sendMessage(msg);
+        return `Mensagem bruta enviada: ${msg}`;
+    }
+
     function runCleanSoundPreset(channel, opts = {}) {
         const steps = [
             applyChannelHpf(channel, opts.hpf || 100),
@@ -396,6 +406,7 @@ function createMixerActions(getMixer) {
             case 'automix_cmd': return automixControl(cmd.action_type, cmd.val);
             case 'automix_assign': return automixAssignChannel(cmd.channel || 1, cmd.group || 'none', cmd.weight || 0.5);
             case 'get_device_info': return getDeviceInfo();
+            case 'send_raw': return sendRawCommand(cmd.message || cmd.msg);
             case 'run_clean_sound_preset': return runCleanSoundPreset(cmd.channel || 1, cmd);
             case 'set_delay': {
                 const id = cmd.channel || cmd.ch || cmd.aux || cmd.id || 1;
