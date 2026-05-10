@@ -116,6 +116,21 @@
         return window.SoundMasterAnalyzer.getLastAnalysis();
     }
 
+    function _buildRt60Multiband(lastRt60) {
+        if (!lastRt60) return null;
+        if (lastRt60.multiband && typeof lastRt60.multiband === 'object' && Object.keys(lastRt60.multiband).length) {
+            return lastRt60.multiband;
+        }
+        const value = Number(lastRt60.rt60);
+        if (!Number.isFinite(value)) return null;
+        return {
+            '125': value,
+            '500': value,
+            '1000': value,
+            '4000': value
+        };
+    }
+
     async function _sendAcousticAnalysis(usePinkReport) {
         const channel = _getTargetChannel();
         if (!channel) return;
@@ -130,13 +145,18 @@
         const message = usePinkReport ? 'Relatório de ruído rosa do salão' : 'Análise acústica do salão';
         _appendBubble(message, true, null);
 
+        const lastRt60 = window.SoundMasterAnalyzer?.getLastRt60();
+        const rt60Multiband = _buildRt60Multiband(lastRt60);
         const payload = {
+            schema_version: '1.1',
             summary: analysis.text,
-            rt60_multiband: analysis.details?.bands || {},
+            spectrum_db: analysis.details?.spectrum_v11 || {},
+            rt60_multiband: rt60Multiband,
             peakHz: analysis.details?.peakHz,
             peakDb: analysis.details?.peakDb,
             rms: analysis.details?.rmsDb,
         };
+
         if (analysis.pinkReport) {
             payload.pinkReport = analysis.pinkReport;
         }

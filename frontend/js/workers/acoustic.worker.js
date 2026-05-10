@@ -5,7 +5,7 @@
 self.onmessage = function(e) {
     const { type, data } = e.data;
 
-    if (type === 'calculate-rt60-schroeder') {
+    if (type === 'calculate-rt60' || type === 'calculate-rt60-schroeder') {
         const { buffer, sampleRate } = data;
         const rt60 = calculateSchroederRT60(buffer, sampleRate);
         self.postMessage({ type: 'rt60-result', result: rt60 });

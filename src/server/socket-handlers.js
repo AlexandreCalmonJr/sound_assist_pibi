@@ -5,6 +5,7 @@ const db = require('./database');
 const historyService = require('./history-service');
 const aiPredictor = require('./ai-predictor');
 const Logger = require('./logger');
+const mixerSingleton = require('./mixer-singleton');
 
 // --- Esquemas de Validação ---
 // ... (esquemas omitidos para brevidade, mantidos no arquivo)
@@ -23,14 +24,24 @@ const schemas = {
         band: z.number().min(1).max(4).optional()
     }),
     aiCommand: z.object({
-        action: z.enum([
-            'eq_cut', 'apply_channel_hpf', 'apply_channel_gate',
-            'apply_channel_compressor', 'set_afs_enabled', 'run_clean_sound_preset',
-            'set_delay', 'set_oscillator', 'set_room_profile', 'log'
-        ]),
+        action: z.string(), // Permite qualquer ação, validaremos no roteador
+        desc: z.string().optional(),
+        target: z.string().optional(),
+        channel: z.number().optional(),
+        ch: z.number().optional(),
         hz: z.number().optional(),
-        desc: z.string().optional()
-    }),
+        gain: z.number().optional(),
+        q: z.number().optional(),
+        band: z.number().optional(),
+        ms: z.number().optional(),
+        aux: z.number().optional(),
+        fx: z.number().optional(),
+        level: z.number().optional(),
+        val: z.number().optional(),
+        enabled: z.union([z.boolean(), z.number()]).optional(),
+        profile: z.string().optional(),
+        name: z.string().optional()
+    }).passthrough(),
     channelBasic: z.object({
         channel: z.number().min(1).max(24)
     }),
@@ -83,14 +94,20 @@ const schemas = {
 function registerSocketHandlers(io, appDataDir = './logs') {
     const logger = Logger.getInstance(appDataDir);
     
-    // ✅ Novo: Broadcast de todos os logs para clientes conectados na página de Debug
     logger.onLog = (entry) => {
         io.emit('system_log', entry);
     };
-
+    
     let activeConnections = 0;
+    let feedbackCooldowns = new Map();
+    let automaticCutState = new Map();
+    const FEEDBACK_COOLDOWN_MS = 5000;
+    const MAX_AUTOMATIC_CUTS = 3;
+    const RAW_MESSAGE_PREFIX_WHITELIST = ['SETD^', 'SETS^', 'BMSG^', 'NODE^'];
 
-    // Função auxiliar para throttle - Correção: retorna função que executa imediatamente se permitido
+    let globalHistoryStack = [];
+    let globalRedoStack = [];
+
     function createThrottle(fn, ms) {
         let lastTime = 0;
         return function(...args) {
@@ -104,201 +121,260 @@ function registerSocketHandlers(io, appDataDir = './logs') {
     
     io.on('connection', (socket) => {
         activeConnections++;
-        let mixer = null;
-        let historyStack = [];
-        let redoStack = [];
-
+        
         function addToHistory(cmd) {
-            historyStack.push(cmd);
-            if (historyStack.length > 50) historyStack.shift();
-            redoStack = [];
+            globalHistoryStack.push(cmd);
+            if (globalHistoryStack.length > 50) globalHistoryStack.shift();
+            globalRedoStack = [];
+        }
+
+        function normalizeAutoCutFrequency(hz) {
+            return Math.round(Number(hz) || 0);
+        }
+
+        function canApplyAutomaticCut(hz) {
+            const now = Date.now();
+            const roundedHz = normalizeAutoCutFrequency(hz);
+            const lastCut = feedbackCooldowns.get(roundedHz) || 0;
+            if (now - lastCut < FEEDBACK_COOLDOWN_MS) {
+                return { allowed: false, reason: 'cooldown', roundedHz };
+            }
+            const activeCuts = Array.from(automaticCutState.values()).filter(entry => now - entry.timestamp < FEEDBACK_COOLDOWN_MS);
+            if (activeCuts.length >= MAX_AUTOMATIC_CUTS) {
+                return { allowed: false, reason: 'limit', roundedHz };
+            }
+            return { allowed: true, roundedHz };
         }
         
-        // Cache de estado para simulação e presets
-        let mixerState = {
-            master: { level: 0, levelDb: -100, mute: 0 },
-            inputs: Array(24).fill(0).map(() => ({
-                level: 0, levelDb: -100, mute: 0, hpf: 100, gate: 0, comp: 0
-            }))
-        };
-
-        const actions = createMixerActions(() => mixer);
+        const actions = createMixerActions(() => mixerSingleton.getMixer());
         
-        // Definição dos throttles por socket
         const throttledSetMaster = createThrottle((level) => {
-            mixer.master.setFaderLevel(level);
-            if (mixer.isSimulated) {
-                mixer.conn.sendMessage(`SETD^m.value^${level}`);
+            const m = mixerSingleton.getMixer();
+            if (!m) return;
+            m.master.setFaderLevel(level);
+            if (m.isSimulated) {
+                m.conn.sendMessage(`SETD^m.value^${level}`);
             }
         }, 50);
 
-        const throttledVuEmit = createThrottle((vuData) => {
-            socket.emit('vu_data', vuData);
-        }, 50);
-
         logger.info(socket.id, 'CLIENT_CONNECTED', { activeConnections });
-        
-        // Envia logs iniciais se necessário (opcional)
 
         socket.on('connect_mixer', async (ip) => {
             try {
                 const validatedIp = schemas.connect.parse(ip);
                 logger.info(socket.id, 'MIXER_CONNECT_ATTEMPT', { ip: validatedIp });
                 
-                // ✅ Correção Auditoria: Limpar instância anterior antes de reconectar
-                if (mixer) {
-                    try {
-                        logger.info(socket.id, 'MIXER_CLEANUP_PREVIOUS');
-                        mixer.disconnect(); 
-                    } catch(e) {}
-                    mixer = null;
+                const currentMixer = mixerSingleton.getMixer();
+
+                if (currentMixer && currentMixer.targetIp === validatedIp) {
+                    logger.info(socket.id, 'MIXER_SINGLETON_REUSE');
+                    socket.emit('mixer_status', { connected: true, msg: `Reutilizando conexão em ${validatedIp}` });
+                    socket.emit('mixer_state_full', mixerSingleton.getState());
+                    return;
                 }
 
-                if (validatedIp === 'offline' || validatedIp === 'simulado' || validatedIp === '127.0.0.1') {
-                    // ... (lógica de simulação mantida)
-                    logger.info(socket.id, 'MIXER_MODE_SIMULATED');
-                    
-                    const createChannelMock = (name, type, id) => ({
-                        setFaderLevel: (v) => socket.emit('mixer_log', `[Sim] ${name} Fader -> ${Math.round(v*100)}%`),
-                        changeFaderLevelDB: (v) => socket.emit('mixer_log', `[Sim] ${name} Fader -> ${v}dB`),
-                        mute: () => socket.emit('mixer_log', `[Sim] ${name} MUTADO`),
-                        unmute: () => socket.emit('mixer_log', `[Sim] ${name} ATIVADO`),
-                        setName: (n) => socket.emit('mixer_log', `[Sim] ${name} Nome -> ${n}`),
-                        eq: () => ({
-                            setHpfFreq: (f) => socket.emit('mixer_log', `[Sim] ${name} HPF -> ${f}Hz`),
-                            band: (b) => ({
-                                setFreq: (f) => socket.emit('mixer_log', `[Sim] ${name} EQ B${b} Freq -> ${f}Hz`),
-                                setGain: (g) => socket.emit('mixer_log', `[Sim] ${name} EQ B${b} Gain -> ${g}dB`),
-                                setQ: (q) => socket.emit('mixer_log', `[Sim] ${name} EQ B${b} Q -> ${q}`)
-                            })
-                        }),
-                        gate: () => ({
-                            enable: () => socket.emit('mixer_log', `[Sim] ${name} Gate ON`),
-                            disable: () => socket.emit('mixer_log', `[Sim] ${name} Gate OFF`),
-                            setThreshold: (t) => socket.emit('mixer_log', `[Sim] ${name} Gate Thr -> ${t}dB`)
-                        }),
-                        compressor: () => ({
-                            enable: () => socket.emit('mixer_log', `[Sim] ${name} Comp ON`),
-                            setRatio: (r) => socket.emit('mixer_log', `[Sim] ${name} Comp Ratio -> ${r}:1`),
-                            setThreshold: (t) => socket.emit('mixer_log', `[Sim] ${name} Comp Thr -> ${t}dB`),
-                            setAttack: () => {}, setRelease: () => {}
-                        }),
-                        aux: (auxId) => ({ setFaderLevel: (v) => {} }),
-                        fx: (fxId) => ({ setFaderLevel: (v) => {} }),
-                        name$: { subscribe: () => {} }
-                    });
+                if (currentMixer) {
+                    try {
+                        logger.info(socket.id, 'MIXER_CLEANUP_PREVIOUS');
+                        currentMixer.disconnect(); 
+                    } catch(e) {}
+                    mixerSingleton.setMixer(null);
+                }
 
-                    mixer = {
+                const newMixer = validatedIp === 'offline' || validatedIp === 'simulado' || validatedIp === '127.0.0.1'
+                    ? {
                         isSimulated: true,
+                        targetIp: validatedIp,
                         conn: { sendMessage: (msg) => socket.emit('mixer_log', `RAW: ${msg}`) },
                         master: {
-                            ...createChannelMock('Master', 'master', 0),
-                            afs: () => ({ enable: () => {}, disable: () => {} }),
-                            setDelay: (ms) => {}, setDelayL: (ms) => {}, setDelayR: (ms) => {},
                             faderLevel$: { subscribe: () => {} },
-                            faderLevelDB$: { subscribe: () => {} }
+                            faderLevelDB$: { subscribe: () => {} },
+                            setFaderLevel: (v) => socket.emit('mixer_log', `[Sim] Master Fader -> ${Math.round(v*100)}%`),
+                            changeFaderLevelDB: (v) => socket.emit('mixer_log', `[Sim] Master Fader -> ${v}dB`),
+                            mute: () => socket.emit('mixer_log', '[Sim] Master MUTADO'),
+                            unmute: () => socket.emit('mixer_log', '[Sim] Master ATIVADO'),
+                            eq: () => ({
+                                band: (b) => ({
+                                    setFreq: (f) => socket.emit('mixer_log', `[Sim] Master EQ B${b} Freq -> ${f}Hz`),
+                                    setGain: (g) => socket.emit('mixer_log', `[Sim] Master EQ B${b} Gain -> ${g}dB`),
+                                    setQ: (q) => socket.emit('mixer_log', `[Sim] Master EQ B${b} Q -> ${q}`),
+                                    setType: (t) => socket.emit('mixer_log', `[Sim] Master EQ B${b} Type -> ${t}`)
+                                })
+                            }),
+                            afs: () => ({ enable: () => {}, disable: () => {} }),
+                            toggleDim: () => {},
+                            setPan: (v) => socket.emit('mixer_log', `[Sim] Master Pan -> ${v}`),
+                            setDelayL: (ms) => socket.emit('mixer_log', `[Sim] Master Delay L -> ${ms}ms`),
+                            setDelayR: (ms) => socket.emit('mixer_log', `[Sim] Master Delay R -> ${ms}ms`)
                         },
-                        input: (ch) => createChannelMock(`Canal ${ch}`, 'input', ch),
-                        hw: () => ({ 
-                            setGain: (v) => {}, phantomOn: () => {}, phantomOff: () => {},
-                            oscillator: () => ({ enable: () => {}, disable: () => {}, setType: () => {}, setFaderLevel: () => {} })
+                        input: (id) => ({
+                            setFaderLevel: (v) => socket.emit('mixer_log', `[Sim] Canal ${id} Fader -> ${Math.round(v * 100)}%`),
+                            mute: () => socket.emit('mixer_log', `[Sim] Canal ${id} MUTADO`),
+                            unmute: () => socket.emit('mixer_log', `[Sim] Canal ${id} ATIVADO`),
+                            setPan: (v) => socket.emit('mixer_log', `[Sim] Canal ${id} Pan -> ${v}`),
+                            toggleSolo: () => socket.emit('mixer_log', `[Sim] Canal ${id} SOLO alternado`),
+                            setDelay: (ms) => socket.emit('mixer_log', `[Sim] Canal ${id} Delay -> ${ms}ms`),
+                            fadeTo: (v, ms) => socket.emit('mixer_log', `[Sim] Canal ${id} Fade -> ${Math.round(v * 100)}% em ${ms}ms`),
+                            setName: (name) => socket.emit('mixer_log', `[Sim] Canal ${id} Nome -> ${name}`),
+                            multiTrackSelect: () => socket.emit('mixer_log', `[Sim] Canal ${id} adicionado ao MTK`),
+                            multiTrackUnselect: () => socket.emit('mixer_log', `[Sim] Canal ${id} removido do MTK`),
+                            automixAssignGroup: (group) => socket.emit('mixer_log', `[Sim] Canal ${id} Automix -> ${group}`),
+                            automixSetWeight: (weight) => socket.emit('mixer_log', `[Sim] Canal ${id} Peso Automix -> ${weight}`),
+                            eq: () => ({
+                                setHpfFreq: (f) => socket.emit('mixer_log', `[Sim] Canal ${id} HPF -> ${f}Hz`),
+                                setHpfSlope: (s) => socket.emit('mixer_log', `[Sim] Canal ${id} HPF Slope -> ${s}`),
+                                band: (b) => ({
+                                    setFreq: (f) => socket.emit('mixer_log', `[Sim] Canal ${id} EQ B${b} Freq -> ${f}Hz`),
+                                    setGain: (g) => socket.emit('mixer_log', `[Sim] Canal ${id} EQ B${b} Gain -> ${g}dB`),
+                                    setQ: (q) => socket.emit('mixer_log', `[Sim] Canal ${id} EQ B${b} Q -> ${q}`),
+                                    setType: (t) => socket.emit('mixer_log', `[Sim] Canal ${id} EQ B${b} Type -> ${t}`)
+                                })
+                            }),
+                            gate: () => ({
+                                enable: () => socket.emit('mixer_log', `[Sim] Canal ${id} Gate ON`),
+                                disable: () => socket.emit('mixer_log', `[Sim] Canal ${id} Gate OFF`),
+                                setThreshold: (threshold) => socket.emit('mixer_log', `[Sim] Canal ${id} Gate Thresh -> ${threshold}`)
+                            }),
+                            compressor: () => ({
+                                enable: () => socket.emit('mixer_log', `[Sim] Canal ${id} Compressor ON`),
+                                setRatio: (ratio) => socket.emit('mixer_log', `[Sim] Canal ${id} Compressor Ratio -> ${ratio}`),
+                                setThreshold: (threshold) => socket.emit('mixer_log', `[Sim] Canal ${id} Compressor Thresh -> ${threshold}`),
+                                setAttack: (attack) => socket.emit('mixer_log', `[Sim] Canal ${id} Compressor Attack -> ${attack}`),
+                                setRelease: (release) => socket.emit('mixer_log', `[Sim] Canal ${id} Compressor Release -> ${release}`)
+                            }),
+                            aux: (auxId) => ({
+                                setFaderLevel: (v) => socket.emit('mixer_log', `[Sim] Canal ${id} AUX ${auxId} -> ${Math.round(v * 100)}%`),
+                                setPost: (post) => socket.emit('mixer_log', `[Sim] Canal ${id} AUX ${auxId} Post -> ${post}`),
+                                setPostProc: (postProc) => socket.emit('mixer_log', `[Sim] Canal ${id} AUX ${auxId} PostProc -> ${postProc}`),
+                                setPan: (v) => socket.emit('mixer_log', `[Sim] Canal ${id} AUX ${auxId} Pan -> ${v}`)
+                            }),
+                            fx: (fxId) => ({
+                                setFaderLevel: (v) => socket.emit('mixer_log', `[Sim] Canal ${id} FX ${fxId} -> ${Math.round(v * 100)}%`),
+                                setPost: (post) => socket.emit('mixer_log', `[Sim] Canal ${id} FX ${fxId} Post -> ${post}`)
+                            }),
+                            faderLevel$: { subscribe: () => {} },
+                            mute$: { subscribe: () => {} },
+                            name$: { subscribe: () => {} }
                         }),
-                        player: { state$: { subscribe: () => {} }, track$: { subscribe: () => {} } },
+                        aux: (id) => ({
+                            setDelay: (ms) => socket.emit('mixer_log', `[Sim] Aux ${id} Delay -> ${ms}ms`)
+                        }),
+                        hw: (id) => ({
+                            setGain: (v) => socket.emit('mixer_log', `[Sim] HW ${id} Gain -> ${v}`),
+                            phantomOn: () => socket.emit('mixer_log', `[Sim] HW ${id} Phantom ON`),
+                            phantomOff: () => socket.emit('mixer_log', `[Sim] HW ${id} Phantom OFF`),
+                            oscillator: () => ({
+                                enable: () => socket.emit('mixer_log', '[Sim] Oscillator ON'),
+                                disable: () => socket.emit('mixer_log', '[Sim] Oscillator OFF'),
+                                setType: (type) => socket.emit('mixer_log', `[Sim] Oscillator Type -> ${type}`),
+                                setFaderLevel: (level) => socket.emit('mixer_log', `[Sim] Oscillator Level -> ${level}dB`)
+                            })
+                        }),
                         recorderDualTrack: { recording$: { subscribe: () => {} } },
                         recorderMultiTrack: { recording$: { subscribe: () => {} } },
                         automix: { groups: { a: { state$: { subscribe: () => {} } }, b: { state$: { subscribe: () => {} } } }, responseTimeMs$: { subscribe: () => {} } },
                         deviceInfo: { firmware$: { subscribe: () => {} }, capabilities$: { subscribe: () => {} } },
-                        disconnect: () => { mixer = null; }
-                    };
+                        shows: { currentShow$: { subscribe: () => {} }, currentSnapshot$: { subscribe: () => {} }, currentCue$: { subscribe: () => {} } },
+                        vuProcessor: { vuData$: { subscribe: () => {} } },
+                        channelSync: {
+                            getSelectedChannel: () => ({ subscribe: () => {} }),
+                            selectChannel: (type, number, syncId) => socket.emit('mixer_log', `[Sim] Select ${type} ${number || ''} (${syncId})`)
+                        },
+                        player: { state$: { subscribe: () => {} }, track$: { subscribe: () => {} } },
+                        muteGroup: () => ({ state$: { subscribe: () => {} }, mute: () => {}, unmute: () => {} }),
+                        volume: { solo: { setFaderLevel: () => {} }, headphone: () => ({ setFaderLevel: () => {} }) },
+                        disconnect: () => { mixerSingleton.setMixer(null); }
+                    }
+                    : new SoundcraftUI(validatedIp);
+
+                mixerSingleton.setMixer(newMixer);
+                
+                if (newMixer.isSimulated) {
                     socket.emit('mixer_status', { connected: true, isSimulated: true, msg: 'Modo Simulado Ativo' });
                     return;
                 }
 
-                mixer = new SoundcraftUI(ip);
-                
-                // ✅ Correção Auditoria: Usar status$ para feedback real da conexão
-                mixer.status$.subscribe(status => {
+                newMixer.status$.subscribe(status => {
                     const statusMap = {
                         [ConnectionStatus.Open]:        { connected: true,  msg: 'Conectado à Soundcraft Ui!' },
                         [ConnectionStatus.Close]:       { connected: false, msg: 'Desconectado da mesa.' },
-                        [ConnectionStatus.Error]:       { connected: false, msg: `Erro de Conexão: ${status.payload?.message || 'Falha na rede'}` },
-                        [ConnectionStatus.Reconnecting]:{ connected: false, msg: 'Reconectando à mesa...' },
-                        [ConnectionStatus.Opening]:     { connected: false, msg: 'Abrindo conexão...' },
+                        [ConnectionStatus.Error]:       { connected: false, msg: 'Erro na conexão com a mesa.' },
+                        [ConnectionStatus.Reconnecting]:{ connected: false, msg: 'Reconectando...' }
                     };
-                    const s = statusMap[status.type];
+                    const s = statusMap[status];
                     if (s) socket.emit('mixer_status', s);
                 });
 
-                await mixer.connect();
+                await newMixer.connect();
                 logger.info(socket.id, 'MIXER_CONNECT_COMMAND_SENT', { ip });
 
-                // --- Subscrições de Estado (Sincronização Real-Time) ---
+                if (!newMixer.isSubscribed) {
+                    newMixer.isSubscribed = true;
+                    const mState = mixerSingleton.getState();
 
-                // Master
-                mixer.master.faderLevel$.subscribe(level => {
-                    mixerState.master.level = level;
-                    socket.emit('master_level', level);
-                });
-                mixer.master.faderLevelDB$.subscribe(levelDb => {
-                    mixerState.master.levelDb = levelDb;
-                    socket.emit('master_level_db', levelDb);
-                });
-
-                // ✅ Correção Auditoria: Mapeamento correto do vuData$
-                mixer.vuProcessor.vuData$.subscribe(vuData => {
-                    const mapped = { master: null, channels: {} };
-                    if (vuData['master']) mapped.master = vuData['master'];
-                    
-                    // Mapeia inputs (i.0 -> Canal 1, etc)
-                    for (let i = 1; i <= 24; i++) {
-                        const key = `i.${i - 1}`;
-                        if (vuData[key]) mapped.channels[i] = vuData[key];
-                    }
-                    throttledVuEmit(mapped);
-                });
-
-                // Device Info
-                mixer.deviceInfo.firmware$.subscribe(fw => socket.emit('device_info', { firmware: fw }));
-                mixer.deviceInfo.capabilities$.subscribe(caps => {
-                    socket.emit('device_info', { 
-                        model: mixer.deviceInfo.model,
-                        caps: { inputs: caps.inputChannels, aux: caps.auxBusses, fx: caps.fxChannels, sub: caps.subGroups, vca: caps.vcaGroups }
+                    newMixer.master.faderLevel$.subscribe(level => {
+                        mixerSingleton.updateMasterState({ level });
+                        io.emit('master_level', level);
                     });
-                });
+                    newMixer.master.faderLevelDB$.subscribe(levelDb => {
+                        mixerSingleton.updateMasterState({ levelDb });
+                        io.emit('master_level_db', levelDb);
+                    });
 
-                // Automix
-                mixer.automix.groups.a.state$.subscribe(state => socket.emit('automix_state', { group: 'a', enabled: !!state }));
-                mixer.automix.groups.b.state$.subscribe(state => socket.emit('automix_state', { group: 'b', enabled: !!state }));
-                mixer.automix.responseTimeMs$.subscribe(ms => socket.emit('automix_response_time', { ms }));
+                    newMixer.vuProcessor.vuData$.subscribe(vuData => {
+                        const mapped = { master: null, channels: {} };
+                        if (vuData['master']) mapped.master = vuData['master'];
+                        for (let i = 1; i <= 24; i++) {
+                            if (vuData[`i.${i-1}`]) mapped.channels[i] = vuData[`i.${i-1}`];
+                        }
+                        io.emit('vu_data', mapped);
+                    });
 
-                // Recorder
-                mixer.recorderDualTrack.recording$.subscribe(isRec => socket.emit('recorder_status', { recording: !!isRec, mtkRecording: false }));
-                mixer.recorderMultiTrack.recording$.subscribe(isMtkRec => socket.emit('recorder_status', { recording: false, mtkRecording: !!isMtkRec }));
+                    newMixer.deviceInfo.firmware$.subscribe(fw => io.emit('device_info', { firmware: fw }));
+                    newMixer.deviceInfo.capabilities$.subscribe(caps => {
+                        io.emit('device_info', { 
+                            model: newMixer.deviceInfo.model,
+                            caps: { inputs: caps.inputChannels, aux: caps.auxBusses, fx: caps.fxChannels, sub: caps.subGroups, vca: caps.vcaGroups }
+                        });
+                    });
 
-                // Player
-                mixer.player.state$.subscribe(state => socket.emit('player_status', { state }));
-                mixer.player.track$.subscribe(track => socket.emit('player_track', { track }));
+                    newMixer.automix.groups.a.state$.subscribe(state => io.emit('automix_state', { group: 'a', enabled: !!state }));
+                    newMixer.automix.groups.b.state$.subscribe(state => io.emit('automix_state', { group: 'b', enabled: !!state }));
+                    newMixer.automix.responseTimeMs$.subscribe(ms => io.emit('automix_response_time', { ms }));
 
-                // ✅ Correção Auditoria: Sincronização de Shows, Snapshots e Cues
-                mixer.shows.currentShow$.subscribe(show => socket.emit('show_status', { show }));
-                mixer.shows.currentSnapshot$.subscribe(snapshot => socket.emit('snapshot_status', { snapshot }));
-                mixer.shows.currentCue$.subscribe(cue => socket.emit('cue_status', { cue }));
+                    newMixer.recorderDualTrack.recording$.subscribe(isRec => io.emit('recorder_status', { recording: !!isRec, mtkRecording: false }));
+                    newMixer.recorderMultiTrack.recording$.subscribe(isMtkRec => io.emit('recorder_status', { recording: false, mtkRecording: !!isMtkRec }));
 
-                // ✅ Correção Auditoria: Sincronização de nomes (para detectar alterações externas)
-                for (let i = 1; i <= 24; i++) {
-                    mixer.input(i).name$.subscribe(name => socket.emit('channel_name_update', { channel: i, name }));
+                    newMixer.player.state$.subscribe(state => io.emit('player_status', { state }));
+                    newMixer.player.track$.subscribe(track => io.emit('player_track', { track }));
+
+                    newMixer.shows.currentShow$.subscribe(show => io.emit('show_status', { show }));
+                    newMixer.shows.currentSnapshot$.subscribe(snapshot => io.emit('snapshot_status', { snapshot }));
+                    newMixer.shows.currentCue$.subscribe(cue => io.emit('cue_status', { cue }));
+
+                    for (let i = 1; i <= 24; i++) {
+                        const input = newMixer.input(i);
+                        input.name$.subscribe(name => io.emit('channel_name_update', { channel: i, name }));
+                        
+                        // ✅ Sincronização de Fader e Mute para o Singleton
+                        input.faderLevel$.subscribe(level => {
+                            mixerSingleton.updateChannelState(i, { level });
+                            io.emit('channel_level', { channel: i, level });
+                        });
+                        input.mute$.subscribe(mute => {
+                            mixerSingleton.updateChannelState(i, { mute });
+                            io.emit('channel_mute', { channel: i, mute });
+                        });
+                    }
+
+                    ['all', '1', '2', '3', '4', 'fx'].forEach(groupId => {
+                        newMixer.muteGroup(groupId).state$.subscribe(state => io.emit('mute_group_state', { groupId, enabled: !!state }));
+                    });
+
+                    newMixer.channelSync.getSelectedChannel('SYNC_ID').subscribe(selection => {
+                        io.emit('channel_selected_external', selection);
+                    });
                 }
-
-                // ✅ Correção Auditoria: Sincronização de Mute Groups
-                [1, 2, 3, 4, 5, 6, 'fx', 'all'].forEach(groupId => {
-                    mixer.muteGroup(groupId).state$.subscribe(state => socket.emit('mute_group_state', { groupId, enabled: !!state }));
-                });
-
-                // ✅ Correção Auditoria: Sincronização de Channel Sync
-                mixer.channelSync.getSelectedChannel('SYNC_ID').subscribe(selection => {
-                    socket.emit('channel_selected_external', selection);
-                });
-
             } catch (error) {
                 logger.error(socket.id, 'MIXER_CONNECT_ERROR', { error: error.message });
                 socket.emit('mixer_status', { connected: false, msg: `Erro de conexao: ${error.message}` });
@@ -306,16 +382,17 @@ function registerSocketHandlers(io, appDataDir = './logs') {
         });
 
         socket.on('disconnect_mixer', () => {
-            if (mixer) {
-                mixer.disconnect();
-                mixer = null;
+            const m = mixerSingleton.getMixer();
+            if (m) {
+                m.disconnect();
+                mixerSingleton.setMixer(null);
                 console.log('Mesa desconectada a pedido do usuario.');
-                socket.emit('mixer_status', { connected: false, msg: 'Desconectado.' });
+                io.emit('mixer_status', { connected: false, msg: 'Desconectado.' });
             }
         });
 
         socket.on('set_master_level', (data) => {
-            if (!mixer) {
+            if (!mixerSingleton.getMixer()) {
                 socket.emit('mixer_status', { connected: false, msg: 'Conecte-se a mesa primeiro!' });
                 return;
             }
@@ -333,13 +410,21 @@ function registerSocketHandlers(io, appDataDir = './logs') {
         });
 
         socket.on('cut_feedback', (data) => {
-            if (!actions.ensureMixer(socket)) return;
             try {
-                const validated = schemas.feedbackCut.parse(data);
-                const msg = actions.applyEqCut('master', null, validated.hz, -6, 8, 4);
-                socket.emit('feedback_cut_success', { hz: validated.hz, msg });
-            } catch (error) {
-                socket.emit('mixer_status', { connected: true, msg: `Falha ao cortar feedback: ${error.message}` });
+                const { hz } = schemas.feedbackCut.parse(data);
+                const now = Date.now();
+                const lastCut = feedbackCooldowns.get(Math.round(hz)) || 0;
+
+                if (now - lastCut < FEEDBACK_COOLDOWN_MS) {
+                    logger.info(socket.id, 'FEEDBACK_CUT_COOLDOWN', { hz });
+                    return;
+                }
+
+                feedbackCooldowns.set(Math.round(hz), now);
+                const result = actions.cutFeedback(hz);
+                io.emit('mixer_log', `[AUTO] ${result}`);
+            } catch (err) {
+                logger.error(socket.id, 'FEEDBACK_CUT_ERROR', err.message);
             }
         });
 
@@ -348,6 +433,7 @@ function registerSocketHandlers(io, appDataDir = './logs') {
             try {
                 const validated = schemas.aiCommand.parse(cmd);
                 const result = actions.executeMixerCommand(validated);
+                addToHistory({ type: 'ai_command', data: validated });
                 logger.info(socket.id, 'AI_COMMAND_EXECUTED', { action: validated.action, result });
                 socket.emit('feedback_cut_success', { hz: validated.hz || 0, msg: `${validated.desc || 'Comando IA'}: ${result}` });
             } catch (error) {
@@ -492,13 +578,24 @@ function registerSocketHandlers(io, appDataDir = './logs') {
             }
         });
 
-        // --- Histórico e IA Preditiva ---
         socket.on('save_acoustic_snapshot', async (data) => {
             try {
                 const doc = await historyService.saveSnapshot(data);
-                socket.emit('snapshot_saved', doc);
+                io.emit('snapshot_saved', doc); // Broadcast para todos
             } catch (e) {
                 console.error('Erro ao salvar snapshot:', e.message);
+            }
+        });
+
+        socket.on('save_heatmap_snapshot', async (data) => {
+            try {
+                const payload = Object.assign({ type: 'heatmap' }, data.snapshot || {}, data);
+                const doc = data._id
+                    ? await historyService.updateSnapshot(data._id, payload)
+                    : await historyService.saveSnapshot(payload);
+                io.emit('heatmap_updated', doc);
+            } catch (e) {
+                console.error('Erro ao salvar heatmap:', e.message);
             }
         });
 
@@ -519,6 +616,13 @@ function registerSocketHandlers(io, appDataDir = './logs') {
                 
                 // Se o risco for altíssimo (> 0.9), podemos disparar um corte preventivo
                 if (risk > 0.9) {
+                    const gate = canApplyAutomaticCut(data.hz);
+                    if (!gate.allowed) {
+                        logger.info(socket.id, 'AUTO_CUT_SKIPPED', { hz: data.hz, reason: gate.reason });
+                        return;
+                    }
+                    feedbackCooldowns.set(gate.roundedHz, Date.now());
+                    automaticCutState.set(gate.roundedHz, { timestamp: Date.now() });
                     const msg = actions.applyEqCut('master', null, data.hz, -3, 10, 4);
                     socket.emit('feedback_cut_success', { hz: data.hz, msg: `[IA Preditiva] Corte preventivo de -3dB: ${msg}` });
                 }
@@ -533,7 +637,7 @@ function registerSocketHandlers(io, appDataDir = './logs') {
             const preset = {
                 name: data.name || `Preset ${new Date().toLocaleString()}`,
                 timestamp: Date.now(),
-                state: JSON.parse(JSON.stringify(mixerState))
+                state: JSON.parse(JSON.stringify(mixerSingleton.getState()))
             };
             db.presets.insert(preset, (err, doc) => {
                 if (err) {
@@ -560,6 +664,7 @@ function registerSocketHandlers(io, appDataDir = './logs') {
                         logger.info(socket.id, 'LOAD_PRESET_START', { name: doc.name });
                         // Restaurar Master
                         if (doc.state.master) {
+                            const mixer = mixerSingleton.getMixer();
                             mixer.master.setFaderLevel(doc.state.master.level);
                         }
                         
@@ -569,6 +674,7 @@ function registerSocketHandlers(io, appDataDir = './logs') {
                                 const ch = idx + 1;
                                 if (ch > 24) return; // Segurança: limite de canais
                                 
+                                const mixer = mixerSingleton.getMixer();
                                 const input = mixer.input(ch);
                                 if (!input) return;
 
@@ -592,19 +698,28 @@ function registerSocketHandlers(io, appDataDir = './logs') {
         });
 
         socket.on('undo_command', () => {
-            const cmd = historyStack.pop();
+            const cmd = globalHistoryStack.pop();
             if (cmd) {
-                redoStack.push(cmd);
+                globalRedoStack.push(cmd);
                 socket.emit('mixer_log', 'Undo: Comando revertido (Simulado/Visual)');
             }
         });
 
         socket.on('send_raw_message', (data) => {
-            if (!mixer) return;
             try {
+                const mixer = mixerSingleton.getMixer();
+                if (!mixer) return;
+                const message = String(data?.message || '').trim();
+                const isAllowed = RAW_MESSAGE_PREFIX_WHITELIST.some(prefix => message.startsWith(prefix));
+                if (!isAllowed) {
+                    logger.warn(socket.id, 'RAW_MESSAGE_REJECTED', { message });
+                    socket.emit('mixer_status', { connected: true, msg: 'Comando RAW rejeitado pela política de segurança.' });
+                    return;
+                }
                 if (mixer.conn && typeof mixer.conn.sendMessage === 'function') {
-                    mixer.conn.sendMessage(data.message);
-                    socket.emit('mixer_log', `RAW enviado: ${data.message}`);
+                    mixer.conn.sendMessage(message);
+                    logger.info(socket.id, 'RAW_MESSAGE_SENT', { message });
+                    socket.emit('mixer_log', `RAW enviado: ${message}`);
                 }
             } catch (error) {
                 console.error('Erro ao enviar mensagem RAW:', error.message);
@@ -617,14 +732,7 @@ function registerSocketHandlers(io, appDataDir = './logs') {
 
         socket.on('disconnect', () => {
             activeConnections--;
-            if (mixer) {
-                try {
-                    mixer.disconnect();
-                } catch (e) {
-                    console.error('Erro ao desconectar mixer no disconnect:', e);
-                }
-                mixer = null;
-            }
+            // Comentário intencional: a conexão com a Ui24R permanece singleton no backend e não cai quando um cliente mobile sai.
             console.log(`[Socket] Frontend desconectado (${activeConnections} cliente(s) restante(s))`);
         });
     });

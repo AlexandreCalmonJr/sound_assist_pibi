@@ -6,6 +6,40 @@ class HistoryService {
         this.db = null;
     }
 
+    normalizeSnapshot(data = {}) {
+        const spectrum = data.spectrum_db || data.spectrum || {};
+        const position = data.position || data.location || null;
+        const normalized = {
+            type: data.type || 'acoustic_measurement',
+            schema_version: data.schema_version || '1.1',
+            name: data.name || 'Medição Acústica',
+            summary: data.summary || null,
+            timestamp: data.timestamp ? new Date(data.timestamp) : new Date(),
+            measurementType: data.measurementType || 'manual',
+            peakHz: data.peakHz ?? data.hz ?? null,
+            peakDb: data.peakDb ?? data.db ?? null,
+            rms: data.rms ?? data.rmsDb ?? null,
+            spl: data.spl ?? data.db ?? data.rms ?? data.rmsDb ?? null,
+            rt60: data.rt60 ?? null,
+            rt60_multiband: data.rt60_multiband || data.rt60_s || null,
+            spectrum_db: spectrum,
+            bands: data.bands || null,
+            position: position,
+            crowdStatus: data.crowdStatus || 'empty',
+            points: Array.isArray(data.points) ? data.points : undefined,
+            bgImageSrc: data.bgImageSrc || undefined,
+            snapshot: data.snapshot || undefined
+        };
+        if (normalized.snapshot && !normalized.snapshot.spectrum_db) {
+            normalized.snapshot = Object.assign({}, normalized.snapshot, {
+                spectrum_db: normalized.spectrum_db,
+                rt60_multiband: normalized.rt60_multiband,
+                crowdStatus: normalized.crowdStatus
+            });
+        }
+        return normalized;
+    }
+
     init(dbDir) {
         this.db = new Datastore({
             filename: path.join(dbDir, 'acoustic_history.db'),
@@ -15,14 +49,24 @@ class HistoryService {
     }
 
     async saveSnapshot(data) {
-        const snapshot = {
-            timestamp: new Date(),
-            ...data // rt60, spl, sti, channelData, crowdStatus (empty/full)
-        };
+        const snapshot = this.normalizeSnapshot(data);
         return new Promise((resolve, reject) => {
             this.db.insert(snapshot, (err, doc) => {
                 if (err) reject(err);
                 else resolve(doc);
+            });
+        });
+    }
+
+    async updateSnapshot(id, data) {
+        const snapshot = this.normalizeSnapshot(data);
+        return new Promise((resolve, reject) => {
+            this.db.update({ _id: id }, { $set: snapshot }, {}, (err) => {
+                if (err) return reject(err);
+                this.db.findOne({ _id: id }, (findErr, doc) => {
+                    if (findErr) reject(findErr);
+                    else resolve(doc);
+                });
             });
         });
     }

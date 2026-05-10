@@ -1,6 +1,7 @@
 (function() {
     let points = [];
     let bgImageSrc = null;
+    let persistedHeatmapId = null;
 
     function initHeatmap() {
         const upload = document.getElementById('heatmap-image-upload');
@@ -27,6 +28,66 @@
                 renderPins();
             }, 300);
         }
+        const savedHeatmapId = localStorage.getItem('heatmap_snapshot_id');
+        if (savedHeatmapId) {
+            persistedHeatmapId = savedHeatmapId;
+        }
+
+        // ✅ Novo: Sincronização em tempo real via Socket
+        if (window.SocketService) {
+            window.SocketService.on('heatmap_updated', (data) => {
+                if (data.snapshot && data.snapshot.points) points = data.snapshot.points;
+                else if (data.points) points = data.points;
+                if (data.bgImageSrc) {
+                    bgImageSrc = data.bgImageSrc;
+                    showImage();
+                }
+                if (data.snapshot && data.snapshot.bgImageSrc) {
+                    bgImageSrc = data.snapshot.bgImageSrc;
+                    showImage();
+                }
+                if (data._id) {
+                    persistedHeatmapId = data._id;
+                    localStorage.setItem('heatmap_snapshot_id', persistedHeatmapId);
+                }
+                renderHeatmap();
+                renderPins();
+            });
+        }
+    }
+
+    function _getMeasurementMetadata(db) {
+        const analyzer = window.SoundMasterAnalyzer;
+        const analysis = analyzer && analyzer.hasAnalysis && analyzer.hasAnalysis() ? analyzer.getLastAnalysis() : null;
+        const rt60 = analyzer && analyzer.getLastRt60 ? analyzer.getLastRt60() : null;
+        return {
+            schema_version: '1.1',
+            type: 'heatmap',
+            measurementType: 'spl-heatmap',
+            summary: analysis ? analysis.text : 'Ponto SPL do mapa de calor',
+            peakHz: analysis?.details?.peakHz ?? null,
+            peakDb: analysis?.details?.peakDb ?? null,
+            rms: analysis?.details?.rmsDb ?? null,
+            spl: db,
+            spectrum_db: analysis?.details?.spectrum_v11 || {},
+            rt60: rt60?.rt60 ? Number(rt60.rt60) : null,
+            rt60_multiband: rt60?.multiband || null
+        };
+    }
+
+    function _persistHeatmap() {
+        if (window.SocketService) {
+            window.SocketService.emit('save_heatmap_snapshot', {
+                _id: persistedHeatmapId,
+                bgImageSrc,
+                points,
+                snapshot: {
+                    bgImageSrc,
+                    points,
+                    ..._getMeasurementMetadata(points.length ? points[points.length - 1].db : null)
+                }
+            });
+        }
     }
 
     function handleImageUpload(e) {
@@ -43,6 +104,7 @@
             bgImageSrc = ev.target.result;
             try {
                 localStorage.setItem('heatmap_bg', bgImageSrc);
+                _persistHeatmap();
             } catch(e) {
                 console.warn('Imagem muito grande para o localStorage. Mantendo em memória temporária.');
             }
@@ -65,6 +127,7 @@
         if(confirm('Tem certeza que deseja apagar todos os pontos de medição?')) {
             points = [];
             localStorage.removeItem('heatmap_points');
+            _persistHeatmap();
             renderHeatmap();
             renderPins();
             document.getElementById('heatmap-last-val').innerText = '-- dB';
@@ -95,9 +158,21 @@
 
         document.getElementById('heatmap-last-val').innerText = `${db.toFixed(1)} dB`;
 
-        points.push({ x, y, db });
+        const point = {
+            x,
+            y,
+            db,
+            position: { x, y },
+            timestamp: new Date().toISOString(),
+            ..._getMeasurementMetadata(db)
+        };
+        points.push(point);
         localStorage.setItem('heatmap_points', JSON.stringify(points));
-        
+        if (window.SoundMasterAnalyzer && typeof window.SoundMasterAnalyzer.setMeasurementPosition === 'function') {
+            window.SoundMasterAnalyzer.setMeasurementPosition({ x, y });
+        }
+        _persistHeatmap();
+
         renderHeatmap();
         renderPins();
     }

@@ -2,9 +2,10 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const Logger = require('./logger');
+const http = require('http');
 
 function startPythonAI(rootDir) {
-    const pythonScript = path.join(rootDir, 'ai_server.py');
+    const pythonScript = path.join(rootDir, 'backend', 'ai', 'ai_server.py');
 
     if (!fs.existsSync(pythonScript)) {
         console.warn(`[Python AI] Script não encontrado: ${pythonScript}. IA desativada.`);
@@ -14,8 +15,8 @@ function startPythonAI(rootDir) {
     // Detector de Ambiente Virtual (venv)
     const isWin = process.platform === 'win32';
     const venvPython = isWin 
-        ? path.join(rootDir, 'venv', 'Scripts', 'python.exe')
-        : path.join(rootDir, 'venv', 'bin', 'python');
+        ? path.join(rootDir, 'backend', 'ai', 'venv', 'Scripts', 'python.exe')
+        : path.join(rootDir, 'backend', 'ai', 'venv', 'bin', 'python');
 
     const commands = [];
     
@@ -35,12 +36,52 @@ function startPythonAI(rootDir) {
     let pythonProcess = null;
     for (const cmd of commands) {
         if (_checkPython(cmd)) {
-            pythonProcess = _trySpawn(cmd, pythonScript, rootDir);
+            pythonProcess = _trySpawn(cmd, pythonScript, path.dirname(pythonScript));
             if (pythonProcess) break;
         }
     }
 
+    if (pythonProcess) {
+        pythonProcess.isReady = false;
+        pythonProcess.healthCheck = () => pythonProcess.isReady;
+        _waitForHealth(pythonProcess).catch((error) => {
+            console.error(`[Python AI] Health-check falhou: ${error.message}`);
+            Logger.getInstance().error('PYTHON', 'PYTHON_HEALTHCHECK_FAILED', error.message);
+        });
+    }
     return pythonProcess;
+}
+
+function _waitForHealth(proc, timeoutMs = 15000, intervalMs = 1000) {
+    const startedAt = Date.now();
+    return new Promise((resolve, reject) => {
+        const attempt = () => {
+            if (!proc || proc.killed) {
+                return reject(new Error('Processo Python encerrado antes do health-check.'));
+            }
+            const req = http.get('http://127.0.0.1:3002/', (res) => {
+                if (res.statusCode === 200) {
+                    proc.isReady = true;
+                    Logger.getInstance().info('PYTHON', 'PYTHON_HEALTHCHECK_READY', 'Health-check OK');
+                    res.resume();
+                    return resolve(true);
+                }
+                res.resume();
+                if (Date.now() - startedAt >= timeoutMs) {
+                    return reject(new Error(`Timeout aguardando /health (${res.statusCode})`));
+                }
+                setTimeout(attempt, intervalMs);
+            });
+            req.on('error', () => {
+                if (Date.now() - startedAt >= timeoutMs) {
+                    return reject(new Error('Timeout aguardando servidor Python responder.'));
+                }
+                setTimeout(attempt, intervalMs);
+            });
+            req.setTimeout(1500, () => req.destroy());
+        };
+        attempt();
+    });
 }
 
 function _checkPython(command) {
@@ -70,6 +111,9 @@ function _trySpawn(command, scriptPath, rootDir) {
         proc.stdout.on('data', (data) => {
             started = true;
             const msg = data.toString().trim();
+            if (msg.includes('READY')) {
+                console.log('✅ [Python AI] Servidor de IA está PRONTO e operacional.');
+            }
             console.log(`[Python AI]: ${msg}`);
             Logger.getInstance().info('PYTHON', 'PYTHON_STDOUT', msg);
         });

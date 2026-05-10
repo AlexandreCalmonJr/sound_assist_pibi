@@ -1,4 +1,5 @@
 const { Easings, vuValueToDB } = require('soundcraft-ui-connection');
+const mixerSingleton = require('./mixer-singleton');
 
 function createMixerActions(getMixer) {
     function clamp(value, min, max) {
@@ -27,6 +28,7 @@ function createMixerActions(getMixer) {
         } else {
             mixer.conn.sendMessage(`SETD^i.${channel-1}.eq.hpf.slope^2`);
         }
+        mixerSingleton.updateChannelState(channel, { hpf: frequency });
         
         return `HPF ${frequency}Hz aplicado no canal ${channel}.`;
     }
@@ -39,6 +41,7 @@ function createMixerActions(getMixer) {
             input.gate().disable();
         }
         input.gate().setThreshold(clamp(threshold, -80, 0));
+        mixerSingleton.updateChannelState(channel, { gate: enabled ? 1 : 0 });
         return `Gate ${enabled ? 'ativado' : 'desativado'} no canal ${channel}.`;
     }
 
@@ -49,6 +52,7 @@ function createMixerActions(getMixer) {
         input.compressor().setThreshold(clamp(threshold, -60, 0));
         input.compressor().setAttack(25);
         input.compressor().setRelease(220);
+        mixerSingleton.updateChannelState(channel, { comp: 1 });
         return `Compressor leve aplicado no canal ${channel}.`;
     }
 
@@ -66,6 +70,12 @@ function createMixerActions(getMixer) {
         eq.band(bandIndex).setQ(qValue);
         // EQ type 0 is usually Bell/Parametric
         if (eq.band(bandIndex).setType) eq.band(bandIndex).setType(0);
+        if (target === 'master') {
+            mixerSingleton.updateMasterState({ eq: Object.assign({}, mixerSingleton.getMasterState().eq || {}, { [bandIndex]: { hz: frequency, gain: cutGain, q: qValue } }) });
+        } else if (channel) {
+            const current = mixerSingleton.getChannelState(channel) || {};
+            mixerSingleton.updateChannelState(channel, { eq: Object.assign({}, current.eq || {}, { [bandIndex]: { hz: frequency, gain: cutGain, q: qValue } }) });
+        }
 
         const label = target === 'master' ? 'Master' : `canal ${channel || 1}`;
         return `EQ aplicado no ${label}: ${frequency}Hz, ${cutGain}dB, Q ${qValue}.`;
@@ -79,10 +89,15 @@ function createMixerActions(getMixer) {
         return `AFS2 ${enabled ? 'ativado' : 'desativado'} globalmente.`;
     }
 
+    function cutFeedback(hz) {
+        return applyEqCut('master', null, hz, -12, 8.0, 4);
+    }
+
     function setAuxLevel(channel, aux, level) {
         const input = getMixer().input(channel);
         const faderVal = clamp(level, 0, 1);
         input.aux(aux).setFaderLevel(faderVal);
+        mixerSingleton.updateAuxState(aux, { level: faderVal, channel });
         return `AUX ${aux} do canal ${channel} ajustado para ${Math.round(faderVal * 100)}%.`;
     }
 
@@ -134,6 +149,7 @@ function createMixerActions(getMixer) {
         // ✅ Correção Auditoria: hw() refere-se à ENTRADA FÍSICA (Hardware Input), não ao canal de software.
         // O valor 0..1 mapeia para o range total de ganho da mesa (-6 a +57dB)
         getMixer().hw(hwInput).setGain(clamp(gain, 0, 1));
+        mixerSingleton.updateChannelState(hwInput, { gain: clamp(gain, 0, 1) });
         return `Ganho de Hardware (Entrada Física ${hwInput}) ajustado para ${Math.round(gain * 100)}%.`;
     }
 
@@ -141,6 +157,7 @@ function createMixerActions(getMixer) {
         const hw = getMixer().hw(hwInput);
         if (enabled) hw.phantomOn();
         else hw.phantomOff();
+        mixerSingleton.updateChannelState(hwInput, { phantom: enabled ? 1 : 0 });
         return `Phantom Power (48V) da Entrada Física ${hwInput} ${enabled ? 'LIGADO ⚠️' : 'DESLIGADO'}.`;
     }
 
@@ -407,6 +424,7 @@ function createMixerActions(getMixer) {
             case 'set_fx_param': return setFxParam(cmd.fx || 1, cmd.param || 1, cmd.val || 0.5);
             case 'set_hw_gain': return setHwGain(cmd.input || cmd.channel || 1, cmd.val || 0.5);
             case 'set_phantom': return setPhantom(cmd.input || cmd.channel || 1, cmd.enabled !== 0);
+            case 'set_phantom_power': return setPhantom(cmd.input || cmd.channel || 1, cmd.enabled !== 0);
             case 'set_monitor_volume': return setMonitorVolume(cmd.target || 'hp1', cmd.val || 0.5);
             case 'select_channel': return selectChannelSync(cmd.type || 'input', cmd.channel || cmd.ch || 1, cmd.syncId || 'SYNC_ID');
             case 'player_cmd': return playerControl(cmd.action_type, cmd.val);
@@ -420,6 +438,7 @@ function createMixerActions(getMixer) {
             case 'automix_assign': return automixAssignChannel(cmd.channel || 1, cmd.group || 'none', cmd.weight || 0.5);
             case 'get_device_info': return getDeviceInfo();
             case 'send_raw': return sendRawCommand(cmd.message || cmd.msg);
+            case 'send_raw_message': return sendRawCommand(cmd.message || cmd.msg);
             case 'run_clean_sound_preset': return runCleanSoundPreset(cmd.channel || 1, cmd);
             case 'set_delay': {
                 const id = cmd.channel || cmd.ch || cmd.aux || cmd.id || 1;
@@ -437,7 +456,7 @@ function createMixerActions(getMixer) {
         applyChannelCompressor, applyChannelGate, applyChannelHpf, applyEqCut,
         applyOscillator, ensureMixer, executeMixerCommand, setAfs,
         setAuxLevel, setFxLevel, setDelay, runCleanSoundPreset,
-        setPhantom, setChannelName
+        setPhantom, setChannelName, cutFeedback
     };
 }
 

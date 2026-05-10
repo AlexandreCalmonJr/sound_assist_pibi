@@ -3,6 +3,7 @@ const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
+const mixerSingleton = require('./mixer-singleton');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 
@@ -76,13 +77,25 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30000);
         try {
+            // ✅ Injeção de Contexto do Mixer para a IA (Problema 8)
+            const payload = req.body;
+            const targetCh = payload.channel || (payload.analysis && payload.analysis.channel);
+            const targetAux = payload.aux;
+            
+            payload.mixer_context = Object.assign({
+                master: mixerSingleton.getMasterState(),
+                channel: targetCh ? mixerSingleton.getChannelState(targetCh) : null,
+                aux: targetAux ? mixerSingleton.getAuxState(targetAux) : null,
+                timestamp: Date.now()
+            }, payload.mixer_context || {});
+
             const aiRes = await fetch('http://127.0.0.1:3002/chat', {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
                     'X-API-Key': process.env.AI_API_KEY || ''
                 },
-                body: JSON.stringify(req.body),
+                body: JSON.stringify(payload),
                 signal: controller.signal
             });
             clearTimeout(timeout);

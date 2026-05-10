@@ -6,7 +6,7 @@ class MultiChannelAnalyzer {
         this.channelStats = Array(32).fill(0).map(() => ({
             rms: -100,
             peak: -100,
-            lastFrequencies: new Float32Array(128) // Buffer reduzido para análise rápida
+            spectralPeakHz: 0
         }));
     }
 
@@ -27,7 +27,7 @@ class MultiChannelAnalyzer {
         console.log('[Analyzer] Analisador Multi-Canal (AES67) em espera.');
     }
 
-    processAudio({ buffer, channels, bitDepth }) {
+    processAudio({ buffer, channels, bitDepth, sampleRate = 48000 }) {
         const bytesPerSample = bitDepth / 8;
         const totalSamples = buffer.length / bytesPerSample;
         const samplesPerChannel = totalSamples / channels;
@@ -35,6 +35,8 @@ class MultiChannelAnalyzer {
         for (let ch = 0; ch < channels; ch++) {
             let sumSq = 0;
             let peak = 0;
+            let zeroCrossings = 0;
+            let lastSample = 0;
 
             for (let s = 0; s < samplesPerChannel; s++) {
                 // Extração de amostra PCM 24-bit (Little Endian)
@@ -47,18 +49,24 @@ class MultiChannelAnalyzer {
 
                 sumSq += sample * sample;
                 if (Math.abs(sample) > peak) peak = Math.abs(sample);
+                if ((sample >= 0 && lastSample < 0) || (sample < 0 && lastSample >= 0)) {
+                    zeroCrossings++;
+                }
+                lastSample = sample;
             }
 
             const rms = 20 * Math.log10(Math.sqrt(sumSq / samplesPerChannel) || 0.000001);
             const peakDb = 20 * Math.log10(peak || 0.000001);
+            const spectralPeakHz = Math.max(20, Math.round((zeroCrossings * sampleRate) / (2 * Math.max(samplesPerChannel, 1))));
 
             // Atualiza estatísticas do canal
             this.channelStats[ch].rms = rms;
             this.channelStats[ch].peak = peakDb;
+            this.channelStats[ch].spectralPeakHz = spectralPeakHz;
 
             // Se o canal estiver ativo (> -40dB), a IA analisa o risco
             if (peakDb > -40) {
-                this.runAiDiagnosis(ch, peakDb);
+                this.runAiDiagnosis(ch, peakDb, spectralPeakHz);
             }
         }
 
@@ -68,7 +76,7 @@ class MultiChannelAnalyzer {
         }
     }
 
-    async runAiDiagnosis(channelIdx, peakDb) {
+    async runAiDiagnosis(channelIdx, peakDb, spectralPeakHz) {
         // Mapeamento intuitivo
         const labels = [
             ...Array(24).fill(0).map((_, i) => `Canal ${i+1}`),
@@ -77,12 +85,10 @@ class MultiChannelAnalyzer {
 
         const label = labels[channelIdx] || `Bus ${channelIdx + 1}`;
         
-        // Exemplo: Simulação de detecção de feedback via análise de transientes
-        // Em um sistema real, aqui passaríamos a FFT do canal para o aiPredictor
-        const risk = await ai.predictRisk(1000, peakDb, peakDb - 2, 50); // Valores dummy para exemplo
+        const risk = await ai.predictRisk(spectralPeakHz, peakDb, peakDb - 2, 50);
         
         if (risk > 0.85) {
-            this.io.emit('mixer_log', `⚠️ [IA] Risco de Feedback detectado no ${label} (${Math.round(risk * 100)}%)`);
+            this.io.emit('mixer_log', `⚠️ [IA] Risco de Feedback detectado no ${label} em ${spectralPeakHz}Hz (${Math.round(risk * 100)}%)`);
         }
     }
 }

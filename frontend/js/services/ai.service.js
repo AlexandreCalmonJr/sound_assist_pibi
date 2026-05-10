@@ -25,6 +25,26 @@
         return hasChannel ? text : text + ' canal ' + validChannel;
     }
 
+    function _getMixerSnapshot(channel) {
+        const state = AppStore.getState();
+        const selectedChannel = Number(channel);
+        const channelVu = state.vuData && state.vuData.channels ? state.vuData.channels[selectedChannel] : null;
+        return {
+            selectedChannel: selectedChannel,
+            channel: {
+                level: state[`ch_${selectedChannel}_level`] ?? null,
+                mute: state[`mute_ch_${selectedChannel}`] ? 1 : 0,
+                phantom: state[`phantom_ch_${selectedChannel}`] ? 1 : 0,
+                vu: channelVu || null
+            },
+            master: {
+                level: state.masterLevel ?? 0,
+                levelDb: state.masterDb ?? null,
+                mute: state.masterMute ? 1 : 0
+            }
+        };
+    }
+
     // -------------------------------------------------------------------------
     // API principal
     // -------------------------------------------------------------------------
@@ -48,7 +68,7 @@
             const response = await fetch(AI_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message, analysis }),
+                body: JSON.stringify({ message, channel, analysis, mixer_context: _getMixerSnapshot(channel) }),
                 signal: controller.signal
             });
 

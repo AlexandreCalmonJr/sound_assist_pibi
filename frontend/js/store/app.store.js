@@ -21,6 +21,7 @@
         mixerStatusMsg: 'Offline',
         masterLevel: 0,       // 0.0 – 1.0
         masterDb: null,       // número ou null
+        masterMute: false,
         vuData: {},           // dados de VU em tempo real por canal
         recording: false,     // estado do gravador 2-track
         mtkRecording: false,  // estado do multitrack

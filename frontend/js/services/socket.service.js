@@ -100,6 +100,32 @@
             AppStore.setState({ mixerNames: names });
         });
 
+        _socket.on('channel_level', function (data) {
+            AppStore.setState({ [`ch_${data.channel}_level`]: data.level });
+        });
+
+        _socket.on('channel_mute', function (data) {
+            AppStore.setState({ [`mute_ch_${data.channel}`]: !!data.mute });
+        });
+
+        _socket.on('mixer_state_full', function (data) {
+            const patch = {};
+            if (data.master) {
+                patch.masterLevel = data.master.level ?? 0;
+                patch.masterDb = data.master.levelDb ?? null;
+                patch.masterMute = !!data.master.mute;
+            }
+            if (Array.isArray(data.inputs)) {
+                data.inputs.forEach(function (input, index) {
+                    const channel = index + 1;
+                    patch[`ch_${channel}_level`] = input.level ?? 0;
+                    patch[`mute_ch_${channel}`] = !!input.mute;
+                    patch[`phantom_ch_${channel}`] = !!input.phantom;
+                });
+            }
+            AppStore.setState(patch);
+        });
+
         _socket.on('mute_group_state', function (data) {
             const mg = Object.assign({}, AppStore.getState().muteGroups || {}, { [data.groupId]: data.enabled });
             AppStore.setState({ muteGroups: mg });

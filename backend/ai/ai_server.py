@@ -93,6 +93,7 @@ async def cleanup_sessions_task():
 class ChatRequest(BaseModel):
     message: str
     analysis: Optional[Dict[str, Any]] = None
+    mixer_context: Optional[Dict[str, Any]] = None
     session_id: Optional[str] = "default"
 
 class AcousticRequest(BaseModel):
@@ -125,7 +126,7 @@ async def chat_endpoint(
     try:
         session = get_session(request.session_id)
         ai_engine = AIEngine(session)
-        result = ai_engine.process(request.message, request.analysis)
+        result = ai_engine.process(request.message, request.analysis, request.mixer_context)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

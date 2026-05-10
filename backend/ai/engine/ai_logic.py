@@ -61,6 +61,7 @@ class LocalLLM:
                 self.llm = Llama(model_path=model_path, n_ctx=512, n_threads=4, verbose=False)
                 self.enabled = True
                 print(f"[AI Engine] Modelo Local carregado: {model_path}")
+                print("[AI Engine] READY")
             except Exception as e:
                 print(f"[AI Engine] Falha ao carregar modelo: {e}")
 
@@ -91,6 +92,36 @@ class AIEngine:
         payload.update(kwargs)
         return payload
 
+    def _safe_float(self, value, default=0.0):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _normalize_rt60_bands(self, analysis):
+        if not analysis:
+            return {}
+        raw = analysis.get('rt60_multiband') or analysis.get('rt60_s') or {}
+        if not isinstance(raw, dict):
+            return {}
+        normalized = {}
+        key_map = {
+            '1k': '1000',
+            '4k': '4000'
+        }
+        for key, value in raw.items():
+            canonical = key_map.get(str(key), str(key))
+            normalized[canonical] = self._safe_float(value, 0.0)
+        return normalized
+
+    def _normalize_spectrum(self, analysis):
+        if not analysis:
+            return {}
+        raw = analysis.get('spectrum_db') or analysis.get('bands') or {}
+        if not isinstance(raw, dict):
+            return {}
+        return {str(key): self._safe_float(value, -100.0) for key, value in raw.items()}
+
     def extract_channel(self, text):
         channel_match = re.search(r'(?:canal|ch)\s*(\d{1,2})', text)
         if not channel_match:
@@ -101,12 +132,12 @@ class AIEngine:
         from acoustics.processor import AcousticProcessor
         
         analysis = analysis or (self.session.analyses_history[-1] if self.session.analyses_history else {})
-        rt60_avg = analysis.get('rt60', 1.2)
+        rt60_avg = self._safe_float(analysis.get('rt60', 1.2), 1.2)
         rt60_info = AcousticProcessor.classify_room(rt60_avg)
         
         # Calibração de SNR baseada em RMS (se disponível)
         # Assumimos nível de fala alvo de -18dBFS
-        rms_noise = analysis.get('rms', -45) # Nível médio de ruído de fundo
+        rms_noise = self._safe_float(analysis.get('rms', -45), -45) # Nível médio de ruído de fundo
         snr_calc = max(5, -18 - rms_noise) # SNR = Sinal - Ruído
         sti = AcousticProcessor.estimate_sti(rt60_avg, snr=snr_calc)
         
@@ -148,14 +179,28 @@ class AIEngine:
         if analysis:
             self.session.add_analysis(analysis)
 
-        # 0. Gatilhos de Saudação Inteligente (Context Aware)
+        # 0. Verificação de Estado de Hardware (Context Aware) - Problema 8
+        hw_note = ""
+        if mixer_state:
+            ch_state = mixer_state.get('channel')
+            if ch_state:
+                if ch_state.get('mute') == 1:
+                    hw_note = "⚠️ Observei que o canal selecionado está MUTADO na mesa."
+                elif ch_state.get('level', 0) < 0.1:
+                    hw_note = "⚠️ O fader deste canal está quase no mínimo."
+            
+            master_state = mixer_state.get('master')
+            if master_state and master_state.get('mute') == 1:
+                hw_note += " (O MASTER também está mutado!)"
+
+        # 1. Gatilhos de Saudação Inteligente (Context Aware)
         greetings = [r'\boi\b', r'\bolá\b', r'\btudo bem\b', r'\bom dia\b', r'\boa tarde\b', r'\boa noite\b']
         if any(re.search(g, text) for g in greetings):
             rt60 = analysis.get('rt60', '--')
             peak = analysis.get('peakHz', '--')
             rms = analysis.get('rms', '--')
             
-            status_msg = f"Oi! Estou monitorando o sistema. "
+            status_msg = f"Oi! Estou monitorando o sistema. {hw_note}"
             if rt60 != '--':
                 status_msg += f"Atualmente a sala está com RT60 de {rt60}s e o nível médio está em {rms}dB. "
             else:
@@ -183,8 +228,6 @@ class AIEngine:
         has_specific_channel = bool(re.search(r'(canal|ch|ch\s*\d)', text))
         
         analysis = analysis or {}
-        if analysis:
-            self.session.add_analysis(analysis)
 
         # 1. Dados Técnicos (FFT)
         fft_response = None
@@ -214,17 +257,54 @@ class AIEngine:
                     "command": self.command("eq_cut", f"Limpeza Sala {peak}Hz", target="master", hz=peak, gain=-2, q=1.5)
                 }
 
-        # 1.5 Análise de RT60 Multibanda
-        rt60_response = None
-        if analysis and 'rt60_multiband' in analysis:
-            bands = analysis['rt60_multiband']
+        # 1.5 Processamento de Schema v1.1 (Recomendado)
+        if analysis and analysis.get('schema_version') == '1.1':
+            spec = self._normalize_spectrum(analysis)
+            rt60 = self._normalize_rt60_bands(analysis)
+            
+            # Análise de Perfil por Reverb (RT60 real em segundos)
+            if rt60:
+                detected_profile = None
+                r125 = self._safe_float(rt60.get('125', 0), 0)
+                r1k = self._safe_float(rt60.get('1000', 0), 0)
+                r4k = self._safe_float(rt60.get('4000', 0), 0)
+                
+                if r125 > 1.8 and r125 > r1k * 1.5:
+                    detected_profile = 'teto_alto'
+                elif self._safe_float(rt60.get('500', 0), 0) > 1.5 and self._safe_float(rt60.get('500', 0), 0) > r4k * 1.3:
+                    detected_profile = 'paredes_paralelas'
+                elif r4k > 1.2:
+                    detected_profile = 'janelas_vidro'
+
+                if detected_profile and detected_profile != self.session.room_profile:
+                    profile_names = {'teto_alto': 'Teto Alto', 'paredes_paralelas': 'Paredes Paralelas', 'janelas_vidro': 'Janelas/Vidro'}
+                    self.session.room_profile = detected_profile
+                    return {
+                        "text": f"Assinatura acústica de {profile_names[detected_profile]} detectada via RT60. Perfil atualizado.",
+                        "command": self.command("set_room_profile", f"Perfil: {detected_profile}", profile=detected_profile)
+                    }
+
+            # Análise de EQ por Spectrum (dB)
+            if spec:
+                s125 = self._safe_float(spec.get('125', -100), -100)
+                s1k = self._safe_float(spec.get('1000', -100), -100)
+                if s125 > s1k + 10:
+                    return {
+                        "text": "Excesso de energia subsônica (125Hz) detectado no espectro. Sugiro HPF.",
+                        "command": self.command("eq_cut", "Limpeza 125Hz", target="master", hz=125, gain=-3, q=1.0)
+                    }
+        
+        # 1.6 Legado: Análise de RT60 Multibanda (Removido Mismatch)
+        # Mantido apenas como fallback básico se não for v1.1
+        elif analysis and 'rt60_multiband' in analysis:
+            bands = self._normalize_rt60_bands(analysis)
             
             detected_profile = None
-            if bands.get('125', 0) > 1.8 and bands.get('125', 0) > bands.get('1k', 0) * 1.5:
+            if bands.get('125', 0) > 1.8 and bands.get('125', 0) > bands.get('1000', 0) * 1.5:
                 detected_profile = 'teto_alto'
-            elif bands.get('500', 0) > 1.5 and bands.get('500', 0) > bands.get('4k', 0) * 1.3:
+            elif bands.get('500', 0) > 1.5 and bands.get('500', 0) > bands.get('4000', 0) * 1.3:
                 detected_profile = 'paredes_paralelas'
-            elif bands.get('4k', 0) > 1.2:
+            elif bands.get('4000', 0) > 1.2:
                 detected_profile = 'janelas_vidro'
 
             if detected_profile and detected_profile != self.session.room_profile:
@@ -242,14 +322,14 @@ class AIEngine:
                     "command": self.command("eq_cut", "Corte RT60 Grave", target="master", hz=125, gain=-4, q=1.0)
                 }
             else:
-                avg_mid = (bands.get('500', 0) + bands.get('1k', 0)) / 2
+                avg_mid = (bands.get('500', 0) + bands.get('1000', 0)) / 2
                 if avg_mid > 1.5:
                     rt60_response = {
                         "text": f"Reverberação média alta ({avg_mid:.1f}s). Sugiro reduzir 800Hz no Master.",
                         "command": self.command("eq_cut", "Melhorar Inteligibilidade", target="master", hz=800, gain=-3, q=1.2)
                     }
 
-        if rt60_response: return rt60_response
+        if 'rt60_response' in locals() and rt60_response: return rt60_response
         if fft_response: return fft_response
 
         # 2. Respostas por Texto
@@ -289,9 +369,9 @@ class AIEngine:
             print(f"[AI Engine] Usando modelo local para: {text}")
             # Passamos o contexto atual para o modelo
             ctx = {
-                "rt60": analysis.get('rt60', 1.2),
-                "peakHz": analysis.get('peakHz', 0),
-                "rms": analysis.get('rms', -45)
+                "rt60": self._safe_float(analysis.get('rt60', 1.2), 1.2),
+                "peakHz": self._safe_float(analysis.get('peakHz', 0), 0),
+                "rms": self._safe_float(analysis.get('rms', -45), -45)
             }
             llm_response = self.llm.query(text, context_data=ctx)
             if llm_response:

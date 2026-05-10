@@ -30,6 +30,10 @@ let pinkMeasurementActive = false;
 let pinkMeasurementCount = 0;
 let pinkMeasurementSum = null;
 let pinkReport = null;
+let lastRt60Result = null; // ✅ Novo: Guarda o último RT60 medido para a IA
+let lastRt60 = 0;
+let lastRt60Multiband = {};
+let lastMeasurementPosition = null;
 
 // ✅ Novo: Arrays globais (reaproveitados) para evitar GC pressure no loop 60fps
 let freqData = null;
@@ -634,6 +638,12 @@ function buildAcousticSummary(freqData, timeData) {
             peakHz: Math.round(peakHz),
             peakDb: formatDb(peak.db),
             rmsDb: formatDb(rmsDb),
+            spectrum_v11: {
+                "125": formatDb(getBandAverage(freqData, audioCtx.sampleRate, 110, 140, analyser.fftSize)),
+                "500": formatDb(getBandAverage(freqData, audioCtx.sampleRate, 450, 550, analyser.fftSize)),
+                "1000": formatDb(getBandAverage(freqData, audioCtx.sampleRate, 900, 1100, analyser.fftSize)),
+                "4000": formatDb(getBandAverage(freqData, audioCtx.sampleRate, 3600, 4400, analyser.fftSize))
+            },
             bands: {
                 low: formatDb(lowAvg),
                 lowMid: formatDb(lowMidAvg),
@@ -668,6 +678,27 @@ function renderAnalysisDetails(summary, pink) {
         li.innerText = text;
         analysisDetailList.appendChild(li);
     });
+}
+
+function buildRt60Payload(rt60Result) {
+    if (!rt60Result) return null;
+    if (rt60Result.multiband && typeof rt60Result.multiband === 'object' && Object.keys(rt60Result.multiband).length) {
+        return rt60Result.multiband;
+    }
+    if (rt60Result.rt60 === undefined || rt60Result.rt60 === null) return null;
+    const rt60Value = Number(rt60Result.rt60);
+    if (!Number.isFinite(rt60Value)) return null;
+    return {
+        '125': rt60Value,
+        '500': rt60Value,
+        '1000': rt60Value,
+        '4000': rt60Value
+    };
+}
+
+function getCurrentMeasurementPosition() {
+    if (lastMeasurementPosition) return lastMeasurementPosition;
+    return null;
 }
 
 function startPinkNoiseMeasurement() {
@@ -1054,22 +1085,38 @@ async function sendAnalysisToAI() {
     if (aiBox) aiBox.classList.remove('hidden');
     if (aiText) aiText.innerText = 'Processando dados com IA...';
 
-    // ✅ Novo: Salva snapshot no banco de dados local antes de enviar para a IA
-    SocketService.emit('save_acoustic_snapshot', {
+    const rt60Payload = buildRt60Payload(lastRt60Result);
+    const acousticSnapshot = {
+        schema_version: '1.1',
         name: `Análise Automática - Canal ${channel}`,
-        hz: lastAnalysis.details.peakHz,
-        db: lastAnalysis.details.peakDb,
-        rms: lastAnalysis.details.rmsDb,
+        type: 'acoustic_measurement',
+        summary: lastAnalysis.text,
+        measurementType: pinkMeasurementActive ? 'pink-noise' : 'live-analysis',
+        peakHz: lastAnalysis.details.peakHz,
+        peakDb: Number(lastAnalysis.details.peakDb),
+        rms: Number(lastAnalysis.details.rmsDb),
+        spl: Number(lastAnalysis.details.rmsDb),
+        rt60: Number(lastRt60) || 0,
+        rt60_multiband: rt60Payload,
+        spectrum_db: lastAnalysis.details.spectrum_v11 || {},
         bands: lastAnalysis.details.bands,
+        position: getCurrentMeasurementPosition(),
+        crowdStatus: document.getElementById('crowd-status')?.value || 'empty',
         timestamp: new Date().toISOString()
-    });
+    };
+
+    // Comentário intencional: o backend normaliza esse contrato para manter histórico e heatmap alinhados.
+    SocketService.emit('save_acoustic_snapshot', acousticSnapshot);
 
     const payload = {
+        schema_version: '1.1',
         summary: lastAnalysis.text,
+        spectrum_db: lastAnalysis.details.spectrum_v11 || {},
+        rt60_multiband: rt60Payload,
         bands: lastAnalysis.details.bands,
         peakHz: lastAnalysis.details.peakHz,
         peakDb: lastAnalysis.details.peakDb,
-        rmsDb: lastAnalysis.details.rmsDb,
+        rms: lastAnalysis.details.rmsDb,
         isPinkNoise: pinkMeasurementActive
     };
 
@@ -1079,11 +1126,12 @@ async function sendAnalysisToAI() {
         
         const actionsArea = document.getElementById('ai-actions');
         if (actionsArea && result.command) {
-            actionsArea.innerHTML = `
-                <button class="px-3 py-1.5 bg-cyan-600/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-[10px] font-bold uppercase hover:bg-cyan-500 hover:text-white transition-all" onclick="MixerService.executeAICommand('${result.command}')">
-                    Executar Correção Sugerida
-                </button>
-            `;
+            actionsArea.innerHTML = '';
+            const button = document.createElement('button');
+            button.className = 'px-3 py-1.5 bg-cyan-600/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-[10px] font-bold uppercase hover:bg-cyan-500 hover:text-white transition-all';
+            button.innerText = 'Executar Correção Sugerida';
+            button.addEventListener('click', () => MixerService.executeAICommand(result.command));
+            actionsArea.appendChild(button);
         }
     } catch (err) {
         if (aiText) aiText.innerText = 'Erro ao consultar a IA. Verifique sua conexão.';
@@ -1161,7 +1209,7 @@ async function triggerImpulseMeasure() {
         const buffer = new Float32Array(analyser.fftSize);
         analyser.getFloatTimeDomainData(buffer);
         if (acousticWorker) {
-            acousticWorker.postMessage({ type: 'calculate', buffer, sampleRate: audioCtx.sampleRate });
+            acousticWorker.postMessage({ type: 'calculate-rt60', data: { buffer, sampleRate: audioCtx.sampleRate } });
             AppStore.addLog('Medição RT60 iniciada (Modo Fallback/Standard).');
         }
         return;
@@ -1222,7 +1270,7 @@ async function triggerImpulseMeasure() {
 
         // Envia para o Worker
         acousticWorker.postMessage({
-            type: 'calculate-rt60-schroeder',
+            type: 'calculate-rt60',
             data: { buffer: decayBuffer, sampleRate: sampleRate }
         });
 
@@ -1231,6 +1279,9 @@ async function triggerImpulseMeasure() {
 
 function _handleRT60Result(result) {
     console.log('[RT60 Result]', result);
+    lastRt60Result = result; // ✅ Guarda para o payload da IA
+    lastRt60 = result.rt60 || 0;
+    lastRt60Multiband = result.multiband || {};
     const resultEl = document.getElementById('rt60-result');
     if (resultEl) {
         resultEl.classList.remove('hidden');
@@ -1279,7 +1330,10 @@ function ensureAudioCtx() {
         hasAnalysis: () => lastAnalysis !== null,
         getFeedbackDetector: () => feedbackDetector,
         isAnalyzing: () => isAnalyzing,
-        getLastAnalysis: () => lastAnalysis
+        getLastAnalysis: () => lastAnalysis,
+        getLastRt60: () => lastRt60Result,
+        setMeasurementPosition: (position) => { lastMeasurementPosition = position; },
+        getMeasurementPosition: () => lastMeasurementPosition
     };
 
     // Ouvir eventos do roteador para Detector de Feedback
