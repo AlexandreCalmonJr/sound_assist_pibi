@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any
 import time
 import asyncio
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 
 # Importações Modulares
 from engine.ai_logic import AIEngine, SessionContext
@@ -13,7 +14,14 @@ from acoustics.processor import AcousticProcessor
 
 load_dotenv()
 
-app = FastAPI(title="SoundMaster Pro AI Engine")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Inicia limpeza de sessões
+    asyncio.create_task(cleanup_sessions_task())
+    yield
+    # Shutdown logic here if needed
+
+app = FastAPI(title="SoundMaster Pro AI Engine", lifespan=lifespan)
 
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -80,10 +88,6 @@ async def cleanup_sessions_task():
                 del sessions[sid]
         if expired:
             print(f"[AI Server] Sessões limpas: {len(expired)}")
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(cleanup_sessions_task())
 
 # Modelos de Dados
 class ChatRequest(BaseModel):

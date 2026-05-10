@@ -3,7 +3,6 @@ const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
-const localtunnel = require('localtunnel');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 
@@ -45,73 +44,9 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     db.initDatabase(dbDir);
     registerMappingsRoutes(expressApp, db.mappings);
 
-    let tunnelUrl = null;
-    let tunnelToken = crypto.randomBytes(32).toString('hex');
-
     expressApp.get('/api/config', (req, res) => {
-        res.json({ localIp, port, tunnelUrl, tunnelToken });
+        res.json({ localIp, port });
     });
-
-    expressApp.post('/api/tunnel/toggle', async (req, res) => {
-        if (tunnelUrl) {
-            // No localtunnel as-is, we'd need to keep the tunnel instance to close it
-            // For now, let's just implement a simple start/stop logic
-            res.json({ success: false, message: 'Re-inicie o app para fechar o túnel ou aguarde implementação de close' });
-        } else {
-            startTunnel();
-            res.json({ success: true, message: 'Iniciando túnel...' });
-        }
-    });
-
-    // Inicia o túnel HTTPS (importante para microfone no iOS/Android)
-    const MAX_TUNNEL_RETRIES = 10;
-
-    async function startTunnel(retryCount = 0) {
-        if (retryCount >= MAX_TUNNEL_RETRIES) {
-            console.error('[Tunnel] Limite de tentativas atingido.');
-            return;
-        }
-
-        try {
-            const sub = 'soundmaster-pibi';
-            
-            const tunnel = await localtunnel({ 
-                port: port,
-                subdomain: sub 
-            });
-
-            tunnelUrl = tunnel.url;
-            console.log('====================================');
-            console.log(`Túnel Seguro Ativo (HTTPS) [Tentativa ${retryCount + 1}]:`);
-            console.log(`URL: ${tunnelUrl}`);
-            console.log(`Token de Acesso: ${tunnelToken}`);
-            console.log(`Acesse via: ${tunnelUrl}/mobile/index.html?token=${tunnelToken}&mode=mobile`);
-            console.log('====================================');
-
-            tunnel.on('close', () => {
-                console.log('[Tunnel] Fechado. Reconectando em 5s...');
-                tunnelUrl = null;
-                setTimeout(() => startTunnel(0), 5000);
-            });
-            
-            tunnel.on('error', (err) => {
-                console.error('[Tunnel] Erro:', err.message);
-                tunnelUrl = null;
-                const delay = Math.min(5000 * Math.pow(2, retryCount), 60000);
-                setTimeout(() => startTunnel(retryCount + 1), delay);
-            });
-
-        } catch (err) {
-            console.error(`[Tunnel] Falha (tentativa ${retryCount + 1}/${MAX_TUNNEL_RETRIES}):`, err.message);
-            const delay = Math.min(5000 * Math.pow(2, retryCount), 60000);
-            setTimeout(() => startTunnel(retryCount + 1), delay);
-        }
-    }
-    if (process.env.USE_TUNNEL === 'true') {
-        startTunnel();
-    } else {
-        console.log('[Tunnel] Opt-in desativado. Para habilitar acesso externo, use USE_TUNNEL=true no .env');
-    }
 
     // Rotas de Calibração (NeDB)
     expressApp.get('/api/calibration', (req, res) => {
@@ -266,16 +201,9 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
         pingInterval: 25000
     });
 
-    // Middleware de Autenticação para Socket.IO (Tunnel)
+    // Middleware de Autenticação para Socket.IO (Removido Túnel)
     io.use((socket, next) => {
-        const token = socket.handshake.auth.token || socket.handshake.query.token;
-        const address = socket.handshake.address;
-        const isLocal = address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
-
-        if (!isLocal && token !== tunnelToken) {
-            console.warn(`[Socket.IO] Acesso negado para ${address} (Token inválido ou ausente)`);
-            return next(new Error('Authentication error: Invalid tunnel token'));
-        }
+        // Acesso liberado para rede local conforme solicitado pelo usuário
         next();
     });
 

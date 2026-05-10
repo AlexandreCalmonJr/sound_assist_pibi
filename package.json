@@ -41,7 +41,6 @@
     "dgram": "^1.0.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.1",
-    "localtunnel": "^2.0.2",
     "nedb": "^1.8.0",
     "socket.io": "^4.8.3",
     "soundcraft-ui-connection": "^6.0.3",
