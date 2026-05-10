@@ -95,6 +95,29 @@ class AIEngine:
         if analysis and 'rt60_multiband' in analysis:
             bands = analysis['rt60_multiband'] # Ex: {'125': 2.1, '500': 1.6, '1k': 1.1, '4k': 0.8}
             
+            # Lógica de Troca Automática de Perfil baseada em RT60
+            detected_profile = None
+            if bands.get('125', 0) > 1.8 and bands.get('125', 0) > bands.get('1k', 0) * 1.5:
+                detected_profile = 'teto_alto'
+            elif bands.get('500', 0) > 1.5 and bands.get('500', 0) > bands.get('4k', 0) * 1.3:
+                detected_profile = 'paredes_paralelas'
+            elif bands.get('4k', 0) > 1.2:
+                detected_profile = 'janelas_vidro'
+
+            # Se detectou algo diferente do perfil atual, sugere a mudança
+            if detected_profile and detected_profile != self.session.room_profile:
+                profile_names = {
+                    'teto_alto': 'Teto Alto (Grave)',
+                    'paredes_paralelas': 'Paredes Paralelas (Médio)',
+                    'janelas_vidro': 'Janelas/Vidro (Brilho)'
+                }
+                rt60_response = {
+                    "text": f"Detectei uma assinatura acústica de {profile_names[detected_profile]}. Alterando perfil para otimizar os filtros.",
+                    "command": self.command("set_room_profile", f"Mudar perfil para {detected_profile}", profile=detected_profile)
+                }
+                self.session.room_profile = detected_profile
+                return rt60_response
+
             # Subgraves (125Hz) costumam mascarar a voz se > 2.0s
             if bands.get('125', 0) > 2.0:
                 rt60_response = {

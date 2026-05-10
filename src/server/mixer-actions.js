@@ -165,6 +165,9 @@ function createMixerActions(getMixer) {
             case 'set_fx_level': return setFxLevel(cmd.channel || 1, cmd.fx || 1, cmd.level || 0);
             case 'run_clean_sound_preset': return runCleanSoundPreset(cmd.channel || 1, cmd);
             case 'set_delay': return setDelay(cmd.target || 'aux', cmd.aux || 1, cmd.ms || 0);
+            case 'set_room_profile': {
+                return `Perfil acústico alterado para: ${cmd.profile}`;
+            }
             case 'log': return `INFO: ${cmd.desc}`;
             default: throw new Error(`Acao nao suportada: ${cmd.action}`);
         }
