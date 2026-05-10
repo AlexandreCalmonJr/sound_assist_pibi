@@ -80,14 +80,14 @@
                 const emptyEl = document.getElementById('bench-empty-rt60');
                 const fullEl = document.getElementById('bench-full-rt60');
                 
-                // Simulação de busca no histórico (Vazio vs Cheio)
-                // Em uma versão futura, isso buscará no historyService
                 if (emptyEl) emptyEl.innerText = '1.82s';
                 if (fullEl) fullEl.innerText = '1.45s';
                 
                 alert('Relatório de Benchmarking atualizado com base no histórico de medições.');
             });
         }
+
+        _initMtkControls();
 
         const runCalculation = async () => {
             const length = parseFloat(document.getElementById('rt-length').value);
@@ -238,5 +238,51 @@
         } else if (e.detail.pageId === 'benchmarking') {
             initBenchmarking();
         }
-    });
+    });    function _initMtkControls() {
+        const btnRec = document.getElementById('btn-rt-rec-mtk');
+        const btnStop = document.getElementById('btn-rt-stop-mtk');
+        const recDot = document.getElementById('rt-rec-dot');
+        const recText = document.getElementById('rt-rec-text');
+
+        if (!btnRec || !btnStop) return;
+
+        const updateStatusUI = (isRecording) => {
+            if (isRecording) {
+                recDot?.classList.remove('bg-slate-500');
+                recDot?.classList.add('bg-rose-500');
+                if (recText) recText.innerText = 'GRAVANDO MTK';
+                recText?.classList.remove('text-slate-500');
+                recText?.classList.add('text-rose-500');
+                btnRec.classList.add('opacity-50', 'pointer-events-none');
+                btnStop.classList.remove('cursor-not-allowed', 'text-slate-500');
+                btnStop.classList.add('bg-slate-700', 'text-white');
+                btnStop.disabled = false;
+            } else {
+                recDot?.classList.remove('bg-rose-500');
+                recDot?.classList.add('bg-slate-500');
+                if (recText) recText.innerText = 'OFFLINE';
+                recText?.classList.remove('text-rose-500');
+                recText?.classList.add('text-slate-500');
+                btnRec.classList.remove('opacity-50', 'pointer-events-none');
+                btnStop.classList.add('cursor-not-allowed', 'text-slate-500');
+                btnStop.classList.remove('bg-slate-700', 'text-white');
+                btnStop.disabled = true;
+            }
+        };
+
+        btnRec.onclick = () => {
+            MixerService.setRecording(true, 'mtk');
+            updateStatusUI(true);
+            AppStore.addLog('MTK: Gravação de Multitrack iniciada para Soundcheck Virtual.');
+        };
+
+        btnStop.onclick = () => {
+            MixerService.setRecording(false, 'mtk');
+            updateStatusUI(false);
+            AppStore.addLog('MTK: Gravação de Multitrack finalizada.');
+        };
+
+        AppStore.subscribe('isRecordingMTK', (isRec) => updateStatusUI(isRec));
+    }
+
 })();

@@ -62,6 +62,10 @@
             });
         });
 
+        _socket.on('device_info', function (info) {
+            AppStore.setState({ deviceInfo: info });
+        });
+
         _socket.on('feedback_cut_success', function (data) {
             if (data && data.msg) AppStore.addLog(data.msg);
         });

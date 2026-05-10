@@ -24,6 +24,11 @@
         vuData: {},           // dados de VU em tempo real por canal
         recording: false,     // estado do gravador 2-track
         mtkRecording: false,  // estado do multitrack
+        deviceInfo: {
+            model: 'Unknown',
+            firmware: 'N/A',
+            caps: {}
+        },
 
         // IA
         aiStatus: 'offline',  // 'online' | 'offline' | 'loading'

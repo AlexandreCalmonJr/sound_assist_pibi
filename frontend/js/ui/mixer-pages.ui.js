@@ -199,25 +199,38 @@
         if (!container) return;
 
         container.innerHTML = '';
-        const fxTypes = ['HALL REVERB', 'ROOM REVERB', 'DIGITAL DELAY', 'CHORUS'];
-
+        
         for (let i = 1; i <= 4; i++) {
             const fxCard = document.createElement('div');
-            fxCard.className = 'bg-slate-900/60 border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-6';
+            fxCard.className = 'bg-slate-900/60 border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-6 group hover:border-indigo-500/30 transition-all';
             fxCard.innerHTML = `
                 <div class="flex items-center justify-between">
-                    <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">FX ${i}</span>
-                    <span class="text-[9px] font-bold text-slate-500">${fxTypes[i - 1]}</span>
+                    <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Engine Lexicon ${i}</span>
+                    <span id="fx-type-${i}" class="text-[9px] font-bold text-slate-500 uppercase">Detectando...</span>
                 </div>
                 
-                <div class="h-64 w-16 bg-black/40 rounded-2xl mx-auto relative flex items-center justify-center border border-white/5 overflow-hidden">
-                    <input type="range" id="fx-level-${i}" min="0" max="100" value="50" 
-                           class="fader-vertical text-indigo-500" orient="vertical">
-                </div>
- 
-                <div class="text-center">
-                    <span id="fx-val-${i}" class="text-xl font-black text-white">50</span>
-                    <span class="text-[10px] text-slate-500 ml-1">%</span>
+                <div class="flex gap-4 items-center">
+                    <div class="h-48 w-10 bg-black/40 rounded-xl relative flex items-center justify-center border border-white/5 overflow-hidden">
+                        <input type="range" id="fx-level-${i}" min="0" max="100" value="50" 
+                               class="fader-vertical text-indigo-500" orient="vertical">
+                    </div>
+                    <div class="flex-1 space-y-4">
+                        <div class="bg-black/20 p-3 rounded-xl border border-white/5">
+                            <label class="text-[9px] uppercase font-bold text-slate-500 mb-1 block">Volume de Retorno</label>
+                            <div class="flex items-end gap-1">
+                                <span id="fx-val-${i}" class="text-xl font-black text-white">50</span>
+                                <span class="text-[10px] text-slate-500 mb-1">%</span>
+                            </div>
+                        </div>
+                        <div class="bg-black/20 p-3 rounded-xl border border-white/5">
+                            <label class="text-[9px] uppercase font-bold text-slate-500 mb-2 block">Tempo / BPM</label>
+                            <div class="flex gap-2">
+                                <input type="number" id="fx-bpm-${i}" value="120" min="40" max="300" 
+                                       class="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-xs text-indigo-400 font-mono text-center focus:border-indigo-500 outline-none">
+                                <button id="fx-tap-${i}" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black rounded-lg transition-all">TAP</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             `;
             container.appendChild(fxCard);
@@ -227,6 +240,23 @@
                 $(`fx-val-${i}`).innerText = val;
                 MixerService.sendRaw(`SETD|f|${i - 1}|mix|${val / 100}`);
             };
+
+            $(`fx-bpm-${i}`).onchange = (e) => {
+                MixerService.setFxBpm(i, e.target.value);
+            };
+
+            $(`fx-tap-${i}`).onclick = () => {
+                const input = $(`fx-bpm-${i}`);
+                const next = (parseInt(input.value) || 120) + 5; 
+                input.value = next > 180 ? 80 : next;
+                MixerService.setFxBpm(i, input.value);
+            };
+        }
+
+        const types = ['Reverb', 'Delay', 'Chorus', 'Room'];
+        for(let i=1; i<=4; i++) {
+            const el = $(`fx-type-${i}`);
+            if(el) el.innerText = types[i-1];
         }
     }
 
@@ -248,26 +278,31 @@
         }
 
         // Configura botões
-        const btnApply = document.querySelectorAll('.bg-rose-600, .bg-cyan-600');
+        const btnApply = document.querySelectorAll('.bg-rose-600, .bg-cyan-600, .bg-emerald-600');
         btnApply.forEach(btn => {
             btn.onclick = () => {
                 const ch = select.value;
-                const type = btn.closest('.bg-slate-900\\/60, .bg-cyan-900\\/20').querySelector('h3').innerText;
+                const type = btn.closest('.bg-slate-900\\/60, .bg-cyan-900\\/20, .bg-emerald-900\\/20').querySelector('h3').innerText;
 
                 let opts = {};
                 if (type.includes('Barítono')) opts = { hpf: 120, low: -2 };
                 if (type.includes('Soprano')) opts = { hpf: 150, high: 2 };
                 if (type.includes('Pregador')) opts = { compressor: 'aggressive', afs: true };
+                if (type.includes('Smart Clean')) opts = { deesser: true, gate: 'adaptive', air: true, denoise: true };
 
                 MixerService.runCleanSoundPreset(ch, opts);
                 AppStore.addLog(`IA: Aplicando preset [${type}] ao canal ${ch}`);
 
                 const originalText = btn.innerText;
                 btn.innerText = 'APLICADO ✓';
+                const originalBg = [...btn.classList].find(c => c.startsWith('bg-'));
+                btn.classList.remove(originalBg);
                 btn.classList.add('bg-green-600');
+                
                 setTimeout(() => {
                     btn.innerText = originalText;
                     btn.classList.remove('bg-green-600');
+                    btn.classList.add(originalBg);
                 }, 2000);
             };
         });

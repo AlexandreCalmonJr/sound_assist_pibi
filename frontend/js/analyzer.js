@@ -103,6 +103,47 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
                 console.log('[Analyzer] Diagnóstico Manual disparado.');
             });
         }
+            });
+        }
+    }
+
+    function _initAutomixControls() {
+        const btnToggle = document.getElementById('btn-toggle-automix');
+        const sliderSpeed = document.getElementById('automix-speed-slider');
+        const valSpeed = document.getElementById('automix-speed-val');
+        const btnGroupA = document.getElementById('btn-automix-group-a');
+        const btnGroupB = document.getElementById('btn-automix-group-b');
+
+        let currentGroup = 'a';
+
+        if (btnToggle) {
+            btnToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                MixerService.automixControl(currentGroup, enabled ? 'enable' : 'disable');
+                console.log(`[Analyzer] Automix ${currentGroup.toUpperCase()}: ${enabled ? 'ON' : 'OFF'}`);
+            });
+        }
+
+        if (sliderSpeed) {
+            sliderSpeed.addEventListener('input', (e) => {
+                const ms = e.target.value;
+                if (valSpeed) valSpeed.innerText = ms + 'ms';
+                MixerService.automixControl(null, 'responseTime', ms);
+            });
+        }
+
+        const updateGroupUI = (group) => {
+            currentGroup = group;
+            if (btnGroupA && btnGroupB) {
+                btnGroupA.classList.toggle('active', group === 'a');
+                btnGroupA.classList.toggle('bg-cyan-600/20', group === 'a');
+                btnGroupB.classList.toggle('active', group === 'b');
+                btnGroupB.classList.toggle('bg-cyan-600/20', group === 'b');
+            }
+        };
+
+        btnGroupA?.addEventListener('click', () => updateGroupUI('a'));
+        btnGroupB?.addEventListener('click', () => updateGroupUI('b'));
     }
 
     function initAnalyzer() {
@@ -112,6 +153,7 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
 
         canvasCtx = canvas.getContext('2d');
         _initManualControls();
+        _initAutomixControls();
         
         // Captura de elementos
         rmsBar = document.getElementById('rms-bar');
