@@ -52,10 +52,11 @@ class HistoryService {
                 }
 
                 docs.forEach(doc => {
-                    // Normalização do status (vazio/empty vs cheio/full)
-                    let status = (doc.crowdStatus || 'empty').toLowerCase();
-                    if (status === 'vazio') status = 'empty';
-                    if (status === 'cheio') status = 'full';
+                    // Normalização robusta do status (vazio/empty vs cheio/full)
+                    let rawStatus = (doc.crowdStatus || 'empty').toLowerCase().trim();
+                    let status = 'empty';
+                    if (rawStatus.startsWith('v') || rawStatus === 'empty') status = 'empty';
+                    else if (rawStatus.startsWith('c') || rawStatus === 'full' || rawStatus.startsWith('f')) status = 'full';
                     
                     if (stats[status] && doc.rt60) {
                         const val = parseFloat(doc.rt60);

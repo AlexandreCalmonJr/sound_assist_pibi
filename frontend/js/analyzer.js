@@ -13,6 +13,10 @@
 (function () {
 'use strict';
 
+// Previne inicialização múltipla se o script for re-executado pelo roteador SPA
+if (window.SoundMasterAnalyzerInitialized) return;
+window.SoundMasterAnalyzerInitialized = true;
+
 // Analisador de Áudio em Tempo Real (Web Audio API)
 let audioCtx;
 let analyser;
@@ -225,7 +229,13 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
         console.log('[Analyzer] Inicializando serviços globais de áudio...');
         
         // 1. Global Mic Toggle Header (Sempre presente no index.html)
-        document.getElementById('btn-toggle-mic')?.addEventListener('click', toggleAnalyzer);
+        // 1. Global Mic Toggle Header (Sempre presente no index.html)
+        const btnMic = document.getElementById('btn-toggle-mic');
+        if (btnMic) {
+            // Remove anterior para evitar duplicidade caso o init seja chamado via console/re-entry
+            btnMic.removeEventListener('click', toggleAnalyzer);
+            btnMic.addEventListener('click', toggleAnalyzer);
+        }
 
         // 2. Inicializa Worker de Acústica
         if (!acousticWorker) {

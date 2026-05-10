@@ -5,6 +5,8 @@ class AcousticProcessor:
     @staticmethod
     def eyring_rt60(volume, surface_area, alpha):
         """Mais preciso que Sabine para alpha > 0.2 (salas tratadas ou muito absortivas)"""
+        if surface_area <= 0:
+            return 0 # Evita divisão por zero
         if alpha >= 1: alpha = 0.99
         return (-0.161 * volume) / (surface_area * math.log(1 - alpha))
 
@@ -46,7 +48,15 @@ class AcousticProcessor:
              return []
 
         from collections import Counter
-        freq_counter = Counter([round(f / 50) * 50 for f in peak_frequencies])
+        # Ajuste: Frequências abaixo de 100Hz usam baldes de 10Hz, acima usam 50Hz
+        buckets = []
+        for f in peak_frequencies:
+            if f < 100:
+                buckets.append(round(f / 10) * 10)
+            else:
+                buckets.append(round(f / 50) * 50)
+        
+        freq_counter = Counter(buckets)
         most_common = freq_counter.most_common(3)
         
         patterns = []

@@ -32,6 +32,12 @@
     function handleImageUpload(e) {
         const file = e.target.files[0];
         if(!file) return;
+        
+        // Alerta sobre limite do localStorage (~5MB total, reservamos 2MB para a imagem)
+        if (file.size > 2 * 1024 * 1024) {
+            alert('Aviso: Imagens maiores que 2MB podem não ser salvas permanentemente devido ao limite do navegador. O mapa funcionará, mas você precisará carregar a imagem novamente ao reiniciar.');
+        }
+
         const reader = new FileReader();
         reader.onload = (ev) => {
             bgImageSrc = ev.target.result;

@@ -20,7 +20,12 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ calibrationData, splOffset })
-        }).catch(err => console.error('[Calibration] Erro ao salvar:', err));
+        })
+        .then(res => { if (!res.ok) throw new Error('Erro no servidor'); })
+        .catch(err => {
+            console.error('[Calibration] Erro ao salvar:', err);
+            alert('Erro ao salvar calibração no servidor. Verifique a conexão.');
+        });
         
         alert('Arquivo de calibração carregado com sucesso!');
     }
@@ -104,7 +109,9 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ calibrationData, splOffset })
-        }).catch(err => console.error('[Calibration] Erro ao salvar SPL:', err));
+        })
+        .then(res => { if (!res.ok) throw new Error('Erro no servidor'); })
+        .catch(err => console.error('[Calibration] Erro ao salvar SPL:', err));
         
         alert(`Offset global ajustado para ${splOffset.toFixed(1)} dB`);
     }

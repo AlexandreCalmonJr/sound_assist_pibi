@@ -80,6 +80,14 @@ class Router {
                  container.textContent = 'Erro ao processar conteúdo da página.';
             } else {
                 container.replaceChildren(...Array.from(doc.body.children).map(child => child.cloneNode(true)));
+                
+                // ✅ Re-executar scripts inline para garantir que a lógica da página funcione
+                container.querySelectorAll('script').forEach(oldScript => {
+                    const newScript = document.createElement('script');
+                    Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                    newScript.textContent = oldScript.textContent;
+                    oldScript.replaceWith(newScript);
+                });
             }
             
             this.currentPage = pageId;

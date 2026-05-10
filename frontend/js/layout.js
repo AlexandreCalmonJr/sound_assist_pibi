@@ -182,6 +182,14 @@
                 if (catEl) catEl.style.display = 'none';
                 if (sepEl) sepEl.style.display = 'none';
                 if (pageEl) pageEl.textContent = title;
+                
+                // Se não há categoria, fechamos o painel e resetamos estado
+                activeCategory = null;
+                const panel = document.getElementById('category-panel');
+                const sidebar = document.getElementById('app-sidebar');
+                panel?.classList.remove('open');
+                sidebar?.classList.remove('panel-open');
+                document.querySelectorAll('.rail-btn[data-category]').forEach(b => b.classList.remove('active'));
             }
         });
     }

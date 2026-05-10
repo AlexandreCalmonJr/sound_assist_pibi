@@ -38,6 +38,8 @@ const MobileRouter = {
             });
         });
         this.navigate(this.currentPage);
+        // ✅ Inicializa lista de mapeamentos salvos
+        loadMobileMappings();
     },
 
     navigate(pageId) {
@@ -760,8 +762,8 @@ async function askAI(text, includeAnalysis = false) {
     aiChatBox.appendChild(userRow);
     aiChatBox.scrollTop = aiChatBox.scrollHeight;
 
-    const payload = { 
         message: text || 'analise o som ambiente',
+        session_id: token, // ✅ Vincula a sessão mobile ao contexto da IA
         analysis: includeAnalysis ? {
             peakHz: Math.round(currentPeakHz),
             rms: rmsReadout?.innerText || '0%',

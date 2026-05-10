@@ -107,7 +107,11 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
             setTimeout(() => startTunnel(retryCount + 1), delay);
         }
     }
-    startTunnel(); 
+    if (process.env.USE_TUNNEL === 'true') {
+        startTunnel();
+    } else {
+        console.log('[Tunnel] Opt-in desativado. Para habilitar acesso externo, use USE_TUNNEL=true no .env');
+    }
 
     // Rotas de Calibração (NeDB)
     expressApp.get('/api/calibration', (req, res) => {

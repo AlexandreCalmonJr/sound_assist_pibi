@@ -14,6 +14,10 @@ function initDatabase(dataDir) {
     presetsDb = new Datastore({ filename: path.join(dataDir, 'presets.db'), autoload: true });
     mappingsDb = new Datastore({ filename: path.join(dataDir, 'mappings.db'), autoload: true });
     settingsDb = new Datastore({ filename: path.join(dataDir, 'settings.db'), autoload: true });
+
+    // Adicionar índices para performance
+    mappingsDb.ensureIndex({ fieldName: 'hz' });
+    mappingsDb.ensureIndex({ fieldName: 'date' });
 }
 
 module.exports = {

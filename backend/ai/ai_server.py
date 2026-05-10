@@ -3,6 +3,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
+import time
+import asyncio
 from dotenv import load_dotenv
 
 # Importações Modulares
@@ -63,7 +65,25 @@ sessions: Dict[str, SessionContext] = {}
 def get_session(session_id: str = "default") -> SessionContext:
     if session_id not in sessions:
         sessions[session_id] = SessionContext()
+    else:
+        sessions[session_id].touch()
     return sessions[session_id]
+
+async def cleanup_sessions_task():
+    """Tarefa em background para limpar sessões inativas (TTL de 1 hora)"""
+    while True:
+        await asyncio.sleep(600)  # Roda a cada 10 minutos
+        cutoff = time.time() - 3600  # 1 hora
+        expired = [sid for sid, s in sessions.items() if s.last_activity < cutoff]
+        for sid in expired:
+            if sid != "default": # Mantemos a default
+                del sessions[sid]
+        if expired:
+            print(f"[AI Server] Sessões limpas: {len(expired)}")
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(cleanup_sessions_task())
 
 # Modelos de Dados
 class ChatRequest(BaseModel):

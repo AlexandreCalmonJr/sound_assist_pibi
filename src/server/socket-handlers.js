@@ -23,7 +23,11 @@ const schemas = {
         band: z.number().min(1).max(4).optional()
     }),
     aiCommand: z.object({
-        action: z.string(),
+        action: z.enum([
+            'eq_cut', 'apply_channel_hpf', 'apply_channel_gate',
+            'apply_channel_compressor', 'set_afs_enabled', 'run_clean_sound_preset',
+            'set_delay', 'set_oscillator', 'set_room_profile', 'log'
+        ]),
         hz: z.number().optional(),
         desc: z.string().optional()
     }),
@@ -72,17 +76,15 @@ function registerSocketHandlers(io, appDataDir = './logs') {
     const logger = new Logger(appDataDir);
     let activeConnections = 0;
 
-    // Função auxiliar para throttle
-    function createThrottle(ms) {
+    // Função auxiliar para throttle - Correção: retorna função que executa imediatamente se permitido
+    function createThrottle(fn, ms) {
         let lastTime = 0;
-        return (fn) => {
-            return function(...args) {
-                const now = Date.now();
-                if (now - lastTime >= ms) {
-                    fn.apply(this, args);
-                    lastTime = now;
-                }
-            };
+        return function(...args) {
+            const now = Date.now();
+            if (now - lastTime >= ms) {
+                lastTime = now;
+                return fn.apply(this, args);
+            }
         };
     }
     
@@ -107,7 +109,18 @@ function registerSocketHandlers(io, appDataDir = './logs') {
         };
 
         const actions = createMixerActions(() => mixer);
-        const throttleMasterLevel = createThrottle(50); // máx 20x por segundo
+        
+        // Definição dos throttles por socket
+        const throttledSetMaster = createThrottle((level) => {
+            mixer.master.setFaderLevel(level);
+            if (mixer.isSimulated) {
+                mixer.conn.sendMessage(`SETD^m.value^${level}`);
+            }
+        }, 50);
+
+        const throttledVuEmit = createThrottle((vuData) => {
+            socket.emit('vu_data', vuData);
+        }, 50);
 
         logger.info(socket.id, 'CLIENT_CONNECTED', { activeConnections });
 
@@ -205,13 +218,8 @@ function registerSocketHandlers(io, appDataDir = './logs') {
                     socket.emit('master_level_db', levelDb);
                 });
 
-                // --- VU METER STREAMING ---
-                // Throttle de 50ms para não inundar o Wi-Fi
-                const throttleVu = createThrottle(50);
                 mixer.vuProcessor.vuData$.subscribe(vuData => {
-                    throttleVu(() => {
-                        socket.emit('vu_data', vuData);
-                    });
+                    throttledVuEmit(vuData);
                 });
             } catch (error) {
                 console.error('Erro ao conectar na mesa:', error.message);
@@ -237,20 +245,9 @@ function registerSocketHandlers(io, appDataDir = './logs') {
             try {
                 const validated = schemas.masterLevel.parse(data);
                 
-                throttleMasterLevel(() => {
-                    try {
-                        mixer.master.setFaderLevel(validated.level);
-                        logger.info(socket.id, 'SET_MASTER_LEVEL', { level: validated.level });
-                        
-                        if (mixer.isSimulated) {
-                            mixer.conn.sendMessage(`SETD^m.value^${validated.level}`);
-                        }
-                        
-                        socket.emit('mixer_status', { connected: true, msg: `Master ajustado para ${Math.round(validated.level * 100)}%` });
-                    } catch (error) {
-                        logger.error(socket.id, 'SET_MASTER_LEVEL_ASYNC_ERROR', { error: error.message });
-                    }
-                });
+                throttledSetMaster(validated.level);
+                logger.info(socket.id, 'SET_MASTER_LEVEL', { level: validated.level });
+                socket.emit('mixer_status', { connected: true, msg: `Master ajustado para ${Math.round(validated.level * 100)}%` });
             } catch (error) {
                 logger.error(socket.id, 'SET_MASTER_LEVEL_VALIDATION_ERROR', { error: error.message });
                 socket.emit('mixer_status', { connected: true, msg: `Dados inválidos: ${error.message}` });
@@ -474,6 +471,8 @@ function registerSocketHandlers(io, appDataDir = './logs') {
                         if (doc.state.inputs && Array.isArray(doc.state.inputs)) {
                             doc.state.inputs.forEach((inputState, idx) => {
                                 const ch = idx + 1;
+                                if (ch > 24) return; // Segurança: limite de canais
+                                
                                 const input = mixer.input(ch);
                                 if (!input) return;
 

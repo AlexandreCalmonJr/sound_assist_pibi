@@ -26,8 +26,13 @@ class SessionContext:
         self.history = []
         self.room_profile = 'janelas_vidro'
         self.analyses_history = []
+        self.last_activity = time.time()
+    
+    def touch(self):
+        self.last_activity = time.time()
     
     def add_analysis(self, analysis):
+        self.touch()
         self.analyses_history.append(analysis)
         if len(self.analyses_history) > 50:
             self.analyses_history.pop(0)
@@ -53,7 +58,12 @@ class AIEngine:
         analysis = analysis or (self.session.analyses_history[-1] if self.session.analyses_history else {})
         rt60_avg = analysis.get('rt60', 1.2)
         rt60_info = AcousticProcessor.classify_room(rt60_avg)
-        sti = AcousticProcessor.estimate_sti(rt60_avg)
+        
+        # Calibração de SNR baseada em RMS (se disponível)
+        # Assumimos nível de fala alvo de -18dBFS
+        rms_noise = analysis.get('rms', -45) # Nível médio de ruído de fundo
+        snr_calc = max(5, -18 - rms_noise) # SNR = Sinal - Ruído
+        sti = AcousticProcessor.estimate_sti(rt60_avg, snr=snr_calc)
         
         room_vol = 900 
         dc = AcousticProcessor.calculate_critical_distance(room_vol, rt60_avg)
