@@ -180,13 +180,26 @@ async function runTestbed() {
     });
     mixer.clearMuteGroups = () => console.log('   [Mixer] Todos os Mute Groups LIMPOS 🧹');
 
+    mixer.automix = {
+        groups: {
+            a: { enable: () => console.log('   [Mixer] AUTOMIX Grupo A ATIVADO 🤖') },
+            b: { enable: () => console.log('   [Mixer] AUTOMIX Grupo B ATIVADO 🤖') }
+        },
+        setResponseTimeMs: (v) => console.log(`   [Mixer] AUTOMIX Tempo de Resposta -> ${v}ms`)
+    };
+
+    mixer.deviceInfo = { model: 'ui24' };
+
     mixer.input = (ch) => ({
         setFaderLevel: (v) => console.log(`   [Mixer] Canal ${ch} -> ${v}`),
+        fadeTo: (v, t) => console.log(`   [Mixer] Fading Canal ${ch} para ${v} em ${t}ms 🌊`),
         toggleSolo: () => console.log(`   [Mixer] Canal ${ch} SOLO Alternado`),
         setPan: (v) => console.log(`   [Mixer] Canal ${ch} Pan -> ${v}`),
         setDelay: (ms) => console.log(`   [Mixer] Canal ${ch} Delay -> ${ms}ms`),
         multiTrackSelect: () => console.log(`   [Mixer] Canal ${ch} -> Selecionado para MTK`),
         multiTrackUnselect: () => console.log(`   [Mixer] Canal ${ch} -> Removido do MTK`),
+        automixAssignGroup: (g) => console.log(`   [Mixer] Canal ${ch} -> Grupo Automix: ${g}`),
+        automixSetWeight: (v) => console.log(`   [Mixer] Canal ${ch} -> Peso Automix: ${v}`),
         aux: (auxId) => ({
             setFaderLevel: (v) => console.log(`   [Mixer] Ch ${ch} -> AUX ${auxId} Level: ${v}`),
             setPost: (v) => console.log(`   [Mixer] Ch ${ch} -> AUX ${auxId} Mode: ${v === 1 ? 'POST' : 'PRE'}`),
@@ -230,7 +243,11 @@ async function runTestbed() {
         { action: 'show_cmd', action_type: 'load_snapshot', show: 'PIBI_Geral', target: 'Culto_Domingo' },
         { action: 'show_cmd', action_type: 'update_snapshot' },
         { action: 'mute_group_cmd', id: 'all', enabled: 1 },
-        { action: 'clear_mute_groups' }
+        { action: 'clear_mute_groups' },
+        { action: 'automix_cmd', action_type: 'enable_a' },
+        { action: 'automix_assign', channel: 1, group: 'a', weight: 0.8 },
+        { action: 'get_device_info' },
+        { action: 'fade_channel', channel: 3, level: 0, time: 5000 }
     ];
 
     tests.forEach(t => {

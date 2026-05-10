@@ -1,3 +1,5 @@
+const { Easings } = require('soundcraft-ui-connection');
+
 function createMixerActions(getMixer) {
     function clamp(value, min, max) {
         return Math.min(max, Math.max(min, Number(value)));
@@ -104,6 +106,16 @@ function createMixerActions(getMixer) {
     function setFxPost(channel, fx, isPost) {
         getMixer().input(channel).fx(fx).setPost(isPost ? 1 : 0);
         return `FX ${fx} do canal ${channel} configurado como ${isPost ? 'POST' : 'PRE'}-Fader.`;
+    }
+
+    function fadeMaster(level, time) {
+        getMixer().master.fadeTo(clamp(level, 0, 1), time, Easings.EaseInOut);
+        return `Fade do Master para ${Math.round(level * 100)}% em ${time}ms iniciado.`;
+    }
+
+    function fadeChannel(channel, level, time) {
+        getMixer().input(channel).fadeTo(clamp(level, 0, 1), time, Easings.EaseInOut);
+        return `Fade do canal ${channel} para ${Math.round(level * 100)}% em ${time}ms iniciado.`;
     }
 
     function setFxBpm(fx, bpm) {
@@ -233,6 +245,36 @@ function createMixerActions(getMixer) {
         return 'Todos os Mute Groups foram limpos.';
     }
 
+    function automixControl(action, value = null) {
+        const am = getMixer().automix;
+        switch (action) {
+            case 'enable_a': am.groups.a.enable(); break;
+            case 'disable_a': am.groups.a.disable(); break;
+            case 'enable_b': am.groups.b.enable(); break;
+            case 'disable_b': am.groups.b.disable(); break;
+            case 'set_response': am.setResponseTimeMs(clamp(value, 20, 4000)); break;
+            default: return `Ação Automix desconhecida: ${action}`;
+        }
+        return `Automix: comando ${action} executado.`;
+    }
+
+    function automixAssignChannel(channel, group, weight = 0.5) {
+        const input = getMixer().input(channel);
+        input.automixAssignGroup(group); // 'a', 'b', ou 'none'
+        input.automixSetWeight(clamp(weight, 0, 1));
+        return `Canal ${channel} atribuído ao Automix Grupo ${group.toUpperCase()} com peso ${Math.round(weight * 100)}%.`;
+    }
+
+    function getDeviceInfo() {
+        const mixer = getMixer();
+        const info = mixer.deviceInfo;
+        return {
+            model: info.model,
+            firmware: 'Verificando...', // Firmware é via Observable, simplificamos para o retorno imediato
+            capabilities: 'Consultando...'
+        };
+    }
+
     function runCleanSoundPreset(channel, opts = {}) {
         const steps = [
             applyChannelHpf(channel, opts.hpf || 100),
@@ -325,10 +367,8 @@ function createMixerActions(getMixer) {
                 mixer.input(ch).toggleSolo();
                 return `Solo do Canal ${ch} alternado.`;
             }
-            case 'fade_master': {
-                mixer.master.fadeTo(clamp(cmd.level || 0, 0, 1), cmd.time || 2000);
-                return `Fazendo fade do Master para ${cmd.level} em ${cmd.time || 2000}ms`;
-            }
+            case 'fade_master': return fadeMaster(cmd.level || 0, cmd.time || 2000);
+            case 'fade_channel': return fadeChannel(cmd.channel || 1, cmd.level || 0, cmd.time || 2000);
             case 'set_oscillator': return applyOscillator(cmd.enabled !== 0, cmd.type, cmd.level);
             case 'set_aux_level': return setAuxLevel(cmd.channel || 1, cmd.aux || 1, cmd.level || 0);
             case 'set_aux_post': return setAuxPost(cmd.channel || 1, cmd.aux || 1, cmd.enabled !== 0);
@@ -353,6 +393,9 @@ function createMixerActions(getMixer) {
             case 'show_cmd': return showControl(cmd.action_type, cmd.show, cmd.target);
             case 'mute_group_cmd': return muteGroupControl(cmd.id || 'all', cmd.enabled !== 0);
             case 'clear_mute_groups': return clearMuteGroups();
+            case 'automix_cmd': return automixControl(cmd.action_type, cmd.val);
+            case 'automix_assign': return automixAssignChannel(cmd.channel || 1, cmd.group || 'none', cmd.weight || 0.5);
+            case 'get_device_info': return getDeviceInfo();
             case 'run_clean_sound_preset': return runCleanSoundPreset(cmd.channel || 1, cmd);
             case 'set_delay': {
                 const id = cmd.channel || cmd.ch || cmd.aux || cmd.id || 1;
