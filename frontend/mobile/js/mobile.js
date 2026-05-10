@@ -274,6 +274,11 @@ const aiInput = document.getElementById('mobile-ai-input');
 const aiChatBox = document.getElementById('mobile-ai-chat');
 const aiQuickTags = document.querySelectorAll('.mobile-ai-suggest');
 
+// DOM Elements — Mappings
+const mobileMappingList = document.getElementById('mobile-mapping-list');
+const mobileMapLocation = document.getElementById('mobile-map-location');
+const btnMobileSavePeak = document.getElementById('mobile-btn-save-peak');
+
 
 let audioCtx;
 let analyser;
@@ -542,6 +547,7 @@ function analyzeMic() {
     const rmsDb = 20 * Math.log10(rms + 1e-6);
 
     // Lógica de Medição de RT60 (Multibanda Schroeder-inspired)
+    if (isMeasuringRT60) {
         // ✅ Correção Auditoria: Calibração de ruído de fundo (primeiros 30 frames ~500ms)
         if (rt60StartTime === 0 && rt60BackgroundSamples < 30) {
             rt60BackgroundLevel = Math.max(rt60BackgroundLevel, rmsDb);
@@ -826,8 +832,9 @@ async function askAI(text, includeAnalysis = false) {
     aiChatBox.appendChild(userRow);
     aiChatBox.scrollTop = aiChatBox.scrollHeight;
 
+    const payload = {
         message: text || 'analise o som ambiente',
-        session_id: token, // ✅ Vincula a sessão mobile ao contexto da IA
+        session_id: token, 
         analysis: includeAnalysis ? {
             peakHz: Math.round(currentPeakHz),
             rms: rmsReadout?.innerText || '0%',
@@ -945,6 +952,7 @@ const mobileBtnPulse = document.getElementById('mobile-btn-pulse');
 
 mobilePinkToggle?.addEventListener('change', (e) => {
     const enabled = e.target.checked;
+    isPinkNoiseActive = enabled;
     const level = mobilePinkLevel ? mobilePinkLevel.value : -20;
     emitMobileTool('set_oscillator', { enabled, type: 1, level }, `Ruído Rosa ${enabled ? 'LIGADO' : 'DESLIGADO'}.`);
 });
@@ -1048,6 +1056,8 @@ btnAiSend?.addEventListener('click', () => {
     askAI(text);
     aiInput.value = '';
 });
+
+btnMobileSavePeak?.addEventListener('click', saveCurrentPeak);
 
 aiQuickTags.forEach(tag => {
     tag.addEventListener('click', () => {

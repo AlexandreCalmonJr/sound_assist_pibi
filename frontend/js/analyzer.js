@@ -31,6 +31,11 @@ let pinkMeasurementCount = 0;
 let pinkMeasurementSum = null;
 let pinkReport = null;
 
+// ✅ Novo: Arrays globais (reaproveitados) para evitar GC pressure no loop 60fps
+let freqData = null;
+let timeData = null;
+let bufferLength = 0;
+
 // Refs que serão capturadas no init
 let canvas, canvasCtx, rmsBar, feedbackAlert, analysisSummaryText, analysisDetailList, btnSendAnalysis, btnMeasurePink, btnDesktopPink, pinkMeasureSummary, btnLogSweep, micSelect;
 let waterfallCanvasEl, waterfallCtx;
@@ -104,13 +109,16 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
 
         if (btnDiag) {
             btnDiag.addEventListener('click', () => {
-                const analysis = _analyzeSpectrum();
+                if (!lastAnalysis) {
+                    alert('Ative o microfone primeiro para realizar a análise.');
+                    return;
+                }
                 const summaryEl = document.getElementById('acoustic-summary');
                 if (summaryEl) {
-                    summaryEl.innerHTML = `<strong>Diagnóstico Manual:</strong> ${analysis.text}`;
+                    summaryEl.innerHTML = `<strong>Diagnóstico Manual:</strong> ${lastAnalysis.text}`;
                     summaryEl.classList.add('text-cyan-400');
                 }
-                console.log('[Analyzer] Diagnóstico Manual disparado.');
+                console.log('[Analyzer] Diagnóstico Manual disparado usando última análise.');
             });
         }
     }
@@ -763,6 +771,13 @@ function analyze() {
     if (!isAnalyzing) return;
     
     animationId = requestAnimationFrame(analyze);
+    
+    // ✅ Inicializa arrays se necessário
+    if (!freqData || freqData.length !== analyser.frequencyBinCount) {
+        bufferLength = analyser.frequencyBinCount;
+        freqData = new Float32Array(bufferLength);
+        timeData = new Float32Array(analyser.fftSize);
+    }
     
     analyser.getFloatFrequencyData(freqData);
     
