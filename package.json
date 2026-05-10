@@ -40,12 +40,14 @@
     "localtunnel": "^2.0.2",
     "nedb": "^1.8.0",
     "socket.io": "^4.8.3",
-    "soundcraft-ui-connection": "^6.0.3"
+    "soundcraft-ui-connection": "^6.0.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.2.4",
     "electron": "^41.5.0",
     "electron-builder": "^26.8.1",
-    "tailwindcss": "^4.2.4"
+    "tailwindcss": "^4.2.4",
+    "vitest": "^4.1.5"
   }
 }

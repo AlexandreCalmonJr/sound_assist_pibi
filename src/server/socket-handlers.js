@@ -1,10 +1,75 @@
+const { z } = require('zod');
 const { SoundcraftUI } = require('soundcraft-ui-connection');
 const { createMixerActions } = require('./mixer-actions');
 const db = require('./database');
 const historyService = require('./history-service');
 const aiPredictor = require('./ai-predictor');
+const Logger = require('./logger');
 
-function registerSocketHandlers(io) {
+// --- Esquemas de Validação ---
+// ... (esquemas omitidos para brevidade, mantidos no arquivo)
+const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+const schemas = {
+    connect: z.string().regex(ipRegex).or(z.enum(['offline', 'simulado', '127.0.0.1'])),
+    masterLevel: z.object({
+        level: z.union([z.number(), z.string()]).transform(v => Number(v)).pipe(z.number().min(0).max(1))
+    }),
+    eqCut: z.object({
+        target: z.enum(['master', 'channel']),
+        channel: z.number().min(1).max(24).optional(),
+        hz: z.number().min(20).max(20000),
+        gain: z.number().min(-24).max(12).optional(),
+        q: z.number().min(0.1).max(10).optional(),
+        band: z.number().min(1).max(4).optional()
+    }),
+    aiCommand: z.object({
+        action: z.string(),
+        hz: z.number().optional(),
+        desc: z.string().optional()
+    }),
+    channelBasic: z.object({
+        channel: z.number().min(1).max(24)
+    }),
+    channelHpf: z.object({
+        channel: z.number().min(1).max(24),
+        hz: z.number().min(20).max(1000)
+    }),
+    channelGate: z.object({
+        channel: z.number().min(1).max(24),
+        enabled: z.union([z.boolean(), z.number()]).transform(v => !!v),
+        threshold: z.number().min(-80).max(0).optional()
+    }),
+    channelComp: z.object({
+        channel: z.number().min(1).max(24),
+        ratio: z.number().min(1).max(20).optional(),
+        threshold: z.number().min(-60).max(0).optional()
+    }),
+    boolEnabled: z.object({
+        enabled: z.union([z.boolean(), z.number()]).transform(v => !!v)
+    }),
+    oscillator: z.object({
+        enabled: z.union([z.boolean(), z.number()]).transform(v => !!v),
+        type: z.number().min(0).max(2).optional(),
+        level: z.number().min(-100).max(0).optional()
+    }),
+    auxFx: z.object({
+        channel: z.number().min(1).max(24),
+        aux: z.number().min(1).max(10).optional(),
+        fx: z.number().min(1).max(4).optional(),
+        level: z.number().min(0).max(1)
+    }),
+    delay: z.object({
+        target: z.enum(['master', 'aux']),
+        id: z.number().min(1).max(10).optional(),
+        ms: z.number().min(0).max(500)
+    }),
+    feedbackCut: z.object({
+        hz: z.number().min(20).max(20000)
+    })
+};
+
+function registerSocketHandlers(io, appDataDir = './logs') {
+    const logger = new Logger(appDataDir);
     let mixer = null;
     let historyStack = [];
     let redoStack = [];
@@ -28,21 +93,24 @@ function registerSocketHandlers(io) {
 
     io.on('connection', (socket) => {
         activeConnections++;
-        console.log(`[Socket] Frontend conectado (${activeConnections} cliente(s) ativo(s))`);
+        logger.info(socket.id, 'CLIENT_CONNECTED', { activeConnections });
 
         if (activeConnections > 1) {
-            console.warn('[Socket] ⚠️ Múltiplos clientes conectados — ações na mesa são compartilhadas!');
+            logger.warn(socket.id, 'MULTIPLE_CLIENTS_WARNING', { activeConnections });
             socket.emit('mixer_status', { connected: !!mixer, msg: '⚠️ Outro cliente já está conectado. Ações serão compartilhadas.' });
         }
 
         socket.on('connect_mixer', async (ip) => {
             try {
-                if (ip === 'offline' || ip === 'simulado' || ip === '127.0.0.1') {
-                    console.log('Iniciando MODO SIMULADO (Offline)...');
+                const validatedIp = schemas.connect.parse(ip);
+                logger.info(socket.id, 'MIXER_CONNECT_ATTEMPT', { ip: validatedIp });
+                
+                if (validatedIp === 'offline' || validatedIp === 'simulado' || validatedIp === '127.0.0.1') {
+                    logger.info(socket.id, 'MIXER_MODE_SIMULATED');
                     mixer = {
                         isSimulated: true,
                         conn: { sendMessage: (msg) => {
-                            console.log('[MIXER SIMULADO]', msg);
+                            logger.info(socket.id, 'MIXER_CMD_RAW', { msg });
                             socket.emit('mixer_log', `CMD SIMULADO: ${msg}`);
                         }},
                         master: {
@@ -72,11 +140,10 @@ function registerSocketHandlers(io) {
                     return;
                 }
 
-                console.log(`Tentando conectar a Soundcraft Ui no IP: ${ip}...`);
                 mixer = new SoundcraftUI(ip);
                 await mixer.connect();
 
-                console.log('Conectado com sucesso a Mesa!');
+                logger.info(socket.id, 'MIXER_CONNECTED', { ip });
                 socket.emit('mixer_status', { connected: true, msg: 'Conectado a Soundcraft Ui!' });
 
                 mixer.master.faderLevel$.subscribe(level => {
@@ -109,32 +176,40 @@ function registerSocketHandlers(io) {
                 return;
             }
             
-            // Debounce para não sobrecarregar a mesa em movimentos rápidos
-            if (masterDebounceTimeout) clearTimeout(masterDebounceTimeout);
-            
-            masterDebounceTimeout = setTimeout(() => {
-                try {
-                    const targetValue = Number(data.level);
-                    mixer.master.setFaderLevel(targetValue);
-                    
-                    // Se for simulado, logamos o comando bruto manualmente aqui para manter consistência
-                    if (mixer.isSimulated) {
-                        mixer.conn.sendMessage(`SETD^m.value^${targetValue}`);
+            try {
+                const validated = schemas.masterLevel.parse(data);
+                
+                // Debounce para não sobrecarregar a mesa em movimentos rápidos
+                if (masterDebounceTimeout) clearTimeout(masterDebounceTimeout);
+                
+                masterDebounceTimeout = setTimeout(() => {
+                    try {
+                        mixer.master.setFaderLevel(validated.level);
+                        logger.info(socket.id, 'SET_MASTER_LEVEL', { level: validated.level });
+                        
+                        // Se for simulado, logamos o comando bruto manualmente aqui para manter consistência
+                        if (mixer.isSimulated) {
+                            mixer.conn.sendMessage(`SETD^m.value^${validated.level}`);
+                        }
+                        
+                        socket.emit('mixer_status', { connected: true, msg: `Master ajustado para ${Math.round(validated.level * 100)}%` });
+                    } catch (error) {
+                        logger.error(socket.id, 'SET_MASTER_LEVEL_ASYNC_ERROR', { error: error.message });
+                        socket.emit('mixer_status', { connected: true, msg: `Falha ao ajustar Master: ${error.message}` });
                     }
-                    
-                    socket.emit('mixer_status', { connected: true, msg: `Master ajustado para ${Math.round(targetValue * 100)}%` });
-                } catch (error) {
-                    console.error('Erro ao ajustar master:', error.message);
-                    socket.emit('mixer_status', { connected: true, msg: `Falha ao ajustar Master: ${error.message}` });
-                }
-            }, 50); // 50ms de debounce é suficiente para suavizar sem perder percepção de tempo real
+                }, 50);
+            } catch (error) {
+                logger.error(socket.id, 'SET_MASTER_LEVEL_VALIDATION_ERROR', { error: error.message });
+                socket.emit('mixer_status', { connected: true, msg: `Dados inválidos: ${error.message}` });
+            }
         });
 
         socket.on('cut_feedback', (data) => {
             if (!actions.ensureMixer(socket)) return;
             try {
-                const msg = actions.applyEqCut('master', null, data.hz, -6, 8, 4);
-                socket.emit('feedback_cut_success', { hz: data.hz, msg });
+                const validated = schemas.feedbackCut.parse(data);
+                const msg = actions.applyEqCut('master', null, validated.hz, -6, 8, 4);
+                socket.emit('feedback_cut_success', { hz: validated.hz, msg });
             } catch (error) {
                 socket.emit('mixer_status', { connected: true, msg: `Falha ao cortar feedback: ${error.message}` });
             }
@@ -143,10 +218,12 @@ function registerSocketHandlers(io) {
         socket.on('execute_ai_command', (cmd) => {
             if (!actions.ensureMixer(socket)) return;
             try {
-                const result = actions.executeMixerCommand(cmd);
-                socket.emit('feedback_cut_success', { hz: cmd.hz || 0, msg: `${cmd.desc || 'Comando IA'}: ${result}` });
+                const validated = schemas.aiCommand.parse(cmd);
+                const result = actions.executeMixerCommand(validated);
+                logger.info(socket.id, 'AI_COMMAND_EXECUTED', { action: validated.action, result });
+                socket.emit('feedback_cut_success', { hz: validated.hz || 0, msg: `${validated.desc || 'Comando IA'}: ${result}` });
             } catch (error) {
-                console.error('Erro ao executar comando IA:', error.message);
+                logger.error(socket.id, 'AI_COMMAND_ERROR', { error: error.message });
                 socket.emit('mixer_status', { connected: true, msg: `Erro IA: ${error.message}` });
             }
         });
@@ -154,7 +231,8 @@ function registerSocketHandlers(io) {
         socket.on('apply_channel_hpf', (data) => {
             if (!actions.ensureMixer(socket)) return;
             try {
-                socket.emit('feedback_cut_success', { msg: actions.applyChannelHpf(data.channel, data.hz) });
+                const validated = schemas.channelHpf.parse(data);
+                socket.emit('feedback_cut_success', { msg: actions.applyChannelHpf(validated.channel, validated.hz) });
             } catch (error) {
                 socket.emit('mixer_status', { connected: true, msg: error.message });
             }
@@ -163,7 +241,8 @@ function registerSocketHandlers(io) {
         socket.on('apply_channel_gate', (data) => {
             if (!actions.ensureMixer(socket)) return;
             try {
-                socket.emit('feedback_cut_success', { msg: actions.applyChannelGate(data.channel, data.enabled, data.threshold) });
+                const validated = schemas.channelGate.parse(data);
+                socket.emit('feedback_cut_success', { msg: actions.applyChannelGate(validated.channel, validated.enabled, validated.threshold) });
             } catch (error) {
                 socket.emit('mixer_status', { connected: true, msg: error.message });
             }
@@ -172,7 +251,8 @@ function registerSocketHandlers(io) {
         socket.on('apply_channel_compressor', (data) => {
             if (!actions.ensureMixer(socket)) return;
             try {
-                socket.emit('feedback_cut_success', { msg: actions.applyChannelCompressor(data.channel, data.ratio, data.threshold) });
+                const validated = schemas.channelComp.parse(data);
+                socket.emit('feedback_cut_success', { msg: actions.applyChannelCompressor(validated.channel, validated.ratio, validated.threshold) });
             } catch (error) {
                 socket.emit('mixer_status', { connected: true, msg: error.message });
             }
@@ -181,7 +261,8 @@ function registerSocketHandlers(io) {
         socket.on('apply_eq_cut', (data) => {
             if (!actions.ensureMixer(socket)) return;
             try {
-                socket.emit('feedback_cut_success', { msg: actions.applyEqCut(data.target, data.channel, data.hz, data.gain, data.q, data.band) });
+                const validated = schemas.eqCut.parse(data);
+                socket.emit('feedback_cut_success', { msg: actions.applyEqCut(validated.target, validated.channel, validated.hz, validated.gain, validated.q, validated.band) });
             } catch (error) {
                 socket.emit('mixer_status', { connected: true, msg: error.message });
             }
@@ -190,7 +271,8 @@ function registerSocketHandlers(io) {
         socket.on('set_afs_enabled', (data) => {
             if (!actions.ensureMixer(socket)) return;
             try {
-                socket.emit('feedback_cut_success', { msg: actions.setAfs(data.enabled) });
+                const validated = schemas.boolEnabled.parse(data);
+                socket.emit('feedback_cut_success', { msg: actions.setAfs(validated.enabled) });
             } catch (error) {
                 socket.emit('mixer_status', { connected: true, msg: `Erro AFS: ${error.message}` });
             }
@@ -199,7 +281,8 @@ function registerSocketHandlers(io) {
         socket.on('set_oscillator', (data) => {
             if (!actions.ensureMixer(socket)) return;
             try {
-                socket.emit('feedback_cut_success', { msg: actions.applyOscillator(data.enabled, data.type, data.level) });
+                const validated = schemas.oscillator.parse(data);
+                socket.emit('feedback_cut_success', { msg: actions.applyOscillator(validated.enabled, validated.type, validated.level) });
             } catch (error) {
                 socket.emit('mixer_status', { connected: true, msg: `Erro oscilador: ${error.message}` });
             }
@@ -208,7 +291,8 @@ function registerSocketHandlers(io) {
         socket.on('set_aux_level', (data) => {
             if (!actions.ensureMixer(socket)) return;
             try {
-                const msg = actions.setAuxLevel(data.channel, data.aux, data.level);
+                const validated = schemas.auxFx.parse(data);
+                const msg = actions.setAuxLevel(validated.channel, validated.aux, validated.level);
                 socket.emit('feedback_cut_success', { msg });
             } catch (error) {
                 socket.emit('mixer_status', { connected: true, msg: error.message });
@@ -218,7 +302,8 @@ function registerSocketHandlers(io) {
         socket.on('set_fx_level', (data) => {
             if (!actions.ensureMixer(socket)) return;
             try {
-                const msg = actions.setFxLevel(data.channel, data.fx, data.level);
+                const validated = schemas.auxFx.parse(data);
+                const msg = actions.setFxLevel(validated.channel, validated.fx, validated.level);
                 socket.emit('feedback_cut_success', { msg });
             } catch (error) {
                 socket.emit('mixer_status', { connected: true, msg: error.message });
@@ -228,7 +313,8 @@ function registerSocketHandlers(io) {
         socket.on('set_delay', (data) => {
             if (!actions.ensureMixer(socket)) return;
             try {
-                const msg = actions.setDelay(data.target, data.id, data.ms);
+                const validated = schemas.delay.parse(data);
+                const msg = actions.setDelay(validated.target, validated.id, validated.ms);
                 socket.emit('feedback_cut_success', { msg });
             } catch (error) {
                 socket.emit('mixer_status', { connected: true, msg: error.message });
@@ -304,8 +390,13 @@ function registerSocketHandlers(io) {
                 state: JSON.parse(JSON.stringify(mixerState))
             };
             db.presets.insert(preset, (err, doc) => {
-                if (err) socket.emit('mixer_status', { connected: true, msg: 'Erro ao salvar preset' });
-                else socket.emit('preset_saved', doc);
+                if (err) {
+                    logger.error(socket.id, 'SAVE_PRESET_ERROR', { error: err.message });
+                    socket.emit('mixer_status', { connected: true, msg: 'Erro ao salvar preset' });
+                } else {
+                    logger.info(socket.id, 'PRESET_SAVED', { name: preset.name });
+                    socket.emit('preset_saved', doc);
+                }
             });
         });
 
@@ -320,6 +411,7 @@ function registerSocketHandlers(io) {
             db.presets.findOne({ _id: id }, (err, doc) => {
                 if (!err && doc) {
                     try {
+                        logger.info(socket.id, 'LOAD_PRESET_START', { name: doc.name });
                         // Restaurar Master
                         if (doc.state.master) {
                             mixer.master.setFaderLevel(doc.state.master.level);
@@ -348,9 +440,11 @@ function registerSocketHandlers(io) {
                             });
                         }
                         
+                        logger.info(socket.id, 'LOAD_PRESET_SUCCESS', { name: doc.name });
                         socket.emit('feedback_cut_success', { msg: `Preset "${doc.name}" carregado com sucesso!` });
                         socket.emit('mixer_log', `Preset "${doc.name}" aplicado.`);
                     } catch (e) {
+                        logger.error(socket.id, 'LOAD_PRESET_ERROR', { name: doc.name, error: e.message });
                         socket.emit('mixer_status', { connected: true, msg: 'Erro ao aplicar preset: ' + e.message });
                     }
                 }

@@ -218,7 +218,7 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
             methods: ['GET', 'POST']
         }
     });
-    registerSocketHandlers(io);
+    registerSocketHandlers(io, dbDir);
 
     return { server, io };
 }

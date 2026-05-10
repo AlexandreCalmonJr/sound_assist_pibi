@@ -10,12 +10,31 @@ function startPythonAI(rootDir) {
         return null;
     }
 
-    console.log(`[Python AI] Iniciando: ${pythonScript}`);
+    // Detector de Ambiente Virtual (venv)
+    const isWin = process.platform === 'win32';
+    const venvPython = isWin 
+        ? path.join(rootDir, 'venv', 'Scripts', 'python.exe')
+        : path.join(rootDir, 'venv', 'bin', 'python');
 
-    // Tenta 'python' primeiro, fallback para 'python3'
-    let pythonProcess = _trySpawn('python', pythonScript);
-    if (!pythonProcess) {
-        pythonProcess = _trySpawn('python3', pythonScript);
+    const commands = [];
+    
+    // 1. Prioridade: Venv local
+    if (fs.existsSync(venvPython)) {
+        console.log(`[Python AI] Ambiente virtual detectado em: ${venvPython}`);
+        commands.push(venvPython);
+    }
+
+    // 2. Fallbacks globais
+    commands.push('python');
+    commands.push('python3');
+    if (isWin) commands.push('py');
+
+    console.log(`[Python AI] Tentando iniciar servidor em: ${pythonScript}`);
+
+    let pythonProcess = null;
+    for (const cmd of commands) {
+        pythonProcess = _trySpawn(cmd, pythonScript);
+        if (pythonProcess) break;
     }
 
     return pythonProcess;

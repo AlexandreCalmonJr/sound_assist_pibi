@@ -7,3 +7,5 @@ dist/
 .agent/
 *.pyc
 __pycache__/
+venv/
+backend/ai/venv/
