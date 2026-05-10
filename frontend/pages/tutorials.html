@@ -1,18 +1,92 @@
-<section class="p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-7xl mx-auto">
-    <header class="mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div class="flex items-center gap-4">
-            <span class="p-4 bg-amber-500/10 border border-amber-500/20 rounded-3xl text-3xl shadow-lg shadow-amber-500/5">🎓</span>
-            <div>
-                <h2 class="text-4xl font-black text-white tracking-tighter">Centro de Treinamento</h2>
-                <p class="text-slate-400 font-medium text-lg">Guia profissional para engenharia de som em igrejas</p>
+<section class="p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-7xl mx-auto overflow-x-hidden">
+    <header class="mb-16 flex flex-col xl:flex-row xl:items-end justify-between gap-8 border-b border-white/5 pb-10">
+        <div class="flex items-center gap-6 text-left">
+            <div class="relative shrink-0">
+                <span class="p-6 bg-amber-500/10 border border-amber-500/20 rounded-[2.5rem] text-5xl shadow-2xl shadow-amber-500/10 block">🎓</span>
+                <div class="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 border-4 border-slate-950 rounded-full"></div>
+            </div>
+            <div class="text-left">
+                <h2 class="text-6xl font-black text-white tracking-tighter uppercase italic leading-none">Centro de Treinamento</h2>
+                <p class="text-slate-500 font-bold text-xl italic mt-3 opacity-90 tracking-wide">Domine a Ui24R & Inteligência de Som</p>
             </div>
         </div>
         
-        <div class="flex bg-slate-900/60 p-1.5 rounded-2xl border border-white/5 shadow-xl gap-1">
-            <button id="btn-tab-tutorials" class="px-8 py-3 bg-amber-600 text-white text-xs font-black rounded-xl transition-all uppercase tracking-widest shadow-lg shadow-amber-600/20 min-w-[140px]">Tutoriais</button>
-            <button id="btn-tab-tools" class="px-8 py-3 text-slate-400 hover:text-white text-xs font-black rounded-xl transition-all uppercase tracking-widest min-w-[140px]">Ferramentas</button>
-        </div>
+        <nav class="flex bg-slate-900/80 p-1.5 rounded-2xl border border-white/10 shadow-2xl backdrop-blur-md self-start xl:self-end">
+            <button id="btn-tab-tutorials" class="px-8 py-3.5 bg-amber-600 text-white text-[10px] font-black rounded-xl transition-all uppercase tracking-[0.2em] shadow-xl shadow-amber-600/20 min-w-[140px]">Biblioteca</button>
+            <button id="btn-tab-workflow" class="px-8 py-3.5 text-slate-400 hover:text-white text-[10px] font-black rounded-xl transition-all uppercase tracking-[0.2em] min-w-[140px]">Workflow</button>
+            <button id="btn-tab-tools" class="px-8 py-3.5 text-slate-400 hover:text-white text-[10px] font-black rounded-xl transition-all uppercase tracking-[0.2em] min-w-[140px]">Ferramentas</button>
+        </nav>
     </header>
+
+    <!-- ABA: WORKFLOW (MAPA DE FLUXO) -->
+    <div id="view-workflow" class="hidden animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-12">
+            <!-- Passo 1: Preparação -->
+            <div class="bg-slate-900/40 border border-white/10 p-6 rounded-3xl relative overflow-hidden group hover:border-amber-500/30 transition-all">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <span class="text-6xl font-black italic">01</span>
+                </div>
+                <h4 class="text-amber-500 font-black text-xs uppercase tracking-widest mb-4">Pré-Culto</h4>
+                <h3 class="text-white font-black text-xl mb-4">Hardware & Rede</h3>
+                <ul class="space-y-2 text-[10px] text-slate-400">
+                    <li class="flex items-center gap-2">✅ Ligar Ui24R & Roteador</li>
+                    <li class="flex items-center gap-2">✅ Verificar IP no SoundAssist</li>
+                    <li class="flex items-center gap-2">✅ Conferir Multitestador de Rede</li>
+                </ul>
+            </div>
+
+            <!-- Passo 2: Medição -->
+            <div class="bg-slate-900/40 border border-white/10 p-6 rounded-3xl relative overflow-hidden group hover:border-cyan-500/30 transition-all">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <span class="text-6xl font-black italic">02</span>
+                </div>
+                <h4 class="text-cyan-500 font-black text-xs uppercase tracking-widest mb-4">Calibração</h4>
+                <h3 class="text-white font-black text-xl mb-4">Medir o Ambiente</h3>
+                <ul class="space-y-2 text-[10px] text-slate-400">
+                    <li class="flex items-center gap-2">📐 Disparar Pulso RT60 (Vazio)</li>
+                    <li class="flex items-center gap-2">📐 Medir Ruído Rosa (Spectrum)</li>
+                    <li class="flex items-center gap-2">📐 Salvar Benchmark Acústico</li>
+                </ul>
+            </div>
+
+            <!-- Passo 3: Passagem -->
+            <div class="bg-slate-900/40 border border-white/10 p-6 rounded-3xl relative overflow-hidden group hover:border-rose-500/30 transition-all">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <span class="text-6xl font-black italic">03</span>
+                </div>
+                <h4 class="text-rose-500 font-black text-xs uppercase tracking-widest mb-4">Soundcheck</h4>
+                <h3 class="text-white font-black text-xl mb-4">Passagem de Som</h3>
+                <ul class="space-y-2 text-[10px] text-slate-400">
+                    <li class="flex items-center gap-2">🔴 Gravar MTK (Soundcheck Virtual)</li>
+                    <li class="flex items-center gap-2">🤖 Aplicar Presets IA de Voz</li>
+                    <li class="flex items-center gap-2">🤖 Ativar Automix (Bancada de Mics)</li>
+                </ul>
+            </div>
+
+            <!-- Passo 4: Operação -->
+            <div class="bg-slate-900/40 border border-white/10 p-6 rounded-3xl relative overflow-hidden group hover:border-green-500/30 transition-all">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <span class="text-6xl font-black italic">04</span>
+                </div>
+                <h4 class="text-green-500 font-black text-xs uppercase tracking-widest mb-4">Ao Vivo</h4>
+                <h3 class="text-white font-black text-xl mb-4">Operação & IA</h3>
+                <ul class="space-y-2 text-[10px] text-slate-400">
+                    <li class="flex items-center gap-2">🔊 Monitorar Feedback (Alertas)</li>
+                    <li class="flex items-center gap-2">🔊 Ajustar BPM do Reverb Lexicon</li>
+                    <li class="flex items-center gap-2">🔊 Conferir Heatmap (SPL Real)</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="bg-black/40 border border-white/10 rounded-3xl p-10 text-center">
+            <h3 class="text-2xl font-black text-white mb-4 italic uppercase">Por que medir o som antes do culto?</h3>
+            <p class="text-slate-400 max-w-3xl mx-auto leading-relaxed text-sm">
+                Uma igreja vazia reflete muito mais som do que uma cheia. Se você equaliza com a nave vazia, quando as pessoas chegarem, o som ficará "morto". 
+                <br><br>
+                <span class="text-amber-500 font-bold">A técnica pro:</span> Use o <b>Benchmark Acústico</b> para comparar o RT60 (tempo de reverb) da igreja vazia vs. cheia. O SoundAssist sugere automaticamente o quanto de Reverb Lexicon você deve adicionar para compensar a absorção das pessoas.
+            </p>
+        </div>
+    </div>
 
     <!-- ABA: TUTORIAIS (BIBLIOTECA) -->
     <div id="view-tutorials" class="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -287,6 +361,67 @@
                     </p>
                 </div>
                 <button onclick="window.router.navigate('spl-heatmap')" class="mt-4 w-full py-2 bg-white/5 hover:bg-white/10 text-white text-[9px] font-black rounded-lg transition-all uppercase tracking-widest border border-white/5">Monitorar dB</button>
+            </div>
+        </div>
+
+        <!-- DEEP DIVE: ACÚSTICA & ANÁLISE -->
+        <div class="mt-20 bg-slate-900/60 border border-white/10 rounded-[3rem] p-8 md:p-16 shadow-2xl relative overflow-hidden text-left mx-auto max-w-full">
+            <div class="absolute top-0 right-0 w-full h-full bg-cyan-500/5 blur-[120px] rounded-full -mr-[50%] -mt-[20%] pointer-events-none"></div>
+            
+            <div class="relative z-10">
+                <div class="flex flex-col md:flex-row md:items-center gap-8 mb-16 border-b border-white/5 pb-8">
+                    <span class="p-6 bg-cyan-500/10 border border-cyan-500/20 rounded-3xl text-5xl shadow-2xl shadow-cyan-500/10 block w-fit">🔬</span>
+                    <div class="text-left">
+                        <h3 class="text-4xl font-black text-white tracking-tighter uppercase italic leading-none">Mestre da Acústica</h3>
+                        <p class="text-slate-400 font-bold text-lg italic mt-2 opacity-80">Domine a física do som em sua nave</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 text-left">
+                    <!-- Coluna: Medir -->
+                    <div class="space-y-8">
+                        <div class="flex items-start gap-4">
+                            <div class="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 font-black shrink-0">1</div>
+                            <div class="text-left">
+                                <h5 class="text-white font-black uppercase text-xs tracking-widest mb-2">Medir (RT60 & Impulso)</h5>
+                                <p class="text-[11px] text-slate-400 leading-relaxed mb-4 text-left">O RT60 nos diz quanto tempo o som leva para sumir na sala. Uma pregação exige clareza (RT60 curto, ~1.4s), enquanto o louvor aceita mais "ambiência" (RT60 longo, ~1.8s).</p>
+                                <div class="p-4 bg-black/40 rounded-2xl border border-white/5 space-y-2 text-left">
+                                    <span class="text-[9px] font-black text-cyan-500 uppercase">Dica Pro:</span>
+                                    <p class="text-[10px] text-slate-500 italic">Dispare o pulso em 3 pontos diferentes da nave e use a função <b>Benchmark</b> para ter uma média real.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start gap-4">
+                            <div class="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 font-black shrink-0">2</div>
+                            <div class="text-left">
+                                <h5 class="text-white font-black uppercase text-xs tracking-widest mb-2">Analisar (FFT & Waterfall)</h5>
+                                <p class="text-[11px] text-slate-400 leading-relaxed mb-4 text-left">O Analisador de Espectro (FFT) mostra o "agora". O Waterfall mostra o "depois". Se você vê uma montanha no Waterfall que não abaixa, você tem uma <b>ressonância modal</b> (o som está "preso" na sala).</p>
+                                <div class="p-4 bg-black/40 rounded-2xl border border-white/5 space-y-2 text-left">
+                                    <span class="text-[9px] font-black text-cyan-500 uppercase">Ação IA:</span>
+                                    <p class="text-[10px] text-slate-500 italic">Ative o <b>Detector de Feedback</b> para identificar essas frequências antes que elas virem microfonia.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Coluna: Ui24R + App -->
+                    <div class="bg-cyan-900/10 border border-cyan-500/20 rounded-3xl p-8 flex flex-col justify-center gap-6 text-left">
+                        <h4 class="text-white font-black text-xl italic uppercase">A Integração SoundAssist</h4>
+                        <p class="text-xs text-slate-400 leading-relaxed text-left">Diferente de apps comuns, o SoundAssist conversa via <b>WebSocket</b> com a sua Ui24R. Isso significa que quando o Analisador detecta um problema, a IA pode sugerir um ajuste no EQ da mesa em milissegundos.</p>
+                        
+                        <div class="flex gap-4">
+                            <div class="flex-1 p-4 bg-black/60 rounded-2xl border border-white/5 text-center">
+                                <span class="block text-2xl font-black text-white mb-1">25ms</span>
+                                <span class="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Latência de Dados</span>
+                            </div>
+                            <div class="flex-1 p-4 bg-black/60 rounded-2xl border border-white/5 text-center">
+                                <span class="block text-2xl font-black text-white mb-1">IA</span>
+                                <span class="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Correção Preditiva</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

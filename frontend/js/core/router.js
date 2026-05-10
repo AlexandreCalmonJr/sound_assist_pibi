@@ -5,7 +5,10 @@
 
 const ROUTE_MAP = {
     'home':              { path: 'pages/home.html',              title: 'Dashboard',           category: null },
-    'tutorials':         { path: 'pages/tutorials.html',         title: 'Treinamento',         category: null },
+    'tutorials':         { path: 'pages/tutorials-library.html', title: 'Treinamento',         category: 'Treino' },
+    'tutorials-library': { path: 'pages/tutorials-library.html', title: 'Biblioteca',          category: 'Treino' },
+    'tutorials-workflow':{ path: 'pages/tutorials-workflow.html',title: 'Workflow',            category: 'Treino' },
+    'tutorials-tools':   { path: 'pages/tutorials-tools.html',   title: 'Ferramentas',         category: 'Treino' },
     'rt60':              { path: 'pages/rt60.html',              title: 'RT60 & Acústica',     category: 'Medir' },
     'benchmarking':      { path: 'pages/benchmarking.html',      title: 'Benchmarking',        category: 'Medir' },
     'spl-heatmap':       { path: 'pages/spl-heatmap.html',       title: 'Mapa SPL',            category: 'Medir' },
@@ -126,6 +129,7 @@ class Router {
                 'Análise': 'analysis',
                 'Mixer': 'mixer',
                 'Rede': 'network',
+                'Treino': 'training',
                 'Configurações': 'settings'
             };
             const catId = categoryMap[routeData.category];

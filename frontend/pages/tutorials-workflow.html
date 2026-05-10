@@ -1,0 +1,90 @@
+<section class="p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-7xl mx-auto overflow-x-hidden">
+    <header class="mb-16 flex flex-col xl:flex-row xl:items-end justify-between gap-8 border-b border-white/5 pb-10">
+        <div class="flex items-center gap-6 text-left">
+            <div class="relative shrink-0">
+                <span class="p-6 bg-cyan-500/10 border border-cyan-500/20 rounded-[2.5rem] text-5xl shadow-2xl shadow-cyan-500/10 block">🛤️</span>
+                <div class="absolute -bottom-1 -right-1 w-5 h-5 bg-cyan-500 border-4 border-slate-950 rounded-full"></div>
+            </div>
+            <div class="text-left">
+                <h2 class="text-6xl font-black text-white tracking-tighter uppercase italic leading-none">Workflow de Sucesso</h2>
+                <p class="text-slate-500 font-bold text-xl italic mt-3 opacity-90 tracking-wide">O passo a passo para um culto impecável</p>
+            </div>
+        </div>
+        
+        <nav class="flex bg-slate-900/80 p-1.5 rounded-2xl border border-white/10 shadow-2xl backdrop-blur-md self-start xl:self-end">
+            <button onclick="window.router.navigate('tutorials-library')" class="px-8 py-3.5 text-slate-400 hover:text-white text-[10px] font-black rounded-xl transition-all uppercase tracking-[0.2em]">Biblioteca</button>
+            <button onclick="window.router.navigate('tutorials-workflow')" class="px-8 py-3.5 bg-cyan-600 text-white text-[10px] font-black rounded-xl transition-all uppercase tracking-[0.2em] shadow-xl shadow-cyan-600/20">Workflow</button>
+            <button onclick="window.router.navigate('tutorials-tools')" class="px-8 py-3.5 text-slate-400 hover:text-white text-[10px] font-black rounded-xl transition-all uppercase tracking-[0.2em]">Ferramentas</button>
+        </nav>
+    </header>
+
+    <div id="view-workflow" class="animate-in fade-in duration-500 pb-20">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-12">
+            <!-- Passo 1: Preparação -->
+            <div class="bg-slate-900/40 border border-white/10 p-8 rounded-3xl relative overflow-hidden group hover:border-amber-500/30 transition-all text-left">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <span class="text-7xl font-black italic">01</span>
+                </div>
+                <h4 class="text-amber-500 font-black text-xs uppercase tracking-widest mb-4">Pré-Culto</h4>
+                <h3 class="text-white font-black text-2xl mb-6">Hardware & Rede</h3>
+                <ul class="space-y-4 text-xs text-slate-400">
+                    <li class="flex items-center gap-3">✅ <span class="flex-1 text-left">Ligar Ui24R & Roteador</span></li>
+                    <li class="flex items-center gap-3">✅ <span class="flex-1 text-left">Verificar IP no SoundAssist</span></li>
+                    <li class="flex items-center gap-3">✅ <span class="flex-1 text-left">Conferir Multitestador de Rede</span></li>
+                </ul>
+            </div>
+
+            <!-- Passo 2: Medição -->
+            <div class="bg-slate-900/40 border border-white/10 p-8 rounded-3xl relative overflow-hidden group hover:border-cyan-500/30 transition-all text-left">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <span class="text-7xl font-black italic">02</span>
+                </div>
+                <h4 class="text-cyan-500 font-black text-xs uppercase tracking-widest mb-4">Calibração</h4>
+                <h3 class="text-white font-black text-2xl mb-6">Medir o Ambiente</h3>
+                <ul class="space-y-4 text-xs text-slate-400">
+                    <li class="flex items-center gap-3">📐 <span class="flex-1 text-left">Disparar Pulso RT60 (Vazio)</span></li>
+                    <li class="flex items-center gap-3">📐 <span class="flex-1 text-left">Medir Ruído Rosa (Spectrum)</span></li>
+                    <li class="flex items-center gap-3">📐 <span class="flex-1 text-left">Salvar Benchmark Acústico</span></li>
+                </ul>
+            </div>
+
+            <!-- Passo 3: Passagem -->
+            <div class="bg-slate-900/40 border border-white/10 p-8 rounded-3xl relative overflow-hidden group hover:border-rose-500/30 transition-all text-left">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <span class="text-7xl font-black italic">03</span>
+                </div>
+                <h4 class="text-rose-500 font-black text-xs uppercase tracking-widest mb-4">Soundcheck</h4>
+                <h3 class="text-white font-black text-2xl mb-6">Passagem de Som</h3>
+                <ul class="space-y-4 text-xs text-slate-400">
+                    <li class="flex items-center gap-3">🔴 <span class="flex-1 text-left">Gravar MTK (Soundcheck Virtual)</span></li>
+                    <li class="flex items-center gap-3">🤖 <span class="flex-1 text-left">Aplicar Presets IA de Voz</span></li>
+                    <li class="flex items-center gap-3">🤖 <span class="flex-1 text-left">Ativar Automix (Mics)</span></li>
+                </ul>
+            </div>
+
+            <!-- Passo 4: Operação -->
+            <div class="bg-slate-900/40 border border-white/10 p-8 rounded-3xl relative overflow-hidden group hover:border-green-500/30 transition-all text-left">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <span class="text-7xl font-black italic">04</span>
+                </div>
+                <h4 class="text-green-500 font-black text-xs uppercase tracking-widest mb-4">Ao Vivo</h4>
+                <h3 class="text-white font-black text-2xl mb-6">Operação & IA</h3>
+                <ul class="space-y-4 text-xs text-slate-400">
+                    <li class="flex items-center gap-3">🔊 <span class="flex-1 text-left">Monitorar Feedback (Alertas)</span></li>
+                    <li class="flex items-center gap-3">🔊 <span class="flex-1 text-left">Ajustar BPM do Reverb Lexicon</span></li>
+                    <li class="flex items-center gap-3">🔊 <span class="flex-1 text-left">Conferir Heatmap (SPL)</span></li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="bg-black/40 border border-white/10 rounded-[2.5rem] p-12 text-center relative overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent pointer-events-none"></div>
+            <h3 class="text-3xl font-black text-white mb-6 italic uppercase relative z-10">Por que medir o som antes do culto?</h3>
+            <p class="text-slate-400 max-w-4xl mx-auto leading-relaxed text-lg italic relative z-10">
+                Uma igreja vazia reflete muito mais som do que uma cheia. Se você equaliza com a nave vazia, quando as pessoas chegarem, o som ficará "morto" e sem vida. 
+                <br><br>
+                <span class="text-cyan-500 font-bold underline decoration-cyan-500/30 underline-offset-8">A técnica pro:</span> Use o <b>Benchmark Acústico</b> para comparar o RT60 (tempo de reverb) da igreja vazia vs. cheia. O SoundAssist sugere automaticamente o quanto de Reverb Lexicon você deve adicionar para compensar a absorção natural das pessoas.
+            </p>
+        </div>
+    </div>
+</section>

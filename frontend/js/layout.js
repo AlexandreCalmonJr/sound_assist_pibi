@@ -44,6 +44,14 @@
             items: [
                 { id: 'settings', label: 'Preferências' },
             ]
+        },
+        training: {
+            title: 'Centro de Treino',
+            items: [
+                { id: 'tutorials-library',  label: 'Biblioteca Técnica' },
+                { id: 'tutorials-workflow', label: 'Workflow Pro' },
+                { id: 'tutorials-tools',    label: 'Ferramentas IA' },
+            ]
         }
     };
 
@@ -189,6 +197,7 @@
                 'Análise': 'analysis',
                 'Mixer': 'mixer',
                 'Rede': 'network',
+                'Treino': 'training',
                 'Configurações': 'settings'
             };
             const catId = categoryMap[category];

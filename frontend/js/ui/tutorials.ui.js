@@ -248,41 +248,35 @@
     // -------------------------------------------------------------------------
     function initTabs() {
         const btnTutorials = $('btn-tab-tutorials');
+        const btnWorkflow = $('btn-tab-workflow');
         const btnTools = $('btn-tab-tools');
+        
         const viewTutorials = $('view-tutorials');
+        const viewWorkflow = $('view-workflow');
         const viewTools = $('view-tools');
 
-        if (!btnTutorials || !btnTools) return;
+        if (!btnTutorials || !btnWorkflow || !btnTools) return;
 
-        btnTutorials.onclick = () => {
-            // Estilo Botão Tutorials (Ativo)
-            btnTutorials.classList.add('bg-amber-600', 'text-white', 'shadow-lg', 'shadow-amber-600/20');
-            btnTutorials.classList.remove('text-slate-400');
-            
-            // Estilo Botão Tools (Inativo)
-            btnTools.classList.remove('bg-amber-600', 'text-white', 'shadow-lg', 'shadow-amber-600/20');
-            btnTools.classList.add('text-slate-400');
-
-            // Visibilidade
-            viewTutorials.classList.remove('hidden');
-            viewTools.classList.add('hidden');
+        const deactivateAll = () => {
+            [btnTutorials, btnWorkflow, btnTools].forEach(btn => {
+                btn.classList.remove('bg-amber-600', 'text-white', 'shadow-lg', 'shadow-amber-600/20');
+                btn.classList.add('text-slate-400');
+            });
+            [viewTutorials, viewWorkflow, viewTools].forEach(view => view.classList.add('hidden'));
         };
 
-        btnTools.onclick = () => {
-            // Estilo Botão Tools (Ativo)
-            btnTools.classList.add('bg-amber-600', 'text-white', 'shadow-lg', 'shadow-amber-600/20');
-            btnTools.classList.remove('text-slate-400');
-            
-            // Estilo Botão Tutorials (Inativo)
-            btnTutorials.classList.remove('bg-amber-600', 'text-white', 'shadow-lg', 'shadow-amber-600/20');
-            btnTutorials.classList.add('text-slate-400');
+        const activate = (btn, view) => {
+            deactivateAll();
+            btn.classList.add('bg-amber-600', 'text-white', 'shadow-lg', 'shadow-amber-600/20');
+            btn.classList.remove('text-slate-400');
+            view.classList.remove('hidden');
+        };
 
-            // Visibilidade
-            viewTools.classList.remove('hidden');
-            viewTutorials.classList.add('hidden');
-            
-            // Re-inicializa ferramentas se necessário (checklist render)
-            initChecklist();
+        btnTutorials.onclick = () => activate(btnTutorials, viewTutorials);
+        btnWorkflow.onclick = () => activate(btnWorkflow, viewWorkflow);
+        btnTools.onclick = () => {
+            activate(btnTools, viewTools);
+            initChecklist(); // Garante renderização do checklist
         };
     }
 
