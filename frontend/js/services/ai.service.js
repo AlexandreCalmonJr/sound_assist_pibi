@@ -69,7 +69,8 @@
 
             return {
                 text: data.text || 'IA não retornou resposta.',
-                command: data.command || null
+                command: data.command || null,
+                report: data.report || null
             };
 
         } catch (err) {

@@ -34,16 +34,31 @@ function startPythonAI(rootDir) {
 
     let pythonProcess = null;
     for (const cmd of commands) {
-        pythonProcess = _trySpawn(cmd, pythonScript);
-        if (pythonProcess) break;
+        if (_checkPython(cmd)) {
+            pythonProcess = _trySpawn(cmd, pythonScript, rootDir);
+            if (pythonProcess) break;
+        }
     }
 
     return pythonProcess;
 }
 
-function _trySpawn(command, scriptPath) {
+function _checkPython(command) {
     try {
-        const proc = spawn(command, [scriptPath], { stdio: ['pipe', 'pipe', 'pipe'] });
+        const { spawnSync } = require('child_process');
+        const result = spawnSync(command, ['--version'], { encoding: 'utf8' });
+        return result.status === 0;
+    } catch (e) {
+        return false;
+    }
+}
+
+function _trySpawn(command, scriptPath, rootDir) {
+    try {
+        const proc = spawn(command, [scriptPath], { 
+            stdio: ['pipe', 'pipe', 'pipe'],
+            cwd: rootDir 
+        });
         let started = false;
 
         proc.on('error', (err) => {

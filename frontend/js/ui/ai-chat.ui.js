@@ -132,10 +132,10 @@
 
         const payload = {
             summary: analysis.text,
-            bands: analysis.details?.bands || {},
+            rt60_multiband: analysis.details?.bands || {},
             peakHz: analysis.details?.peakHz,
             peakDb: analysis.details?.peakDb,
-            rmsDb: analysis.details?.rmsDb,
+            rms: analysis.details?.rmsDb,
         };
         if (analysis.pinkReport) {
             payload.pinkReport = analysis.pinkReport;
@@ -151,9 +151,13 @@
             if (loadingBubble) loadingBubble.remove();
             
             _appendBubble(result.text, false, result.command);
+            if (result.report) {
+                _appendBubble(result.report, false, null);
+            }
         } catch (err) {
             const loadingBubble = document.getElementById(loadingId);
-            if (loadingBubble) loadingBubble.innerText = 'Erro ao processar análise: ' + err.message;
+            if (loadingBubble) loadingBubble.remove();
+            _appendBubble('Erro ao processar análise: ' + err.message, false, null);
         }
     }
 
@@ -182,6 +186,9 @@
             if (loadingBubble) loadingBubble.remove();
             
             _appendBubble(result.text, false, result.command);
+            if (result.report) {
+                _appendBubble(result.report, false, null);
+            }
         } catch (err) {
             const loadingBubble = document.getElementById(loadingId);
             if (loadingBubble) loadingBubble.innerText = 'Erro na conexão com IA. Verifique o servidor local.';

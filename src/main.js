@@ -64,6 +64,17 @@ let ioInstance = null;
 function startServer() {
     const { server, io } = createHttpServer();
     ioInstance = io;
+
+    server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.error(`[Main] Erro: A porta ${PORT} já está em uso por outro processo.`);
+            console.error('[Main] Feche outros apps que possam estar usando esta porta e tente novamente.');
+            app.quit();
+        } else {
+            console.error('[Main] Erro inesperado no servidor:', err.message);
+        }
+    });
+
     server.listen(PORT, () => {
         console.log('====================================');
         console.log('SoundMaster Backend Rodando!');

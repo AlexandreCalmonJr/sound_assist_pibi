@@ -8,7 +8,7 @@
     "build:css": "tailwindcss -i css/input.css -o css/styles.css --watch",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "test": "node tests/audit-tests.js",
+    "test": "vitest run",
     "testbed": "node tests/testbed.js",
     "audit": "node tests/audit-tests.js",
     "audit:quick": "echo 'Use: npm run audit para rodar auditoria completa' && echo 'Abra AUDIT_INTERACTIVE.html para teste visual interativo' && echo 'Consulte AUDIT_GUIDE.md para instruções detalhadas'"
@@ -41,7 +41,7 @@
     "dgram": "^1.0.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.1",
-    "nedb": "^1.8.0",
+
     "socket.io": "^4.8.3",
     "soundcraft-ui-connection": "^6.0.3",
     "zod": "^4.4.3"

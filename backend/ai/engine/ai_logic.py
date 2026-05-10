@@ -43,6 +43,14 @@ class LocalLLM:
     _instance = None
     
     def __init__(self, model_path="models/tinyllama-1.1b-chat.Q4_K_M.gguf"):
+        # Resolve caminho relativo ao script para robustez
+        if not os.path.isabs(model_path):
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            # ai_logic.py está em engine/, models está em ../models/
+            potential_path = os.path.join(os.path.dirname(script_dir), model_path)
+            if os.path.exists(potential_path):
+                model_path = potential_path
+
         self.model_path = model_path
         self.llm = None
         self.enabled = False
@@ -167,7 +175,7 @@ class AIEngine:
             return {
                 "text": "Gerando seu relatório técnico detalhado agora. Analisando inteligibilidade (STI) e distância crítica...",
                 "report": report_md,
-                "command": self.command("log", "Relatório Gerado", desc="Relatório técnico enviado ao usuário")
+                "command": self.command("log", "Relatório Gerado: Relatório técnico enviado ao usuário")
             }
 
         # Se o usuário não citar canal, tentamos deduzir pelo contexto ou agir no Master

@@ -6,7 +6,7 @@
  * Ou: npm test -- tests/audit-tests.js
  */
 
-const assert = require('assert');
+import { describe, it, assert } from 'vitest';
 
 // =============================================================================
 // 1. CONFIGURAÇÃO DE DADOS ESPERADOS
@@ -22,11 +22,6 @@ const EXPECTED_MENU_STRUCTURE = {
     type: 'direct',
     name: 'Dashboard',
     icon: 'home'
-  },
-  tutorials: {
-    type: 'direct',
-    name: 'Treinamento',
-    icon: 'book'
   },
   measuring: {
     type: 'category',
@@ -90,7 +85,6 @@ const EXPECTED_MENU_STRUCTURE = {
 
 const EXPECTED_PAGES = [
   { id: 'home', file: 'pages/home.html', category: 'Dashboard' },
-  { id: 'tutorials', file: 'pages/tutorials.html', category: 'Treinamento' },
   { id: 'rt60', file: 'pages/rt60.html', category: 'Medir' },
   { id: 'benchmarking', file: 'pages/benchmarking.html', category: 'Medir' },
   { id: 'spl-heatmap', file: 'pages/spl-heatmap.html', category: 'Medir' },
@@ -115,9 +109,9 @@ const EXPECTED_PAGES = [
 
 describe('📋 AUDITA - Estrutura de Menus', function() {
   
-  it('Deve ter 9 menus principais', function() {
+  it('Deve ter 8 menus principais', function() {
     const menuCount = Object.keys(EXPECTED_MENU_STRUCTURE).length;
-    assert.strictEqual(menuCount, 9, `Esperado 9 menus, encontrado ${menuCount}`);
+    assert.strictEqual(menuCount, 8, `Esperado 8 menus, encontrado ${menuCount}`);
   });
 
   it('Deve ter 5 menus de categoria com submenus', function() {
@@ -126,10 +120,10 @@ describe('📋 AUDITA - Estrutura de Menus', function() {
     assert.strictEqual(categories.length, 5, `Esperado 5 categorias, encontrado ${categories.length}`);
   });
 
-  it('Deve ter 4 menus diretos (links rápidos)', function() {
+  it('Deve ter 3 menus diretos (links rápidos)', function() {
     const directMenus = Object.values(EXPECTED_MENU_STRUCTURE)
       .filter(m => m.type === 'direct');
-    assert.strictEqual(directMenus.length, 4, `Esperado 4 menus diretos, encontrado ${directMenus.length}`);
+    assert.strictEqual(directMenus.length, 3, `Esperado 3 menus diretos, encontrado ${directMenus.length}`);
   });
 
   it('Deve ter 13 submenus no total', function() {
@@ -212,11 +206,11 @@ describe('🧩 AUDITA - Componentes Shell', function() {
 
 describe('📄 AUDITA - Páginas e Views', function() {
   
-  it('Deve haver 18 páginas no total', function() {
+  it('Deve haver 17 páginas no total', function() {
     assert.strictEqual(
       EXPECTED_PAGES.length,
-      18,
-      `Esperado 18 páginas, encontrado ${EXPECTED_PAGES.length}`
+      17,
+      `Esperado 17 páginas, encontrado ${EXPECTED_PAGES.length}`
     );
   });
 
@@ -308,13 +302,12 @@ describe('🗺️ AUDITA - Mapeamento Menu → Página', function() {
   });
 
   it('Menus diretos devem ter páginas correspondentes', function() {
-    const directMenuIds = ['dashboard', 'tutorials', 'aiChat', 'mobile'];
+    const directMenuIds = ['dashboard', 'aiChat', 'mobile'];
     const pageIds = EXPECTED_PAGES.map(p => p.id);
     
     // Mapear IDs de menu para IDs de página
     const menuToPageMap = {
       'dashboard': 'home',
-      'tutorials': 'tutorials',
       'aiChat': 'ai-chat',
       'mobile': 'mobile'
     };
@@ -465,7 +458,7 @@ describe('📈 RESUMO DA AUDITORIA', function() {
     console.log(`   • Submenus:                ${stats.totalSubmenus}`);
     console.log(`   • Páginas:                 ${stats.totalPages}`);
     console.log(`   • Componentes Shell:       ${stats.totalComponents}`);
-    console.log(`\n✅ TESTES ESPERADOS A PASSAR: ${9 * 9} testes\n`);
+    console.log(`\n✅ TESTES ESPERADOS A PASSAR: ${8 * 9} testes\n`);
 
     assert.ok(true);
   });
