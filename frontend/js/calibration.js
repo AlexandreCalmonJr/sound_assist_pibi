@@ -1,6 +1,7 @@
 (function() {
     let calibrationData = []; // [{hz: 10, offset: 1.2}, ...]
     let splOffset = 0;
+    let useAWeighting = true; // Padrão para SPL profissional
 
     async function handleFileUpload(event) {
         const file = event.target.files[0];
@@ -61,8 +62,21 @@
 
         for(let i=0; i < binCount; i++) {
             const hz = i * hzPerBin;
+            
+            // 1. Calcular Ponderação A (dBA)
+            // Fórmula: Ra(f) = (12194^2 * f^4) / ((f^2 + 20.6^2) * sqrt((f^2 + 107.7^2) * (f^2 + 737.9^2)) * (f^2 + 12194^2))
+            // A(f) = 20 * log10(Ra(f)) + 2.0
+            let aWeight = 0;
+            if (useAWeighting && hz > 0) {
+                const f2 = hz * hz;
+                const f4 = f2 * f2;
+                const rA = (148693636 * f4) / 
+                           ((f2 + 424.36) * Math.sqrt((f2 + 11599.29) * (f2 + 544496.41)) * (f2 + 148693636));
+                aWeight = 20 * Math.log10(rA) + 2.0;
+            }
+
             if(calibrationData.length === 0) {
-                offsetCache[i] = 0;
+                offsetCache[i] = aWeight;
                 continue;
             }
 
@@ -78,7 +92,7 @@
                 for (let j = 0; j < sorted.length - 1; j++) {
                     if (hz >= sorted[j].hz && hz <= sorted[j + 1].hz) {
                         const t = (hz - sorted[j].hz) / (sorted[j + 1].hz - sorted[j].hz);
-                        offsetCache[i] = sorted[j].offset + t * (sorted[j + 1].offset - sorted[j].offset);
+                        offsetCache[i] = (sorted[j].offset + t * (sorted[j + 1].offset - sorted[j].offset)) + aWeight;
                         break;
                     }
                 }

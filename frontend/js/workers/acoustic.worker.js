@@ -34,6 +34,17 @@ function calculateSchroederRT60(buffer, sampleRate) {
         }
     }
 
+    // ✅ Novo: Cálculo do Noise Floor (ruído de fundo antes do impulso)
+    // Pega os primeiros 100ms da gravação como referência de silêncio
+    const noiseSamples = Math.floor(sampleRate * 0.1);
+    let noiseEnergy = 0;
+    for (let i = 0; i < noiseSamples && i < peakIdx; i++) {
+        noiseEnergy += energy[i];
+    }
+    const noiseFloorDb = 10 * Math.log10(Math.max(noiseEnergy / noiseSamples, 1e-12));
+    const peakDbActual = 10 * Math.log10(Math.max(peakEnergy, 1e-12));
+    const snr = peakDbActual - noiseFloorDb;
+
     // 2. Integração reversa (Schroeder) SÓ a partir do pico
     const schroederLen = n - peakIdx;
     const schroeder = new Float32Array(schroederLen);
@@ -70,6 +81,8 @@ function calculateSchroederRT60(buffer, sampleRate) {
     return {
         rt60: rt60.toFixed(2),
         t30: (durationSeconds * 2).toFixed(2),
+        snr: snr.toFixed(1),
+        warning: snr < 35 ? 'SNR Baixo: medição pode estar mascarada pelo ruído ambiente.' : null,
         curve: schroederDb.filter((_, i) => i % 100 === 0) // Downsample para gráfico
     };
 }

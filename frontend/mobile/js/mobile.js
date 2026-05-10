@@ -551,6 +551,13 @@ function analyzeMic() {
                     
                     const rt60 = drop > 5 ? (time * 60 / drop) : 0;
                     results[key] = parseFloat(rt60.toFixed(2));
+                    
+                    // ✅ Novo: Check de SNR no Mobile
+                    const bandSnr = maxLevel - rt60BackgroundLevel;
+                    if (bandSnr < 20) {
+                        appendMobileLog(`⚠️ SNR insuficiente na banda ${key}Hz (${bandSnr.toFixed(1)}dB).`);
+                    }
+
                     const el = document.getElementById(`mobile-rt60-${key}`);
                     if (el) el.innerText = rt60 > 0 ? `${rt60.toFixed(2)}` : '--';
                 });

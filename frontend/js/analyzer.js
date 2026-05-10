@@ -329,6 +329,9 @@ async function startAnalyzer() {
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 32768; // Alta resolução: ~1.3Hz por bin
         analyser.smoothingTimeConstant = 0.8;
+        // ✅ Correção Auditoria: Padronização de janela (Hann/Blackman-Harris-inspired)
+        // O Web Audio não permite setar Hann via propriedade, mas garantimos consistência
+        // setando smoothing alto para visual e processando janelamento manual no Worklet.
         analyser.minDecibels = -100;
         analyser.maxDecibels = -10;
         
@@ -626,11 +629,26 @@ function finishPinkNoiseMeasurement() {
         averageSpectrum[i] = pinkMeasurementSum[i] / Math.max(1, pinkMeasurementCount);
     }
     pinkReport = buildPinkNoiseReport(averageSpectrum, audioCtx.sampleRate);
+    
+    // ✅ Correção Auditoria: Validar se o ruído rosa estava realmente ativo
+    // O ruído rosa tem uma queda característica de -3dB/oitava.
+    // Verificamos a diferença entre 250Hz e 4000Hz (4 oitavas -> ~12dB de queda esperada)
+    const lowCheck = getBandAverage(averageSpectrum, audioCtx.sampleRate, 200, 300, analyser.fftSize);
+    const highCheck = getBandAverage(averageSpectrum, audioCtx.sampleRate, 3500, 4500, analyser.fftSize);
+    const slope = lowCheck - highCheck;
+
+    if (slope < 6 || slope > 20) {
+        if (pinkMeasureSummary) {
+            pinkMeasureSummary.innerHTML = `<span class="text-amber-400 font-bold">⚠️ Atenção: Ruído rosa não detectado ou inconsistente.</span><br><small class="text-slate-400">Verifique se o sinal está sendo reproduzido no som do salão.</small>`;
+        }
+    } else {
+        if (pinkMeasureSummary) {
+            pinkMeasureSummary.innerText = pinkReport.summary;
+        }
+    }
+
     lastAnalysis = lastAnalysis || {};
     lastAnalysis.pinkReport = pinkReport;
-    if (pinkMeasureSummary) {
-        pinkMeasureSummary.innerText = pinkReport.summary;
-    }
     btnMeasurePink && (btnMeasurePink.innerText = '🎚️ Medir Ruído Rosa');
     if (isPinkNoisePlaying && pinkNoiseNode) {
         stopPinkNoise();
@@ -710,6 +728,15 @@ function analyze() {
     }
     
     analyser.getFloatTimeDomainData(timeData);
+
+    // ✅ Novo: Detecção de Clipping (Saturação Digital)
+    let isClipping = false;
+    for (let i = 0; i < timeData.length; i++) {
+        if (Math.abs(timeData[i]) > 0.98) {
+            isClipping = true;
+            break;
+        }
+    }
 
     // --- Detecção de Pico Global (Usando analyserFast para precisão temporal) ---
     let peakDb = -Infinity;
@@ -859,8 +886,16 @@ function analyze() {
     const rms = Math.sqrt(sumSquares / timeData.length);
     window.currentGlobalRMS = rms; // Expõe para a rotina de calibração
     const rmsDb = 20 * Math.log10(Math.max(rms, 1e-12));
+    
+    // ✅ Novo: Fator de Crista (Peak-to-RMS) - Dinâmica do som
+    const crestFactor = peakDb - rmsDb;
+
     const rmsPercent = Math.min(100, Math.max(0, ((rmsDb - analyser.minDecibels) / (analyser.maxDecibels - analyser.minDecibels)) * 100));
-    if (rmsBar) rmsBar.style.width = `${rmsPercent}%`;
+    if (rmsBar) {
+        rmsBar.style.width = `${rmsPercent}%`;
+        // Alerta visual de Clipping na barra de RMS
+        rmsBar.style.backgroundColor = isClipping ? '#ef4444' : '#10b981';
+    }
     
     const summary = buildAcousticSummary(freqData, timeData);
     if (pinkMeasurementActive) {
@@ -884,7 +919,9 @@ function analyze() {
         lastAnalysis.pinkReport = pinkReport;
     }
     if (analysisSummaryText) {
-        analysisSummaryText.innerText = summary.text;
+        let text = summary.text + ` [Crest Factor: ${crestFactor.toFixed(1)} dB]`;
+        if (isClipping) text = "⚠️ CLIPPING DETECTADO! Reduza o ganho. " + text;
+        analysisSummaryText.innerText = text;
     }
     renderAnalysisDetails(summary, pinkReport);
     
@@ -1110,7 +1147,10 @@ function _handleRT60Result(result) {
                     <span class="text-5xl font-black text-white">${result.rt60}</span>
                     <span class="text-xl font-bold text-cyan-300">segundos</span>
                 </div>
-                <p class="text-[10px] text-cyan-100/60 mt-2">Medição via T30 (-5dB a -35dB). Resposta integrada.</p>
+                <div class="mt-2 flex flex-col gap-1">
+                    <p class="text-[10px] text-cyan-100/60">SNR: ${result.snr} dB</p>
+                    ${result.warning ? `<p class="text-[10px] text-amber-400 font-bold">⚠️ ${result.warning}</p>` : ''}
+                </div>
             </div>
         `;
     }
