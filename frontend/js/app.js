@@ -40,9 +40,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         window.SoundMasterMixerPanel.init();
     }
 
-    // 5. Navigate to Home
+    // 5. Navigate to Home or Mobile
     if (window.router) {
-        window.router.navigate('home');
+        const urlParams = new URLSearchParams(window.location.search);
+        const isMobileMode = urlParams.get('mode') === 'mobile' || window.innerWidth < 768;
+        
+        if (isMobileMode) {
+            console.log('[SoundMaster] Modo mobile detectado. Navegando para interface remota.');
+            window.router.navigate('mobile');
+        } else {
+            window.router.navigate('home');
+        }
     }
 
     console.log('[SoundMaster] App Shell v2 inicializado com sucesso.');

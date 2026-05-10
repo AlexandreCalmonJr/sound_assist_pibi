@@ -21,32 +21,22 @@
                 return;
             }
 
+            // URL Base
+            const baseUrl = config.tunnelUrl || `http://${config.localIp}:${config.port}`;
+            const tokenQuery = config.tunnelToken ? `token=${config.tunnelToken}&` : '';
+            const mobileHref = `${baseUrl}/mobile/index.html?${tokenQuery}mode=mobile`;
+
             // Informativo sobre o Túnel
             if (!config.tunnelUrl) {
-                if (mobileUrl) mobileUrl.innerHTML = '<span style="color: var(--slate-400); font-size: 9px; text-transform: uppercase;">Túnel HTTPS Desativado (Melhor Performance). Ative em "Sistemas" se precisar do Celular.</span>';
-                
-                const localHref = `http://${config.localIp}:${config.port}/mobile/index.html`;
-                if (mobileLink) mobileLink.href = localHref;
-                if (mobileQrCode) {
-                    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(localHref)}`;
-                    mobileQrCode.src = qrUrl;
-                }
-                return;
-            }
-
-            // Se o túnel subiu ou se desistimos após 20s
-            const baseUrl = config.tunnelUrl || `http://${config.localIp}:${config.port}`;
-            const mobileHref = `${baseUrl}/mobile/index.html`;
-
-            if (!config.tunnelUrl) {
-                if (mobileUrl) mobileUrl.innerHTML = `${mobileHref} <br><span style="color: var(--danger); font-size: 10px; font-weight: 800; text-transform: uppercase; margin-top: 4px; display: block;">Túnel Falhou: Microfone bloqueado no celular.</span>`;
+                if (mobileUrl) mobileUrl.innerHTML = `<span style="color: var(--slate-400); font-size: 9px; text-transform: uppercase;">Túnel HTTPS Desativado. Ative em "Sistemas" se precisar do Celular.</span><br><span style="color: var(--cyan-400); font-size: 10px;">Link Local: ${mobileHref}</span>`;
             } else {
                 if (mobileUrl) mobileUrl.innerHTML = `<span style="color: var(--success); font-weight: bold;">${mobileHref}</span>`;
             }
-
+            
             if (mobileLink) mobileLink.href = mobileHref;
             
             if (mobileQrCode) {
+                // Usando o token para que o celular já abra autenticado
                 const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(mobileHref)}`;
                 mobileQrCode.src = qrUrl;
                 console.log('[Config] QR Code setado para:', mobileHref);

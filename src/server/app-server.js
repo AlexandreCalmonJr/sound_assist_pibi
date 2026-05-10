@@ -85,7 +85,7 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
             console.log(`Túnel Seguro Ativo (HTTPS) [Tentativa ${retryCount + 1}]:`);
             console.log(`URL: ${tunnelUrl}`);
             console.log(`Token de Acesso: ${tunnelToken}`);
-            console.log(`Acesse via: ${tunnelUrl}?token=${tunnelToken}`);
+            console.log(`Acesse via: ${tunnelUrl}/mobile/index.html?token=${tunnelToken}&mode=mobile`);
             console.log('====================================');
 
             tunnel.on('close', () => {

@@ -5,7 +5,12 @@
 (function() {
 'use strict';
 
-const socket = io();
+const urlParams = new URLSearchParams(window.location.search);
+const token = urlParams.get('token');
+const socket = io({
+    auth: { token },
+    query: { token }
+});
 
 // UI Elements - Navigation & Status
 const statusBar = document.getElementById('status-heartbeat');
