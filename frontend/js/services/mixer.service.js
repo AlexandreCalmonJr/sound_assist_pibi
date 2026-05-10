@@ -437,6 +437,9 @@
         setPhantomPower,
         setHwGain,
         setChannelName,
-        vuToHeight
+        vuToHeight,
+        pingMixer: function() {
+            return _emit('ping_mixer', {}, 'Solicitando status da mesa...');
+        }
     };
 })();

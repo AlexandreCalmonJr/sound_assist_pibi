@@ -14,23 +14,13 @@
             const mobileQrCode = document.getElementById('mobile-qr-code');
 
             if (ipCard) ipCard.style.display = 'block';
-            if (ipDisplay) ipDisplay.innerText = `http://${config.localIp}:${config.port}`;
+            const serverUrl = `http://${config.localIp}:${config.port}`;
+            if (ipDisplay) ipDisplay.innerText = serverUrl;
             
-            if (config.localIp === '127.0.0.1' && !config.tunnelUrl) {
-                if (mobileUrl) mobileUrl.innerText = 'Aguardando rede...';
-                return;
-            }
-
-            // URL Base
-            const baseUrl = config.tunnelUrl || `http://${config.localIp}:${config.port}`;
-            const tokenQuery = config.tunnelToken ? `token=${config.tunnelToken}&` : '';
-            const mobileHref = `${baseUrl}/mobile/index.html?${tokenQuery}mode=mobile`;
-
-            // Informativo sobre o Túnel
-            if (!config.tunnelUrl) {
-                if (mobileUrl) mobileUrl.innerHTML = `<span style="color: var(--slate-400); font-size: 9px; text-transform: uppercase;">Túnel HTTPS Desativado. Ative em "Sistemas" se precisar do Celular.</span><br><span style="color: var(--cyan-400); font-size: 10px;">Link Local: ${mobileHref}</span>`;
-            } else {
-                if (mobileUrl) mobileUrl.innerHTML = `<span style="color: var(--success); font-weight: bold;">${mobileHref}</span>`;
+            // Link para modo mobile (Celular)
+            const mobileHref = `${serverUrl}/mobile/index.html?mode=mobile`;
+            if (mobileUrl) {
+                mobileUrl.innerHTML = `<span style="color: var(--cyan-400); font-size: 10px;">Acesso Rede Local: ${mobileHref}</span>`;
             }
             
             if (mobileLink) mobileLink.href = mobileHref;

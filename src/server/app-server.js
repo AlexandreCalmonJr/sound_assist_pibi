@@ -74,7 +74,7 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     // Proxy para IA (permite acesso mobile)
     expressApp.post('/api/ai', async (req, res) => {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
+        const timeout = setTimeout(() => controller.abort(), 30000);
         try {
             const aiRes = await fetch('http://127.0.0.1:3002/chat', {
                 method: 'POST',
@@ -108,43 +108,11 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
         }
     });
 
-    expressApp.post('/api/ai/analyze-feedback', async (req, res) => {
-        try {
-            const aiRes = await fetch('http://127.0.0.1:3002/analyze-feedback', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-API-Key': process.env.AI_API_KEY || ''
-                },
-                body: JSON.stringify(req.body)
-            });
-            const data = await aiRes.json();
-            res.json(data);
-        } catch (error) {
-            res.status(500).json({ error: 'IA offline' });
-        }
-    });
 
-    expressApp.post('/api/ai/train', async (req, res) => {
-        try {
-            const aiRes = await fetch('http://127.0.0.1:3002/train', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-API-Key': process.env.AI_API_KEY || ''
-                },
-                body: JSON.stringify(req.body)
-            });
-            const data = await aiRes.json();
-            res.json(data);
-        } catch (error) {
-            res.status(500).json({ error: 'IA offline' });
-        }
-    });
 
     expressApp.post('/api/acoustic_analysis', async (req, res) => {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
+        const timeout = setTimeout(() => controller.abort(), 30000);
         try {
             const aiRes = await fetch('http://127.0.0.1:3002/acoustic_analysis', {
                 method: 'POST',

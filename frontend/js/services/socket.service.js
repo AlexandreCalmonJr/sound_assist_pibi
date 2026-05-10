@@ -113,6 +113,29 @@
             if (data && data.msg) AppStore.addLog(data.msg);
         });
 
+        // --- Novos Listeners (Consolidação Média) ---
+        _socket.on('system_log', function (data) {
+            AppStore.addLog(`[System] ${data.msg || data}`);
+        });
+
+        _socket.on('mixer_log', function (msg) {
+            AppStore.addLog(`[Mixer] ${msg}`);
+        });
+
+        _socket.on('snapshot_saved', function (data) {
+            AppStore.addLog(`✅ Snapshot acústico salvo: ${data.name || 'Sucesso'}`);
+        });
+
+        _socket.on('feedback_risk_result', function (data) {
+            if (data.risk > 0.7) {
+                AppStore.addLog(`⚠️ Risco de Realimentação em ${data.hz}Hz: ${Math.round(data.risk * 100)}%`);
+            }
+        });
+
+        _socket.on('pong_mixer', function () {
+            AppStore.addLog('🏓 Mesa respondeu ao ping.');
+        });
+
         // --- Limpar estado ao fechar janela ---
         window.addEventListener('beforeunload', function () {
             if (_socket) _socket.disconnect();

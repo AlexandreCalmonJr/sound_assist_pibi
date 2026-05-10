@@ -527,13 +527,6 @@ function registerSocketHandlers(io, appDataDir = './logs') {
             }
         });
 
-        socket.on('train_feedback_event', async (data) => {
-            try {
-                await aiPredictor.trainOnEvent(data.hz, data.db, data.prevDb, data.gain || 0, data.isFeedback);
-            } catch (e) {
-                console.error('Erro no treinamento de IA:', e.message);
-            }
-        });
 
         // --- Gerenciamento de Presets ---
         socket.on('save_preset', (data) => {

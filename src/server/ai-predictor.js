@@ -24,7 +24,7 @@ class FeedbackPredictor {
      */
     async predictRisk(freq, db, prevDb, gain) {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 3000);
+        const timeout = setTimeout(() => controller.abort(), 10000);
         try {
             const res = await fetch(this.pythonUrl, {
                 method: 'POST',
@@ -45,21 +45,7 @@ class FeedbackPredictor {
         }
     }
 
-    async trainOnEvent(freq, db, prevDb, gain, isFeedback) {
-        // Envia evento de treino para o Python
-        try {
-            await fetch('http://127.0.0.1:3002/train', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-API-Key': this.apiKey
-                },
-                body: JSON.stringify({ freq, db, prevDb, gain, isFeedback })
-            });
-        } catch (e) {
-            console.warn('[AI Predictor] Erro ao enviar treino para o Python.');
-        }
-    }
+
 }
 
 module.exports = new FeedbackPredictor();

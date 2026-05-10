@@ -11,7 +11,7 @@
     'use strict';
 
     const AI_URL = '/api/ai';
-    const TIMEOUT_MS = 8000;
+    const TIMEOUT_MS = 30000;
 
     // -------------------------------------------------------------------------
     // Helpers

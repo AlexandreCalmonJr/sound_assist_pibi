@@ -1005,6 +1005,15 @@ function analyze() {
     // ✅ Correção Auditoria: Feedback detectado no analisador rápido (latência mínima)
     const isFeedback = feedbackDetector.analyze(currentFastPeakHz, peakDb, -20);
     
+    // ✅ Novo: Solicita verificação de risco de IA se houver pico relevante
+    if (isAnalyzing && peakDb > -15) {
+        SocketService.emit('analyze_feedback_risk', { 
+            hz: Math.round(currentFastPeakHz), 
+            db: peakDb, 
+            prevDb: lastAnalysis?.details?.peakDb || -100 
+        });
+    }
+    
     if (isFeedback) {
         if (feedbackAlert) {
             feedbackAlert.className = 'alert danger';
@@ -1044,6 +1053,16 @@ async function sendAnalysisToAI() {
     
     if (aiBox) aiBox.classList.remove('hidden');
     if (aiText) aiText.innerText = 'Processando dados com IA...';
+
+    // ✅ Novo: Salva snapshot no banco de dados local antes de enviar para a IA
+    SocketService.emit('save_acoustic_snapshot', {
+        name: `Análise Automática - Canal ${channel}`,
+        hz: lastAnalysis.details.peakHz,
+        db: lastAnalysis.details.peakDb,
+        rms: lastAnalysis.details.rmsDb,
+        bands: lastAnalysis.details.bands,
+        timestamp: new Date().toISOString()
+    });
 
     const payload = {
         summary: lastAnalysis.text,
