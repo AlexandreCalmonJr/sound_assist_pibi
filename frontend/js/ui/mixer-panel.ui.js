@@ -55,7 +55,15 @@
             meterMaster:      $('meter-master'),
             recStatusBadge:   $('rec-status-badge'),
             fxBpmInput:       $('fx-bpm-input'),
-            btnSyncBpm:       $('btn-sync-bpm')
+            btnSyncBpm:       $('btn-sync-bpm'),
+            // Novos
+            hwInputNum:       $('hw-input-num'),
+            hwGainSlider:     $('hw-gain-slider'),
+            hwGainVal:        $('hw-gain-val'),
+            hwPhantom:        $('btn-hw-phantom'),
+            btnSyncShows:     $('btn-sync-shows'),
+            btnNewShow:       $('btn-new-show'),
+            nativeShowsList:  $('native-shows-list')
         };
     }
 
@@ -329,6 +337,41 @@
             const next = current > 140 ? 120 : current + 8;
             els.fxBpmInput.value = next;
             MixerService.setFxBpm(1, next);
+        });
+
+        // ✅ Novo: Mute Groups
+        document.querySelectorAll('.mute-group-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const groupId = btn.dataset.group;
+                const isActive = btn.classList.contains('active');
+                MixerService.automixControl(groupId, isActive ? 'disable' : 'enable');
+                btn.classList.toggle('active', !isActive);
+                btn.classList.toggle('bg-red-600', !isActive && groupId === 'all');
+                btn.classList.toggle('bg-cyan-600', !isActive && groupId !== 'all');
+            });
+        });
+
+        // ✅ Novo: Hardware Gain
+        els.hwGainSlider?.addEventListener('input', (e) => {
+            const val = e.target.value;
+            if (els.hwGainVal) els.hwGainVal.innerText = val + '%';
+            MixerService.setHwGain(els.hwInputNum.value, val / 100);
+        });
+
+        // ✅ Novo: Phantom Power
+        els.hwPhantom?.addEventListener('change', (e) => {
+            MixerService.setPhantomPower(els.hwInputNum.value, e.target.checked);
+        });
+
+        // ✅ Novo: Shows & Snapshots
+        els.btnSyncShows?.addEventListener('click', () => {
+            MixerService.showControl('list');
+            els.btnSyncShows.innerText = '⌛...';
+        });
+
+        els.btnNewShow?.addEventListener('click', () => {
+            const name = prompt('Nome do novo Show:');
+            if (name) MixerService.showControl('save', name);
         });
 
         // Esconde botão desconectar inicialmente

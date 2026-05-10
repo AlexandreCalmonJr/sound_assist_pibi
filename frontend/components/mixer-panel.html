@@ -19,7 +19,7 @@
         <div class="flex gap-1 bg-black/20 p-1 rounded-lg">
             <button class="mixer-tab-btn active flex-1 text-[10px] uppercase font-bold py-1.5 rounded transition-all" data-tab="mixer-overview">Geral</button>
             <button class="mixer-tab-btn flex-1 text-[10px] uppercase font-bold py-1.5 rounded text-slate-500 hover:text-white transition-all" data-tab="mixer-connection">Status</button>
-            <button class="mixer-tab-btn flex-1 text-[10px] uppercase font-bold py-1.5 rounded text-slate-500 hover:text-white transition-all" data-tab="mixer-presets">Presets</button>
+            <button class="mixer-tab-btn flex-1 text-[10px] uppercase font-bold py-1.5 rounded text-slate-500 hover:text-white transition-all" data-tab="mixer-setup">Setup</button>
             <button class="mixer-tab-btn flex-1 text-[10px] uppercase font-bold py-1.5 rounded text-slate-500 hover:text-white transition-all" data-tab="mixer-interface">Mesa</button>
         </div>
     </div>
@@ -129,18 +129,60 @@
             <button id="btn-disconnect-mixer" class="w-full py-2 bg-red-600/20 text-red-400 border border-red-500/30 rounded text-xs font-bold">Desconectar Mesa</button>
         </section>
 
-        <!-- Presets -->
-        <section id="mixer-presets" class="mixer-panel-section hidden space-y-4">
+        <!-- Setup de Hardware e Mute Groups -->
+        <section id="mixer-setup" class="mixer-panel-section hidden space-y-4">
             <div class="bg-slate-800/40 border border-white/5 rounded-xl p-4">
-                <h3 class="text-xs font-bold text-slate-500 uppercase mb-4">Salvar Estado</h3>
-                <div class="space-y-3">
-                    <input type="text" id="preset-name" placeholder="Nome do Preset" 
-                        class="w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-xs focus:border-cyan-500 outline-none">
-                    <button id="btn-save-preset" class="w-full py-2 bg-cyan-600 text-white rounded text-xs font-bold">Salvar Atual</button>
+                <h3 class="text-xs font-bold text-slate-500 uppercase mb-4">Mute Groups</h3>
+                <div class="grid grid-cols-4 gap-2">
+                    <button class="mute-group-btn py-2 bg-slate-700 hover:bg-slate-600 rounded text-[10px] font-black" data-group="1">G1</button>
+                    <button class="mute-group-btn py-2 bg-slate-700 hover:bg-slate-600 rounded text-[10px] font-black" data-group="2">G2</button>
+                    <button class="mute-group-btn py-2 bg-slate-700 hover:bg-slate-600 rounded text-[10px] font-black" data-group="3">G3</button>
+                    <button class="mute-group-btn py-2 bg-slate-700 hover:bg-slate-600 rounded text-[10px] font-black" data-group="4">G4</button>
+                    <button class="mute-group-btn py-2 bg-slate-700 hover:bg-slate-600 rounded text-[10px] font-black" data-group="5">G5</button>
+                    <button class="mute-group-btn py-2 bg-slate-700 hover:bg-slate-600 rounded text-[10px] font-black" data-group="6">G6</button>
+                    <button class="mute-group-btn py-2 bg-slate-700 hover:bg-slate-600 rounded text-[10px] font-black" data-group="fx">FX</button>
+                    <button class="mute-group-btn py-2 bg-red-600/30 text-red-500 border border-red-500/20 rounded text-[10px] font-black" data-group="all">ALL</button>
                 </div>
             </div>
-            <div id="presets-list" class="space-y-2">
-                <!-- Carregado via JS -->
+
+            <div class="bg-slate-800/40 border border-white/5 rounded-xl p-4">
+                <h3 class="text-xs font-bold text-slate-500 uppercase mb-4">Hardware Gain & 48V</h3>
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex flex-col">
+                            <span class="text-[9px] uppercase font-black text-slate-600">Entrada Física</span>
+                            <input type="number" id="hw-input-num" min="1" max="24" value="1" 
+                                class="bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-cyan-400 w-16 outline-none">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[9px] uppercase font-black text-slate-600">48V</span>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="btn-hw-phantom" class="sr-only peer">
+                                <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-600"></div>
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-[9px] uppercase font-black text-slate-600">Ganho de Entrada</span>
+                            <span id="hw-gain-val" class="text-[10px] font-mono text-cyan-400">0%</span>
+                        </div>
+                        <input type="range" id="hw-gain-slider" min="0" max="100" value="0" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500">
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-800/40 border border-white/5 rounded-xl p-4">
+                <h3 class="text-xs font-bold text-slate-500 uppercase mb-4">Shows & Snapshots</h3>
+                <div class="space-y-3">
+                    <div class="flex gap-2">
+                        <button id="btn-sync-shows" class="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-[9px] font-bold uppercase">Sincronizar</button>
+                        <button id="btn-new-show" class="flex-1 py-1.5 bg-cyan-600/20 text-cyan-400 border border-cyan-500/20 rounded text-[9px] font-bold uppercase">Novo Show</button>
+                    </div>
+                    <div id="native-shows-list" class="max-h-40 overflow-y-auto space-y-1">
+                        <div class="text-[9px] text-slate-600 italic text-center py-4">Clique em sincronizar para carregar.</div>
+                    </div>
+                </div>
             </div>
         </section>
 

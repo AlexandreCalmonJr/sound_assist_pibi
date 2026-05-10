@@ -1026,6 +1026,17 @@ btnMuteAll?.addEventListener('click', () => {
     appendMobileLog('Sistema mutado. Use a mesa física ou desktop para desmutar canais individuais.');
 });
 
+// Mute Groups Mobile
+document.querySelectorAll('.mobile-mute-group').forEach(btn => {
+    btn.addEventListener('click', () => {
+        triggerHaptic('medium');
+        const groupId = btn.dataset.group;
+        const active = btn.classList.contains('active-mix');
+        emitMobileTool('mute_group_cmd', { id: groupId, enabled: active ? 0 : 1 }, `Mute Group ${groupId} ${active ? 'Desativado' : 'Ativado'}`);
+        btn.classList.toggle('active-mix', !active);
+    });
+});
+
 btnRecToggle?.addEventListener('click', () => {
     triggerHaptic('medium');
     emitMobileTool('recorder_cmd', { action_type: 'recordToggle' }, 'Alternando estado da gravação...');
