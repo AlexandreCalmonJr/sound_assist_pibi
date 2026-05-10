@@ -51,6 +51,17 @@
             AppStore.setState({ masterDb: db });
         });
 
+        _socket.on('vu_data', function (data) {
+            AppStore.setState({ vuData: data });
+        });
+
+        _socket.on('recorder_status', function (data) {
+            AppStore.setState({ 
+                recording: !!data.recording,
+                mtkRecording: !!data.mtkRecording 
+            });
+        });
+
         _socket.on('feedback_cut_success', function (data) {
             if (data && data.msg) AppStore.addLog(data.msg);
         });

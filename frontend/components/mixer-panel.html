@@ -3,7 +3,10 @@
         <div class="flex items-center justify-between mb-4">
             <div class="flex flex-col">
                 <span class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Soundcraft Ui24R</span>
-                <span id="mixer-status-badge" class="text-xs font-bold text-red-500">● Offline</span>
+                <div class="flex items-center gap-2">
+                    <span id="mixer-status-badge" class="text-xs font-bold text-red-500">● Offline</span>
+                    <span id="rec-status-badge" class="hidden text-[9px] bg-red-600 text-white px-1.5 py-0.5 rounded font-black animate-pulse">REC</span>
+                </div>
             </div>
             <div class="flex gap-2">
                 <input type="text" id="mixer-ip" value="10.10.1.1" 
@@ -31,10 +34,13 @@
                         <span id="mixer-master-level" class="text-2xl font-mono text-cyan-400">0%</span>
                         <span id="mixer-master-db" class="text-xs text-slate-500">-∞ dB</span>
                     </div>
-                    <div class="relative h-48 bg-black/40 rounded-lg border border-white/5 p-2 flex justify-center">
+                    <div class="relative h-48 bg-black/40 rounded-lg border border-white/5 p-2 flex justify-center gap-2">
+                        <div class="w-1.5 bg-slate-800 rounded-full relative overflow-hidden h-full">
+                            <div id="meter-master" class="absolute bottom-0 w-full bg-emerald-500 h-[0%] transition-all duration-100"></div>
+                        </div>
                         <input type="range" id="master-volume-slider" min="0" max="100" value="0" 
-                            class="appearance-none w-full h-2 bg-slate-700 rounded-lg cursor-pointer accent-cyan-500" 
-                            style="writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 8px; height: 100%;">
+                            class="appearance-none w-2 h-full bg-slate-700 rounded-lg cursor-pointer accent-cyan-500" 
+                            style="writing-mode: bt-lr; -webkit-appearance: slider-vertical;">
                     </div>
                     <div class="flex gap-2">
                         <button id="btn-master-volume-down" class="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded text-xs">-1%</button>
@@ -42,6 +48,18 @@
                     </div>
 
                     <div class="h-px bg-white/5 my-4"></div>
+
+                    <div class="h-px bg-white/5 my-4"></div>
+
+                    <div class="flex justify-between items-center mb-3">
+                        <h4 class="text-[9px] font-black uppercase text-slate-600 tracking-widest">Efeitos & BPM</h4>
+                        <button id="btn-sync-bpm" class="text-[8px] bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded text-slate-400">TAP</button>
+                    </div>
+                    <div class="flex items-center gap-2 mb-4">
+                        <input type="number" id="fx-bpm-input" value="120" min="40" max="300"
+                            class="flex-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-cyan-400 text-center font-mono outline-none">
+                        <span class="text-[10px] text-slate-500 uppercase font-bold">BPM</span>
+                    </div>
 
                     <h4 class="text-[9px] font-black uppercase text-slate-600 mb-3 tracking-widest">Seleção de Mix</h4>
                     <div class="grid grid-cols-2 gap-2" id="desktop-mix-selector">

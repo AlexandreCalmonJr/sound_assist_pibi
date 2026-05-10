@@ -330,6 +330,39 @@
     }
 
     // -------------------------------------------------------------------------
+    // Novos Controles Avançados (Ui24R)
+    // -------------------------------------------------------------------------
+
+    function recorderControl(action) {
+        return _emit('recorder_cmd', { action_type: action }, 'Gravador 2-Track: ' + action);
+    }
+
+    function mtkControl(action) {
+        return _emit('mtk_cmd', { action_type: action }, 'Multitrack: ' + action);
+    }
+
+    function setFxBpm(fx, bpm) {
+        return _emit('set_fx_bpm', { fx: fx, val: bpm }, 'FX ' + fx + ' BPM: ' + bpm);
+    }
+
+    function showControl(action, show, target) {
+        return _emit('show_cmd', { action_type: action, show: show, target: target }, 'Show/Scene: ' + action);
+    }
+
+    function automixControl(action, val) {
+        return _emit('automix_cmd', { action_type: action, val: val }, 'Automix: ' + action);
+    }
+
+    function fadeMaster(level, time) {
+        return _emit('fade_master', { level: level, time: time }, 'Fade Master iniciado...');
+    }
+
+    function fadeChannel(channel, level, time) {
+        const ch = _validateChannel(channel);
+        return _emit('fade_channel', { channel: ch, level: level, time: time }, 'Fade Canal ' + ch + ' iniciado...');
+    }
+
+    // -------------------------------------------------------------------------
     // Exportação
     // -------------------------------------------------------------------------
     window.MixerService = {
@@ -355,6 +388,13 @@
         undo,
         sendRaw,
         loadNames,
-        saveNames
+        saveNames,
+        recorderControl,
+        mtkControl,
+        setFxBpm,
+        showControl,
+        automixControl,
+        fadeMaster,
+        fadeChannel
     };
 })();

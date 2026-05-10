@@ -274,6 +274,25 @@
     }
 
     // -------------------------------------------------------------------------
+    // Atualização de VUs em Tempo Real (Canais)
+    // -------------------------------------------------------------------------
+    AppStore.subscribe('vuData', (data) => {
+        if (!data || !data.channels) return;
+        
+        // Atualiza os meters de canal que existirem no DOM
+        for (let i = 1; i <= 24; i++) {
+            const meter = document.getElementById(`meter-ch-${i}`);
+            if (meter) {
+                const chData = data.channels[i];
+                if (chData) {
+                    const height = (chData.vuPostFader || 0) * 100;
+                    meter.style.height = height + '%';
+                }
+            }
+        }
+    });
+
+    // -------------------------------------------------------------------------
     // Lifecycle
     // -------------------------------------------------------------------------
     document.addEventListener('page-loaded', (e) => {

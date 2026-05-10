@@ -73,6 +73,22 @@
             background-color: #06b6d4 !important; color: #000 !important;
             box-shadow: 0 0 12px rgba(6, 182, 212, 0.25) !important;
         }
+
+        /* VU Meter Styles */
+        .vu-container {
+            width: 4px; height: 180px; background: #111113; border-radius: 2px;
+            position: absolute; right: 25px; top: 98px; overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.03);
+        }
+        .vu-bar {
+            width: 100%; height: 0%; position: absolute; bottom: 0;
+            background: linear-gradient(to top, #10b981 0%, #10b981 70%, #fbbf24 85%, #f43f5e 100%);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+            transition: height 0.1s linear;
+        }
+        .rec-indicator { display: none; }
+        .rec-active .rec-indicator { display: block; animation: blink 1s steps(1) infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
     </style>
 </head>
 <body class="bg-[#08080a] text-[#f0f0f2] h-screen flex flex-col overflow-hidden text-[14px]">
@@ -87,8 +103,14 @@
             <div class="w-[7px] h-[7px] rounded-full bg-cyan-400 pulse-dot" aria-hidden="true"></div>
             <span class="text-[11px] uppercase tracking-[0.25em] text-[#f0f0f2]">Console <span class="text-cyan-400">Remote</span></span>
         </div>
-        <div id="connection-indicator" class="text-[9px] uppercase tracking-[0.12em] text-[#606068]">
-            Mixer Offline
+        <div class="flex items-center gap-4">
+            <div id="rec-status-mobile" class="flex items-center gap-1.5 rec-indicator">
+                <div class="w-[6px] h-[6px] rounded-full bg-red-500"></div>
+                <span class="text-[8px] font-bold text-red-500 uppercase tracking-widest">REC</span>
+            </div>
+            <div id="connection-indicator" class="text-[9px] uppercase tracking-[0.12em] text-[#606068]">
+                Mixer Offline
+            </div>
         </div>
     </header>
 
@@ -115,6 +137,10 @@
 
             <div class="flex justify-center mb-4">
                 <div class="fader-container relative w-[64px] h-[220px] bg-[#040405] rounded-md border border-white/5 shadow-[inset_0_2px_12px_rgba(0,0,0,0.9),inset_0_0_0_1px_rgba(255,255,255,0.02)]">
+                    <!-- VU Meter Master -->
+                    <div class="vu-container" style="top: 20px; height: 180px; right: 8px;">
+                        <div id="vu-master" class="vu-bar" style="height: 0%"></div>
+                    </div>
                     <input type="range" id="mobile-master-slider" min="0" max="100" value="0" class="vertical-range">
                 </div>
             </div>
@@ -223,6 +249,20 @@
 
         <!-- SEÇÃO: FERRAMENTAS -->
         <section id="mobile-tools" class="mobile-page hidden flex-col">
+            <div class="bg-[#111113] border border-white/5 rounded-md p-3 mb-3 shadow-[0_2px_16px_rgba(0,0,0,0.5)]">
+                <span class="text-[8px] uppercase tracking-[0.14em] text-[#606068] block mb-2">Ações Rápidas (Pânico / REC)</span>
+                <div class="grid grid-cols-2 gap-2 mb-3">
+                    <button id="mobile-mute-all" class="bg-red-500/10 border border-red-500/30 py-3 rounded-md text-red-500 text-[10px] uppercase font-bold active:bg-red-500 active:text-white transition-all flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                        Mute All
+                    </button>
+                    <button id="mobile-rec-toggle" class="bg-[#1a1a1d] border border-white/5 py-3 rounded-md text-[#f0f0f2] text-[10px] uppercase active:bg-[#222226] flex items-center justify-center gap-2">
+                        <div id="mobile-rec-dot" class="w-2 h-2 rounded-full bg-red-500 hidden"></div>
+                        Gravador
+                    </button>
+                </div>
+            </div>
+
             <div class="bg-[#111113] border border-white/5 rounded-md p-3 mb-3 shadow-[0_2px_16px_rgba(0,0,0,0.5)]">
                 <div class="flex justify-between items-center mb-3">
                     <div class="flex items-center gap-2">

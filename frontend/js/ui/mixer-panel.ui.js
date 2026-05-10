@@ -51,7 +51,11 @@
             btnSavePreset:    $('btn-save-preset'),
             presetNameInput:  $('preset-name'),
             presetsList:      $('presets-list'),
-            mixBtns:          document.querySelectorAll('.mix-selector-btn-desktop')
+            mixBtns:          document.querySelectorAll('.mix-selector-btn-desktop'),
+            meterMaster:      $('meter-master'),
+            recStatusBadge:   $('rec-status-badge'),
+            fxBpmInput:       $('fx-bpm-input'),
+            btnSyncBpm:       $('btn-sync-bpm')
         };
     }
 
@@ -313,6 +317,20 @@
             });
         });
 
+        // BPM Control
+        els.fxBpmInput && els.fxBpmInput.addEventListener('change', function() {
+            const bpm = parseInt(els.fxBpmInput.value);
+            MixerService.setFxBpm(1, bpm); // Ajusta o FX 1 por padrão
+        });
+
+        // TAP BPM
+        els.btnSyncBpm && els.btnSyncBpm.addEventListener('click', function() {
+            const current = parseInt(els.fxBpmInput.value) || 120;
+            const next = current > 140 ? 120 : current + 8;
+            els.fxBpmInput.value = next;
+            MixerService.setFxBpm(1, next);
+        });
+
         // Esconde botão desconectar inicialmente
         if (els.btnDisconnect) els.btnDisconnect.style.display = 'none';
     }
@@ -343,6 +361,19 @@
 
         AppStore.subscribe('aiSuggestions', function (suggestions) {
             _renderAISuggestions(suggestions);
+        });
+
+        AppStore.subscribe('vuData', function (data) {
+            if (data && data.master && els.meterMaster) {
+                const height = (data.master.vuPostFader || 0) * 100;
+                els.meterMaster.style.height = height + '%';
+            }
+        });
+
+        AppStore.subscribe('recording', function (isRecording) {
+            if (els.recStatusBadge) {
+                els.recStatusBadge.classList.toggle('hidden', !isRecording);
+            }
         });
 
         SocketService.on('presets_list', (presets) => _renderPresets(presets));

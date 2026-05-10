@@ -154,6 +154,32 @@ socket.on('mixer_status', (data) => {
     updateConnectivityUI(data.connected);
 });
 
+// Listener de VU Meters
+socket.on('vu_data', (data) => {
+    if (data && data.master) {
+        const vuMaster = document.getElementById('vu-master');
+        if (vuMaster) {
+            // master.vuPostFader é o valor linear 0-1
+            const height = (data.master.vuPostFader || 0) * 100;
+            vuMaster.style.height = `${height}%`;
+        }
+    }
+});
+
+// Listener de Gravador
+socket.on('recorder_status', (data) => {
+    const isRecording = !!data.recording || !!data.mtkRecording;
+    if (isRecording) {
+        document.body.classList.add('rec-active');
+        if (recDot) recDot.classList.remove('hidden');
+        if (btnRecToggle) btnRecToggle.classList.add('text-red-500', 'font-bold');
+    } else {
+        document.body.classList.remove('rec-active');
+        if (recDot) recDot.classList.add('hidden');
+        if (btnRecToggle) btnRecToggle.classList.remove('text-red-500', 'font-bold');
+    }
+});
+
 // Initialize Router
 MobileRouter.init();
 
@@ -188,6 +214,12 @@ const btnMobileEqMud = document.getElementById('mobile-eq-mud');
 const btnMobileEqHarsh = document.getElementById('mobile-eq-harsh');
 const btnMobileAfsOn = document.getElementById('mobile-afs-on');
 const btnMobileAfsOff = document.getElementById('mobile-afs-off');
+
+// Botões de Ação Rápida
+const btnMuteAll = document.getElementById('mobile-mute-all');
+const btnRecToggle = document.getElementById('mobile-rec-toggle');
+const recDot = document.getElementById('mobile-rec-dot');
+const recStatusMobile = document.getElementById('rec-status-mobile');
 
 // DOM Elements — AI Chat Section
 const btnAiSend = document.getElementById('mobile-ai-send');
@@ -917,6 +949,20 @@ btnMobileAfsOn?.addEventListener('click', () => {
 btnMobileAfsOff?.addEventListener('click', () => {
     triggerHaptic('light');
     emitMobileTool('set_afs_enabled', { enabled: 0 }, 'Solicitado AFS2 global desligado.');
+});
+
+// Listeners de Ação Rápida
+btnMuteAll?.addEventListener('click', () => {
+    triggerHaptic('heavy');
+    // Muta o grupo 'all'
+    emitMobileTool('mute_group_cmd', { id: 'all', enabled: 1 }, '🚨 PANICO: Mute All ativado!');
+    // Limpa após 3 segundos (opcional, ou deixa mutado até o técnico agir)
+    appendMobileLog('Sistema mutado. Use a mesa física ou desktop para desmutar canais individuais.');
+});
+
+btnRecToggle?.addEventListener('click', () => {
+    triggerHaptic('medium');
+    emitMobileTool('recorder_cmd', { action_type: 'recordToggle' }, 'Alternando estado da gravação...');
 });
 
 btnAiSend?.addEventListener('click', () => {
