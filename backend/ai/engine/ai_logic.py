@@ -1,5 +1,6 @@
 import re
 import time
+import os
 
 CHURCH_PROFILES = {
     'janelas_vidro': {
@@ -37,9 +38,45 @@ class SessionContext:
         if len(self.analyses_history) > 50:
             self.analyses_history.pop(0)
 
+class LocalLLM:
+    """Gerenciador de Modelo Leve Local (TinyLlama/Gemma via Llama-cpp)"""
+    _instance = None
+    
+    def __init__(self, model_path="models/tinyllama-1.1b-chat.Q4_K_M.gguf"):
+        self.model_path = model_path
+        self.llm = None
+        self.enabled = False
+        
+        if os.path.exists(model_path):
+            try:
+                from llama_cpp import Llama
+                self.llm = Llama(model_path=model_path, n_ctx=512, n_threads=4, verbose=False)
+                self.enabled = True
+                print(f"[AI Engine] Modelo Local carregado: {model_path}")
+            except Exception as e:
+                print(f"[AI Engine] Falha ao carregar modelo: {e}")
+
+    def query(self, prompt, context_data=None):
+        if not self.enabled:
+            return None
+            
+        system_prompt = "Você é o SoundMaster IA, um engenheiro de som especialista. Seja conciso, técnico e prestativo."
+        if context_data:
+            system_prompt += f" Contexto Atual: RT60={context_data.get('rt60')}s, Pico={context_data.get('peakHz')}Hz, RMS={context_data.get('rms')}dB."
+
+        full_prompt = f"<|system|>\n{system_prompt}</s>\n<|user|>\n{prompt}</s>\n<|assistant|>\n"
+        output = self.llm(full_prompt, max_tokens=128, stop=["</s>"], echo=False)
+        return output['choices'][0]['text'].strip()
+
 class AIEngine:
+    _llm_instance = None
+
     def __init__(self, session):
         self.session = session
+        if AIEngine._llm_instance is None:
+            # Singleton para evitar carregar o modelo várias vezes na memória
+            AIEngine._llm_instance = LocalLLM()
+        self.llm = AIEngine._llm_instance
 
     def command(self, action, desc, **kwargs):
         payload = {"action": action, "desc": desc}
@@ -98,9 +135,33 @@ class AIEngine:
         return report
 
     def process(self, text, analysis=None, mixer_state=None):
-        text = text.lower()
-        
-        # 0. Gatilho de Relatório Completo
+        text = text.lower().strip()
+        analysis = analysis or (self.session.analyses_history[-1] if self.session.analyses_history else {})
+        if analysis:
+            self.session.add_analysis(analysis)
+
+        # 0. Gatilhos de Saudação Inteligente (Context Aware)
+        greetings = [r'\boi\b', r'\bolá\b', r'\btudo bem\b', r'\bom dia\b', r'\boa tarde\b', r'\boa noite\b']
+        if any(re.search(g, text) for g in greetings):
+            rt60 = analysis.get('rt60', '--')
+            peak = analysis.get('peakHz', '--')
+            rms = analysis.get('rms', '--')
+            
+            status_msg = f"Oi! Estou monitorando o sistema. "
+            if rt60 != '--':
+                status_msg += f"Atualmente a sala está com RT60 de {rt60}s e o nível médio está em {rms}dB. "
+            else:
+                status_msg += "Aguardando primeira medição para análise completa. "
+            
+            status_msg += "Como posso ajudar no seu mix hoje?"
+            
+            return {
+                "text": status_msg,
+                "command": None,
+                "context": {"rt60": rt60, "peak": peak}
+            }
+
+        # 1. Gatilho de Relatório Completo
         if re.search(r'(relatorio|auditoria|resumo técnico|estatistica)', text):
             report_md = self.generate_technical_report(analysis)
             return {
@@ -215,4 +276,17 @@ class AIEngine:
             if "mudo" in text or "mutar" in text:
                 return {"text": f"Mutando canal {channel} no Aux {aux_ch}.", "command": self.command("set_aux_level", "Mute Aux", channel=channel, aux=aux_ch, level=0)}
 
-        return {"text": "Estou ouvindo. Posso sugerir ajustes ou gerar um relatório técnico.", "command": None}
+        # 3. Fallback: IA Local (Modelo Leve)
+        if self.llm and self.llm.enabled:
+            print(f"[AI Engine] Usando modelo local para: {text}")
+            # Passamos o contexto atual para o modelo
+            ctx = {
+                "rt60": analysis.get('rt60', 1.2),
+                "peakHz": analysis.get('peakHz', 0),
+                "rms": analysis.get('rms', -45)
+            }
+            llm_response = self.llm.query(text, context_data=ctx)
+            if llm_response:
+                return {"text": llm_response, "command": None, "source": "local_llm"}
+
+        return {"text": "Estou ouvindo. Posso sugerir ajustes técnicos, aplicar presets de voz ou gerar um relatório detalhado da sua acústica.", "command": None}

@@ -309,7 +309,7 @@
 
         // Mensagem de boas-vindas
         _appendBubble(
-            'Olá! Sou o SoundMaster IA. Conte o problema do som e eu sugiro ajustes práticos.',
+            'Bem-vindo ao Centro de Comando IA. Estou monitorando o sistema em tempo real. Como posso otimizar seu som agora?',
             false,
             null
         );
