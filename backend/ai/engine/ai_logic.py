@@ -179,7 +179,7 @@ class AIEngine:
             if "pa" in text or "frente" in text:
                 return {
                     "text": f"Otimizando o envio do canal {channel} para o PA (Master).",
-                    "command": self.command("set_master_level", f"Volume PA Ch {channel}", channel=channel, level=0.7)
+                    "command": self.command("set_channel_level", f"Volume PA Ch {channel}", channel=channel, level=0.7)
                 }
 
             if "alto" in text or "mais" in text or "aumentar" in text:

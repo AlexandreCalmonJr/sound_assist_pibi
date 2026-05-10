@@ -3,95 +3,95 @@ function createMixerActions(getMixer) {
         return Math.min(max, Math.max(min, Number(value)));
     }
 
-    function getInputIndex(channel) {
-        const parsed = Number(channel);
-        if (!Number.isInteger(parsed) || parsed < 1 || parsed > 24) {
-            throw new Error('Canal invalido. Use um numero entre 1 e 24.');
-        }
-        return parsed - 1;
-    }
-
     function ensureMixer(socket) {
         const mixer = getMixer();
-        if (!mixer || !mixer.conn) {
-            socket.emit('mixer_status', { connected: false, msg: 'Conecte-se a mesa primeiro!' });
+        if (!mixer || (!mixer.conn && !mixer.isSimulated)) {
+            if (socket) socket.emit('mixer_status', { connected: false, msg: 'Conecte-se a mesa primeiro!' });
             return false;
         }
         return true;
     }
 
-    function sendUi(path, value) {
-        const mixer = getMixer();
-        mixer.conn.sendMessage(`SETD^${path}^${value}`);
-    }
-
     function applyChannelHpf(channel, hz) {
-        const input = getInputIndex(channel);
+        const mixer = getMixer();
+        const input = mixer.input(channel);
         const frequency = clamp(hz || 100, 20, 400);
-        sendUi(`i.${input}.eq.hpf.freq`, frequency);
-        sendUi(`i.${input}.eq.hpf.slope`, 2);
+        
+        input.eq().setHpfFreq(frequency);
+        // Slope is often not directly exposed as a simple setter in all versions, 
+        // using raw as fallback if method not found, but trying high-level first.
+        if (input.eq().setHpfSlope) {
+            input.eq().setHpfSlope(2);
+        } else {
+            mixer.conn.sendMessage(`SETD^i.${channel-1}.eq.hpf.slope^2`);
+        }
+        
         return `HPF ${frequency}Hz aplicado no canal ${channel}.`;
     }
 
     function applyChannelGate(channel, enabled, threshold = -52) {
-        const input = getInputIndex(channel);
-        sendUi(`i.${input}.gate.enabled`, enabled ? 1 : 0);
-        sendUi(`i.${input}.gate.thresh`, clamp(threshold, -80, 0));
+        const input = getMixer().input(channel);
+        if (enabled) {
+            input.gate().enable();
+        } else {
+            input.gate().disable();
+        }
+        input.gate().setThreshold(clamp(threshold, -80, 0));
         return `Gate ${enabled ? 'ativado' : 'desativado'} no canal ${channel}.`;
     }
 
     function applyChannelCompressor(channel, ratio = 2.5, threshold = -18) {
-        const input = getInputIndex(channel);
-        sendUi(`i.${input}.dyn.enabled`, 1);
-        sendUi(`i.${input}.dyn.ratio`, clamp(ratio, 1, 20));
-        sendUi(`i.${input}.dyn.thresh`, clamp(threshold, -60, 0));
-        sendUi(`i.${input}.dyn.attack`, 25);
-        sendUi(`i.${input}.dyn.release`, 220);
+        const input = getMixer().input(channel);
+        input.compressor().enable();
+        input.compressor().setRatio(clamp(ratio, 1, 20));
+        input.compressor().setThreshold(clamp(threshold, -60, 0));
+        input.compressor().setAttack(25);
+        input.compressor().setRelease(220);
         return `Compressor leve aplicado no canal ${channel}.`;
     }
 
     function applyEqCut(target, channel, hz, gain = -3, q = 1.4, band = 2) {
+        const mixer = getMixer();
         const frequency = clamp(hz || 250, 20, 20000);
         const cutGain = clamp(gain, -12, 6);
         const qValue = clamp(q, 0.2, 10);
         const bandIndex = clamp(band, 1, 4);
-        const prefix = target === 'master' ? 'm.eq' : `i.${getInputIndex(channel || 1)}.eq`;
 
-        sendUi(`${prefix}.b${bandIndex}.freq`, frequency);
-        sendUi(`${prefix}.b${bandIndex}.gain`, cutGain);
-        sendUi(`${prefix}.b${bandIndex}.q`, qValue);
-        sendUi(`${prefix}.b${bandIndex}.type`, 0);
+        const eq = target === 'master' ? mixer.master.eq() : mixer.input(channel).eq();
+        
+        eq.band(bandIndex).setFreq(frequency);
+        eq.band(bandIndex).setGain(cutGain);
+        eq.band(bandIndex).setQ(qValue);
+        // EQ type 0 is usually Bell/Parametric
+        if (eq.band(bandIndex).setType) eq.band(bandIndex).setType(0);
 
         const label = target === 'master' ? 'Master' : `canal ${channel || 1}`;
         return `EQ aplicado no ${label}: ${frequency}Hz, ${cutGain}dB, Q ${qValue}.`;
     }
 
     function setAfs(enabled) {
-        sendUi('afs.enabled', enabled ? 1 : 0);
+        const mixer = getMixer();
+        // AFS is usually on the master or global hw
+        if (enabled) mixer.master.afs().enable();
+        else mixer.master.afs().disable();
         return `AFS2 ${enabled ? 'ativado' : 'desativado'} globalmente.`;
     }
 
     function setAuxLevel(channel, aux, level) {
-        const input = getInputIndex(channel);
-        const auxIdx = Number(aux) - 1;
-        if (auxIdx < 0 || auxIdx > 9) throw new Error('AUX invalido (1-10).');
+        const input = getMixer().input(channel);
         const faderVal = clamp(level, 0, 1);
-        sendUi(`i.${input}.aux.${auxIdx}.value`, faderVal);
+        input.aux(aux).setFaderLevel(faderVal);
         return `AUX ${aux} do canal ${channel} ajustado para ${Math.round(faderVal * 100)}%.`;
     }
 
     function setFxLevel(channel, fx, level) {
-        const input = getInputIndex(channel);
-        const fxIdx = Number(fx) - 1;
-        if (fxIdx < 0 || fxIdx > 3) throw new Error('FX invalido (1-4).');
+        const input = getMixer().input(channel);
         const faderVal = clamp(level, 0, 1);
-        sendUi(`i.${input}.fx.${fxIdx}.value`, faderVal);
+        input.fx(fx).setFaderLevel(faderVal);
         return `FX ${fx} do canal ${channel} ajustado para ${Math.round(faderVal * 100)}%.`;
     }
 
     function runCleanSoundPreset(channel, opts = {}) {
-        // Validação de canal (getInputIndex é chamado internamente por cada ação)
-        getInputIndex(channel);
         const steps = [
             applyChannelHpf(channel, opts.hpf || 100),
             applyChannelGate(channel, 1, opts.gateThreshold || -52),
@@ -103,111 +103,77 @@ function createMixerActions(getMixer) {
     }
 
     function applyOscillator(enabled, type = 1, level = -20) {
-        // type 1 = pink noise
-        sendUi('hw.osc.enabled', enabled ? 1 : 0);
-        sendUi('hw.osc.type', type);
-        sendUi('hw.osc.level', clamp(level, -100, 0));
+        const mixer = getMixer();
+        const osc = mixer.hw().oscillator();
+        if (enabled) osc.enable();
+        else osc.disable();
+        osc.setType(type === 0 ? 'sine' : (type === 1 ? 'pink' : 'white'));
+        osc.setFaderLevel(clamp(level, -100, 0));
         return `Gerador de ruído ${enabled ? 'ligado' : 'desligado'}.`;
     }
 
     function setDelay(target, id, ms) {
-        const delayValue = clamp(ms, 0, 500); // soundcraft ui24r delay max usually 500ms
-        let path = '';
+        const mixer = getMixer();
+        const delayValue = clamp(ms, 0, 500);
         if (target === 'master') {
-            path = 'm.delay';
+            mixer.master.setDelay(delayValue);
         } else if (target === 'aux') {
-            const auxIdx = Number(id) - 1;
-            path = `a.${auxIdx}.delay`;
-        } else {
-            throw new Error('Alvo de delay invalido (use master ou aux).');
+            mixer.aux(id).setDelay(delayValue);
         }
-        sendUi(path, delayValue);
         return `Delay de ${delayValue}ms aplicado no ${target} ${id || ''}.`;
     }
 
     function executeMixerCommand(cmd) {
         const mixer = getMixer();
-        if (!cmd || !cmd.action) {
-            throw new Error('Comando invalido.');
-        }
+        if (!cmd || !cmd.action) throw new Error('Comando invalido.');
 
-        if (cmd.action === 'volume_up' || cmd.action === 'volume_down') {
-            const delta = Number(cmd.val) || (cmd.action === 'volume_up' ? 1 : -1);
-            if (cmd.target === 'master') {
-                mixer.master.changeFaderLevelDB(delta);
-                return `Master ajustado em ${delta}dB.`;
+        switch (cmd.action) {
+            case 'volume_up':
+            case 'volume_down': {
+                const delta = Number(cmd.val) || (cmd.action === 'volume_up' ? 1 : -1);
+                const target = cmd.target === 'master' ? mixer.master : mixer.input(cmd.ch || cmd.channel || 1);
+                target.changeFaderLevelDB(delta);
+                return `${cmd.target} ajustado em ${delta}dB.`;
             }
-            if (cmd.target === 'channel') {
-                const channel = Number(cmd.ch || cmd.channel || 1);
-                mixer.master.input(channel).changeFaderLevelDB(delta);
-                return `Canal ${channel} ajustado em ${delta}dB.`;
+            case 'eq_cut': return applyEqCut(cmd.target, cmd.channel, cmd.hz, cmd.gain, cmd.q, cmd.band);
+            case 'apply_channel_hpf': return applyChannelHpf(cmd.channel || 1, cmd.hz || 100);
+            case 'apply_channel_gate': return applyChannelGate(cmd.channel || 1, cmd.enabled !== 0, cmd.threshold);
+            case 'apply_channel_compressor': return applyChannelCompressor(cmd.channel || 1, cmd.ratio, cmd.threshold);
+            case 'set_afs_enabled': return setAfs(cmd.enabled !== 0);
+            case 'mute_master':
+                if (cmd.enabled) mixer.master.mute(); else mixer.master.unmute();
+                return `Mute do master ${cmd.enabled ? 'ativado' : 'desativado'}.`;
+            case 'run_master_ideal_curve': {
+                const steps = [
+                    applyEqCut('master', null, 60, 3, 1.0, 1),
+                    applyEqCut('master', null, 400, -2, 1.2, 2),
+                    applyEqCut('master', null, 3000, 1, 1.0, 3)
+                ];
+                return `Curva ideal aplicada no Master: ${steps.join(' ')}`;
             }
+            case 'set_master_level': {
+                mixer.master.setFaderLevel(clamp(cmd.level || 0.7, 0, 1));
+                return `Master ajustado para ${Math.round((cmd.level || 0.7) * 100)}%`;
+            }
+            case 'set_channel_level': {
+                const ch = cmd.channel || cmd.ch || 1;
+                mixer.input(ch).setFaderLevel(clamp(cmd.level || 0.7, 0, 1));
+                return `Canal ${ch} ajustado para ${Math.round((cmd.level || 0.7) * 100)}%`;
+            }
+            case 'set_oscillator': return applyOscillator(cmd.enabled !== 0, cmd.type, cmd.level);
+            case 'set_aux_level': return setAuxLevel(cmd.channel || 1, cmd.aux || 1, cmd.level || 0);
+            case 'set_fx_level': return setFxLevel(cmd.channel || 1, cmd.fx || 1, cmd.level || 0);
+            case 'run_clean_sound_preset': return runCleanSoundPreset(cmd.channel || 1, cmd);
+            case 'set_delay': return setDelay(cmd.target || 'aux', cmd.aux || 1, cmd.ms || 0);
+            case 'log': return `INFO: ${cmd.desc}`;
+            default: throw new Error(`Acao nao suportada: ${cmd.action}`);
         }
-
-        if (cmd.action === 'eq_cut') {
-            return applyEqCut(cmd.target, cmd.channel, cmd.hz, cmd.gain, cmd.q, cmd.band);
-        }
-        if (cmd.action === 'apply_channel_hpf') {
-            return applyChannelHpf(cmd.channel || 1, cmd.hz || 100);
-        }
-        if (cmd.action === 'apply_channel_gate') {
-            return applyChannelGate(cmd.channel || 1, cmd.enabled !== 0, cmd.threshold);
-        }
-        if (cmd.action === 'apply_channel_compressor') {
-            return applyChannelCompressor(cmd.channel || 1, cmd.ratio, cmd.threshold);
-        }
-        if (cmd.action === 'set_afs_enabled') {
-            return setAfs(cmd.enabled !== 0);
-        }
-        if (cmd.action === 'mute_master') {
-            sendUi('m.mute', cmd.enabled ? 1 : 0);
-            return `Mute do master ${cmd.enabled ? 'ativado' : 'desativado'}.`;
-        }
-        if (cmd.action === 'run_master_ideal_curve') {
-            const steps = [
-                applyEqCut('master', null, 60, 3, 1.0, 1),
-                applyEqCut('master', null, 400, -2, 1.2, 2),
-                applyEqCut('master', null, 3000, 1, 1.0, 3)
-            ];
-            return `Curva ideal aplicada no Master: ${steps.join(' ')}`;
-        }
-        if (cmd.action === 'set_oscillator') {
-            return applyOscillator(cmd.enabled !== 0, cmd.type, cmd.level);
-        }
-
-        if (cmd.action === 'set_aux_level') {
-            return setAuxLevel(cmd.channel || 1, cmd.aux || 1, cmd.level || 0);
-        }
-        if (cmd.action === 'set_fx_level') {
-            return setFxLevel(cmd.channel || 1, cmd.fx || 1, cmd.level || 0);
-        }
-        if (cmd.action === 'run_clean_sound_preset') {
-            return runCleanSoundPreset(cmd.channel || 1, cmd);
-        }
-        if (cmd.action === 'set_delay') {
-            return setDelay(cmd.target || 'aux', cmd.aux || 9, cmd.ms || 0);
-        }
-
-        if (cmd.action === 'log') {
-            return `INFO: ${cmd.desc}`;
-        }
-        
-        throw new Error(`Acao nao suportada: ${cmd.action}`);
     }
 
     return {
-        applyChannelCompressor,
-        applyChannelGate,
-        applyChannelHpf,
-        applyEqCut,
-        applyOscillator,
-        ensureMixer,
-        executeMixerCommand,
-        setAfs,
-        setAuxLevel,
-        setFxLevel,
-        setDelay,
-        runCleanSoundPreset
+        applyChannelCompressor, applyChannelGate, applyChannelHpf, applyEqCut,
+        applyOscillator, ensureMixer, executeMixerCommand, setAfs,
+        setAuxLevel, setFxLevel, setDelay, runCleanSoundPreset
     };
 }
 

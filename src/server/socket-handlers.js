@@ -118,33 +118,72 @@ function registerSocketHandlers(io, appDataDir = './logs') {
                 
                 if (validatedIp === 'offline' || validatedIp === 'simulado' || validatedIp === '127.0.0.1') {
                     logger.info(socket.id, 'MIXER_MODE_SIMULATED');
+                    
+                    // Helper para criar mocks de canais
+                    const createChannelMock = (name, type, id) => ({
+                        setFaderLevel: (v) => { 
+                            socket.emit('mixer_log', `[Sim] ${name} Fader -> ${Math.round(v*100)}%`);
+                        },
+                        changeFaderLevelDB: (v) => { 
+                            socket.emit('mixer_log', `[Sim] ${name} Fader -> ${v}dB`);
+                        },
+                        mute: () => socket.emit('mixer_log', `[Sim] ${name} MUTADO`),
+                        unmute: () => socket.emit('mixer_log', `[Sim] ${name} ATIVADO`),
+                        eq: () => ({
+                            setHpfFreq: (f) => socket.emit('mixer_log', `[Sim] ${name} HPF -> ${f}Hz`),
+                            band: (b) => ({
+                                setFreq: (f) => socket.emit('mixer_log', `[Sim] ${name} EQ B${b} Freq -> ${f}Hz`),
+                                setGain: (g) => socket.emit('mixer_log', `[Sim] ${name} EQ B${b} Gain -> ${g}dB`),
+                                setQ: (q) => socket.emit('mixer_log', `[Sim] ${name} EQ B${b} Q -> ${q}`)
+                            })
+                        }),
+                        gate: () => ({
+                            enable: () => socket.emit('mixer_log', `[Sim] ${name} Gate ON`),
+                            disable: () => socket.emit('mixer_log', `[Sim] ${name} Gate OFF`),
+                            setThreshold: (t) => socket.emit('mixer_log', `[Sim] ${name} Gate Thr -> ${t}dB`)
+                        }),
+                        compressor: () => ({
+                            enable: () => socket.emit('mixer_log', `[Sim] ${name} Comp ON`),
+                            setRatio: (r) => socket.emit('mixer_log', `[Sim] ${name} Comp Ratio -> ${r}:1`),
+                            setThreshold: (t) => socket.emit('mixer_log', `[Sim] ${name} Comp Thr -> ${t}dB`),
+                            setAttack: () => {}, setRelease: () => {}
+                        }),
+                        aux: (auxId) => ({
+                            setFaderLevel: (v) => socket.emit('mixer_log', `[Sim] ${name} AUX ${auxId} -> ${Math.round(v*100)}%`)
+                        }),
+                        fx: (fxId) => ({
+                            setFaderLevel: (v) => socket.emit('mixer_log', `[Sim] ${name} FX ${fxId} -> ${Math.round(v*100)}%`)
+                        })
+                    });
+
                     mixer = {
                         isSimulated: true,
                         conn: { sendMessage: (msg) => {
                             logger.info(socket.id, 'MIXER_CMD_RAW', { msg });
-                            socket.emit('mixer_log', `CMD SIMULADO: ${msg}`);
+                            socket.emit('mixer_log', `RAW SIMULADO: ${msg}`);
                         }},
                         master: {
-                            setFaderLevel: (v) => { 
-                                mixerState.master.level = v; 
-                                socket.emit('master_level', v); 
-                            },
-                            changeFaderLevelDB: (v) => { 
-                                mixerState.master.levelDb += v; 
-                                socket.emit('master_level_db', mixerState.master.levelDb); 
-                                mixer.conn.sendMessage(`SETD^m.value^${v}dB (delta)`);
-                            },
-                            input: (ch) => ({
-                                changeFaderLevelDB: (v) => { 
-                                    const idx = ch - 1;
-                                    if (mixerState.inputs[idx]) mixerState.inputs[idx].levelDb += v;
-                                    mixer.conn.sendMessage(`SETD^i.${idx}.value^${v}dB (delta)`);
-                                    socket.emit('mixer_log', `Volume Ch${ch} alterado em ${v}dB (Simulado)`);
-                                }
+                            ...createChannelMock('Master', 'master', 0),
+                            afs: () => ({
+                                enable: () => socket.emit('mixer_log', '[Sim] AFS2 ON'),
+                                disable: () => socket.emit('mixer_log', '[Sim] AFS2 OFF')
                             }),
+                            setDelay: (ms) => socket.emit('mixer_log', `[Sim] Master Delay -> ${ms}ms`),
                             faderLevel$: { subscribe: () => {} },
                             faderLevelDB$: { subscribe: () => {} }
                         },
+                        input: (ch) => createChannelMock(`Canal ${ch}`, 'input', ch),
+                        aux: (id) => ({
+                            setDelay: (ms) => socket.emit('mixer_log', `[Sim] AUX ${id} Delay -> ${ms}ms`)
+                        }),
+                        hw: () => ({
+                            oscillator: () => ({
+                                enable: () => socket.emit('mixer_log', '[Sim] OSC ON'),
+                                disable: () => socket.emit('mixer_log', '[Sim] OSC OFF'),
+                                setType: (t) => socket.emit('mixer_log', `[Sim] OSC Type -> ${t}`),
+                                setFaderLevel: (v) => socket.emit('mixer_log', `[Sim] OSC Level -> ${v}dB`)
+                            })
+                        }),
                         disconnect: () => { mixer = null; }
                     };
                     socket.emit('mixer_status', { connected: true, isSimulated: true, msg: 'Modo Simulado Ativo' });
@@ -426,21 +465,13 @@ function registerSocketHandlers(io, appDataDir = './logs') {
                         if (doc.state.inputs && Array.isArray(doc.state.inputs)) {
                             doc.state.inputs.forEach((inputState, idx) => {
                                 const ch = idx + 1;
-                                const input = mixer.master.input(ch);
+                                const input = mixer.input(ch);
                                 if (!input) return;
 
-                                // Restauração robusta de parâmetros
-                                if (typeof input.setFaderLevel === 'function') {
-                                    input.setFaderLevel(inputState.level);
-                                } else if (typeof input.changeFaderLevelDB === 'function') {
-                                    // Fallback para dB se fader linear não existir
-                                    const currentDb = inputState.levelDb || -100;
-                                    input.changeFaderLevelDB(currentDb - (mixerState.inputs[idx]?.levelDb || -100));
-                                }
-                                
-                                // Restaura Mute se disponível
-                                if (typeof input.setMute === 'function') {
-                                    input.setMute(inputState.mute);
+                                // Restauração de Volume e Mute
+                                if (inputState.level !== undefined) input.setFaderLevel(inputState.level);
+                                if (inputState.mute !== undefined) {
+                                    if (inputState.mute) input.mute(); else input.unmute();
                                 }
                             });
                         }

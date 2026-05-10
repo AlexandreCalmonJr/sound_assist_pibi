@@ -9,9 +9,13 @@ const fs = require('fs');
 class FeedbackPredictor {
     constructor() {
         this.pythonUrl = 'http://127.0.0.1:3002/analyze-feedback';
+        this.apiKey = process.env.AI_API_KEY || '';
     }
 
     async init() {
+        if (!this.apiKey) {
+            console.warn('[AI Predictor] Aviso: AI_API_KEY não configurada. A comunicação com o servidor Python pode falhar em produção.');
+        }
         console.log('[AI Predictor] Operando em modo Remoto (Offloading para Python).');
     }
 
@@ -19,16 +23,24 @@ class FeedbackPredictor {
      * Envia dados para o Python analisar o risco
      */
     async predictRisk(freq, db, prevDb, gain) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000);
         try {
             const res = await fetch(this.pythonUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ freq, db, prevDb, gain })
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-API-Key': this.apiKey
+                },
+                body: JSON.stringify({ freq, db, prevDb, gain }),
+                signal: controller.signal
             });
+            clearTimeout(timeout);
             const data = await res.json();
             return data.risk || 0;
         } catch (e) {
-            // Em caso de erro, retorna risco zero para não travar
+            clearTimeout(timeout);
+            // Em caso de erro ou timeout, retorna risco zero para não travar
             return 0;
         }
     }
@@ -38,7 +50,10 @@ class FeedbackPredictor {
         try {
             await fetch('http://127.0.0.1:3002/train', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-API-Key': this.apiKey
+                },
                 body: JSON.stringify({ freq, db, prevDb, gain, isFeedback })
             });
         } catch (e) {
