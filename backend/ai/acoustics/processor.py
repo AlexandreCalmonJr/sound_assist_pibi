@@ -10,10 +10,31 @@ class AcousticProcessor:
 
     @staticmethod
     def classify_room(rt60):
-        if rt60 < 0.3: return "Sala morta (excesso de absorção)"
-        if 0.3 <= rt60 <= 0.8: return "Ideal para palavra/pregação"
-        if 0.8 < rt60 <= 1.5: return "Aceitável para louvor congregacional"
-        return "Problemático (baixa inteligibilidade, muito eco)"
+        if rt60 < 0.3: return {"status": "Sala morta", "desc": "Excesso de absorção. O som pode parecer sem vida.", "rating": 2}
+        if 0.3 <= rt60 <= 0.8: return {"status": "Ideal para Voz", "desc": "Inteligibilidade máxima para pregação.", "rating": 5}
+        if 0.8 < rt60 <= 1.5: return {"status": "Ideal para Música", "desc": "Boa sustentação para louvor congregacional.", "rating": 4}
+        return {"status": "Crítico", "desc": "Baixa inteligibilidade. Requer tratamento acústico ou eletrônico agressivo.", "rating": 1}
+
+    @staticmethod
+    def estimate_sti(rt60, snr=25):
+        """
+        Estimativa simplificada do Speech Transmission Index (IEC 60268-16)
+        Baseado na relação RT60 e Relação Sinal-Ruído (SNR)
+        """
+        # Simplificação: STI ≈ (1 / (1 + (RT60 / 0.5))) * (SNR / 30)
+        # Valores entre 0 (pessimo) e 1 (excelente)
+        sti = (1.0 / (1.0 + (rt60 / 0.6))) * (min(snr, 30) / 30.0)
+        return round(max(0, min(1, sti)), 2)
+
+    @staticmethod
+    def calculate_critical_distance(volume, rt60, q=2):
+        """
+        Calcula a Distância Crítica (Dc) - onde o som direto é igual ao reverberante.
+        q=2 para caixas direcionais (padrão)
+        """
+        if rt60 <= 0: return 0
+        dc = 0.057 * math.sqrt((q * volume) / rt60)
+        return round(dc, 2)
 
     @staticmethod
     def diagnose_patterns(analyses_history):
@@ -24,7 +45,6 @@ class AcousticProcessor:
         if not peak_frequencies:
              return []
 
-        # Agrupar por baldes de 50Hz
         from collections import Counter
         freq_counter = Counter([round(f / 50) * 50 for f in peak_frequencies])
         most_common = freq_counter.most_common(3)
@@ -35,6 +55,6 @@ class AcousticProcessor:
                 patterns.append({
                     'hz': freq_bucket,
                     'confidence': round(count / len(peak_frequencies), 2),
-                    'suggestion': f"Ressonância recorrente em {freq_bucket}Hz detectada."
+                    'suggestion': f"Ressonância em {freq_bucket}Hz. Sugerimos filtro Notch."
                 })
         return patterns
