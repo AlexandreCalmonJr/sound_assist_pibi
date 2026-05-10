@@ -138,6 +138,15 @@ async function runTestbed() {
         selectChannel: (type, num, id) => console.log(`   [Mixer] SYNC: Selecionando ${type} ${num || ''} no SyncID: ${id}`)
     };
 
+    mixer.fx = (id) => ({
+        setBpm: (v) => console.log(`   [Mixer] FX Engine ${id} BPM -> ${v}`),
+        setParam: (p, v) => console.log(`   [Mixer] FX Engine ${id} Param ${p} -> ${v}`),
+        input: (ch) => ({
+            setFaderLevel: (v) => console.log(`   [Mixer] Ch ${ch} -> FX ${id} Level: ${v}`),
+            setPost: (v) => console.log(`   [Mixer] Ch ${ch} -> FX ${id} Mode: ${v === 1 ? 'POST' : 'PRE'}`)
+        })
+    });
+
     mixer.player = {
         play: () => console.log('   [Mixer] Player -> PLAY'),
         pause: () => console.log('   [Mixer] Player -> PAUSE'),
@@ -151,6 +160,47 @@ async function runTestbed() {
         recordStop: () => console.log('   [Mixer] RECORDER -> Parado ⏹️'),
         recordToggle: () => console.log('   [Mixer] RECORDER -> Alternando Gravação')
     };
+
+    mixer.recorderMultiTrack = {
+        recordStart: () => console.log('   [Mixer] MTK -> Gravando Multitrack 🎙️'),
+        recordStop: () => console.log('   [Mixer] MTK -> Parado ⏹️'),
+        activateSoundcheck: () => console.log('   [Mixer] MTK -> VIRTUAL SOUNDCHECK ATIVADO 🎚️'),
+        deactivateSoundcheck: () => console.log('   [Mixer] MTK -> VIRTUAL SOUNDCHECK DESATIVADO')
+    };
+
+    mixer.shows = {
+        loadShow: (name) => console.log(`   [Mixer] SHOW -> Carregando Show: ${name}`),
+        loadSnapshot: (show, snap) => console.log(`   [Mixer] SHOW -> Carregando Snapshot: ${snap} (Show: ${show})`),
+        updateCurrentSnapshot: () => console.log('   [Mixer] SHOW -> Snapshot ATUALIZADO 💾')
+    };
+
+    mixer.muteGroup = (id) => ({
+        mute: () => console.log(`   [Mixer] Mute Group ${id} MUTADO 🔇`),
+        unmute: () => console.log(`   [Mixer] Mute Group ${id} ATIVADO 🔊`)
+    });
+    mixer.clearMuteGroups = () => console.log('   [Mixer] Todos os Mute Groups LIMPOS 🧹');
+
+    mixer.input = (ch) => ({
+        setFaderLevel: (v) => console.log(`   [Mixer] Canal ${ch} -> ${v}`),
+        toggleSolo: () => console.log(`   [Mixer] Canal ${ch} SOLO Alternado`),
+        setPan: (v) => console.log(`   [Mixer] Canal ${ch} Pan -> ${v}`),
+        setDelay: (ms) => console.log(`   [Mixer] Canal ${ch} Delay -> ${ms}ms`),
+        multiTrackSelect: () => console.log(`   [Mixer] Canal ${ch} -> Selecionado para MTK`),
+        multiTrackUnselect: () => console.log(`   [Mixer] Canal ${ch} -> Removido do MTK`),
+        aux: (auxId) => ({
+            setFaderLevel: (v) => console.log(`   [Mixer] Ch ${ch} -> AUX ${auxId} Level: ${v}`),
+            setPost: (v) => console.log(`   [Mixer] Ch ${ch} -> AUX ${auxId} Mode: ${v === 1 ? 'POST' : 'PRE'}`),
+            setPostProc: (v) => console.log(`   [Mixer] Ch ${ch} -> AUX ${auxId} Proc: ${v === 1 ? 'POST-PROC' : 'PRE-PROC'}`),
+            setPan: (v) => console.log(`   [Mixer] Ch ${ch} -> AUX ${auxId} Pan: ${v}`)
+        }),
+        fx: (fxId) => ({
+            setFaderLevel: (v) => console.log(`   [Mixer] Ch ${ch} -> FX ${fxId} Level: ${v}`),
+            setPost: (v) => console.log(`   [Mixer] Ch ${ch} -> FX ${fxId} Mode: ${v === 1 ? 'POST' : 'PRE'}`)
+        }),
+        eq: () => ({
+            setHpfFreq: (f) => console.log(`   [Mixer] Ch ${ch} HPF -> ${f}Hz`)
+        })
+    });
 
     const tests = [
         { action: 'toggle_dim' },
@@ -172,7 +222,15 @@ async function runTestbed() {
         { action: 'select_channel', type: 'master' },
         { action: 'player_cmd', action_type: 'play' },
         { action: 'player_cmd', action_type: 'load_playlist', val: 'Hinos_PIBI' },
-        { action: 'recorder_cmd', action_type: 'start' }
+        { action: 'recorder_cmd', action_type: 'start' },
+        { action: 'mtk_cmd', action_type: 'soundcheck_on' },
+        { action: 'mtk_select', channel: 12, enabled: 1 },
+        { action: 'set_fx_bpm', fx: 2, val: 125 },
+        { action: 'set_fx_param', fx: 1, param: 3, val: 0.8 },
+        { action: 'show_cmd', action_type: 'load_snapshot', show: 'PIBI_Geral', target: 'Culto_Domingo' },
+        { action: 'show_cmd', action_type: 'update_snapshot' },
+        { action: 'mute_group_cmd', id: 'all', enabled: 1 },
+        { action: 'clear_mute_groups' }
     ];
 
     tests.forEach(t => {

@@ -204,6 +204,15 @@ function registerSocketHandlers(io, appDataDir = './logs') {
                     mixerState.master.levelDb = levelDb;
                     socket.emit('master_level_db', levelDb);
                 });
+
+                // --- VU METER STREAMING ---
+                // Throttle de 50ms para não inundar o Wi-Fi
+                const throttleVu = createThrottle(50);
+                mixer.vuProcessor.vuData$.subscribe(vuData => {
+                    throttleVu(() => {
+                        socket.emit('vu_data', vuData);
+                    });
+                });
             } catch (error) {
                 console.error('Erro ao conectar na mesa:', error.message);
                 socket.emit('mixer_status', { connected: false, msg: `Erro de conexao: ${error.message}` });

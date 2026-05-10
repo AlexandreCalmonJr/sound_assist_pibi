@@ -106,6 +106,16 @@ function createMixerActions(getMixer) {
         return `FX ${fx} do canal ${channel} configurado como ${isPost ? 'POST' : 'PRE'}-Fader.`;
     }
 
+    function setFxBpm(fx, bpm) {
+        getMixer().fx(fx).setBpm(clamp(bpm, 20, 400));
+        return `BPM do processador de efeito ${fx} ajustado para ${bpm}.`;
+    }
+
+    function setFxParam(fx, param, value) {
+        getMixer().fx(fx).setParam(clamp(param, 1, 6), clamp(value, 0, 1));
+        return `Parâmetro ${param} do processador de efeito ${fx} ajustado para ${Math.round(value * 100)}%.`;
+    }
+
     function setHwGain(input, gain) {
         getMixer().hw(input).setGain(clamp(gain, 0, 1));
         return `Ganho de Hardware (Pré-amp) da entrada ${input} ajustado para ${Math.round(gain * 100)}%.`;
@@ -175,6 +185,52 @@ function createMixerActions(getMixer) {
             default: return `Ação do gravador desconhecida: ${action}`;
         }
         return `Gravador: comando ${action} executado.`;
+    }
+
+    function mtkControl(action) {
+        const mtk = getMixer().recorderMultiTrack;
+        switch (action) {
+            case 'start': mtk.recordStart(); break;
+            case 'stop': mtk.recordStop(); break;
+            case 'play': mtk.play(); break;
+            case 'pause': mtk.pause(); break;
+            case 'soundcheck_on': mtk.activateSoundcheck(); break;
+            case 'soundcheck_off': mtk.deactivateSoundcheck(); break;
+            default: return `Ação MTK desconhecida: ${action}`;
+        }
+        return `Multitrack: comando ${action} executado.`;
+    }
+
+    function mtkSelectChannel(channel, selected) {
+        const input = getMixer().input(channel);
+        if (selected) input.multiTrackSelect();
+        else input.multiTrackUnselect();
+        return `Canal ${channel} ${selected ? 'ADICIONADO ao' : 'REMOVIDO do'} Multitrack.`;
+    }
+
+    function showControl(action, showName, targetName = null) {
+        const s = getMixer().shows;
+        switch (action) {
+            case 'load_show': s.loadShow(showName); break;
+            case 'load_snapshot': s.loadSnapshot(showName, targetName); break;
+            case 'load_cue': s.loadCue(showName, targetName); break;
+            case 'save_snapshot': s.saveSnapshot(showName, targetName); break;
+            case 'update_snapshot': s.updateCurrentSnapshot(); break;
+            default: return `Ação de Show desconhecida: ${action}`;
+        }
+        return `Show/Snapshot: comando ${action} executado (${showName}${targetName ? ' > ' + targetName : ''}).`;
+    }
+
+    function muteGroupControl(groupId, mute) {
+        const mg = getMixer().muteGroup(groupId);
+        if (mute) mg.mute();
+        else mg.unmute();
+        return `Mute Group ${groupId} ${mute ? 'MUTADO' : 'ATIVADO'}.`;
+    }
+
+    function clearMuteGroups() {
+        getMixer().clearMuteGroups();
+        return 'Todos os Mute Groups foram limpos.';
     }
 
     function runCleanSoundPreset(channel, opts = {}) {
@@ -284,12 +340,19 @@ function createMixerActions(getMixer) {
             }
             case 'set_fx_level': return setFxLevel(cmd.channel || 1, cmd.fx || 1, cmd.level || 0);
             case 'set_fx_post': return setFxPost(cmd.channel || 1, cmd.fx || 1, cmd.enabled !== 0);
+            case 'set_fx_bpm': return setFxBpm(cmd.fx || 1, cmd.val || 120);
+            case 'set_fx_param': return setFxParam(cmd.fx || 1, cmd.param || 1, cmd.val || 0.5);
             case 'set_hw_gain': return setHwGain(cmd.input || cmd.channel || 1, cmd.val || 0.5);
             case 'set_phantom': return setPhantom(cmd.input || cmd.channel || 1, cmd.enabled !== 0);
             case 'set_monitor_volume': return setMonitorVolume(cmd.target || 'hp1', cmd.val || 0.5);
             case 'select_channel': return selectChannelSync(cmd.type || 'input', cmd.channel || cmd.ch || 1, cmd.syncId || 'SYNC_ID');
             case 'player_cmd': return playerControl(cmd.action_type, cmd.val);
             case 'recorder_cmd': return recorderControl(cmd.action_type);
+            case 'mtk_cmd': return mtkControl(cmd.action_type);
+            case 'mtk_select': return mtkSelectChannel(cmd.channel || cmd.ch || 1, cmd.enabled !== 0);
+            case 'show_cmd': return showControl(cmd.action_type, cmd.show, cmd.target);
+            case 'mute_group_cmd': return muteGroupControl(cmd.id || 'all', cmd.enabled !== 0);
+            case 'clear_mute_groups': return clearMuteGroups();
             case 'run_clean_sound_preset': return runCleanSoundPreset(cmd.channel || 1, cmd);
             case 'set_delay': {
                 const id = cmd.channel || cmd.ch || cmd.aux || cmd.id || 1;
