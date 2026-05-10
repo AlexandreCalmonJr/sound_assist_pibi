@@ -70,35 +70,46 @@ const schemas = {
 
 function registerSocketHandlers(io, appDataDir = './logs') {
     const logger = new Logger(appDataDir);
-    let mixer = null;
-    let historyStack = [];
-    let redoStack = [];
     let activeConnections = 0;
-    
-    // Cache de estado para simulação e presets
-    let mixerState = {
-        master: { level: 0, levelDb: -100, mute: 0 },
-        inputs: Array(24).fill(0).map(() => ({
-            level: 0, levelDb: -100, mute: 0, hpf: 100, gate: 0, comp: 0
-        }))
-    };
 
-    const actions = createMixerActions(() => mixer);
-
-    function addToHistory(cmd) {
-        historyStack.push(cmd);
-        if (historyStack.length > 50) historyStack.shift();
-        redoStack = [];
+    // Função auxiliar para throttle
+    function createThrottle(ms) {
+        let lastTime = 0;
+        return (fn) => {
+            return function(...args) {
+                const now = Date.now();
+                if (now - lastTime >= ms) {
+                    fn.apply(this, args);
+                    lastTime = now;
+                }
+            };
+        };
     }
-
+    
     io.on('connection', (socket) => {
         activeConnections++;
-        logger.info(socket.id, 'CLIENT_CONNECTED', { activeConnections });
+        let mixer = null;
+        let historyStack = [];
+        let redoStack = [];
 
-        if (activeConnections > 1) {
-            logger.warn(socket.id, 'MULTIPLE_CLIENTS_WARNING', { activeConnections });
-            socket.emit('mixer_status', { connected: !!mixer, msg: '⚠️ Outro cliente já está conectado. Ações serão compartilhadas.' });
+        function addToHistory(cmd) {
+            historyStack.push(cmd);
+            if (historyStack.length > 50) historyStack.shift();
+            redoStack = [];
         }
+        
+        // Cache de estado para simulação e presets
+        let mixerState = {
+            master: { level: 0, levelDb: -100, mute: 0 },
+            inputs: Array(24).fill(0).map(() => ({
+                level: 0, levelDb: -100, mute: 0, hpf: 100, gate: 0, comp: 0
+            }))
+        };
+
+        const actions = createMixerActions(() => mixer);
+        const throttleMasterLevel = createThrottle(50); // máx 20x por segundo
+
+        logger.info(socket.id, 'CLIENT_CONNECTED', { activeConnections });
 
         socket.on('connect_mixer', async (ip) => {
             try {
@@ -169,7 +180,6 @@ function registerSocketHandlers(io, appDataDir = './logs') {
             }
         });
 
-        let masterDebounceTimeout = null;
         socket.on('set_master_level', (data) => {
             if (!mixer) {
                 socket.emit('mixer_status', { connected: false, msg: 'Conecte-se a mesa primeiro!' });
@@ -179,15 +189,11 @@ function registerSocketHandlers(io, appDataDir = './logs') {
             try {
                 const validated = schemas.masterLevel.parse(data);
                 
-                // Debounce para não sobrecarregar a mesa em movimentos rápidos
-                if (masterDebounceTimeout) clearTimeout(masterDebounceTimeout);
-                
-                masterDebounceTimeout = setTimeout(() => {
+                throttleMasterLevel(() => {
                     try {
                         mixer.master.setFaderLevel(validated.level);
                         logger.info(socket.id, 'SET_MASTER_LEVEL', { level: validated.level });
                         
-                        // Se for simulado, logamos o comando bruto manualmente aqui para manter consistência
                         if (mixer.isSimulated) {
                             mixer.conn.sendMessage(`SETD^m.value^${validated.level}`);
                         }
@@ -195,9 +201,8 @@ function registerSocketHandlers(io, appDataDir = './logs') {
                         socket.emit('mixer_status', { connected: true, msg: `Master ajustado para ${Math.round(validated.level * 100)}%` });
                     } catch (error) {
                         logger.error(socket.id, 'SET_MASTER_LEVEL_ASYNC_ERROR', { error: error.message });
-                        socket.emit('mixer_status', { connected: true, msg: `Falha ao ajustar Master: ${error.message}` });
                     }
-                }, 50);
+                });
             } catch (error) {
                 logger.error(socket.id, 'SET_MASTER_LEVEL_VALIDATION_ERROR', { error: error.message });
                 socket.emit('mixer_status', { connected: true, msg: `Dados inválidos: ${error.message}` });
@@ -477,6 +482,14 @@ function registerSocketHandlers(io, appDataDir = './logs') {
 
         socket.on('disconnect', () => {
             activeConnections--;
+            if (mixer) {
+                try {
+                    mixer.disconnect();
+                } catch (e) {
+                    console.error('Erro ao desconectar mixer no disconnect:', e);
+                }
+                mixer = null;
+            }
             console.log(`[Socket] Frontend desconectado (${activeConnections} cliente(s) restante(s))`);
         });
     });

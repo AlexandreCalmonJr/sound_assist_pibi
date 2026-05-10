@@ -67,7 +67,18 @@ class Router {
             if (!response.ok) throw new Error(`Erro ao carregar: ${pageId}`);
 
             const html = await response.text();
-            container.innerHTML = html;
+            
+            // ✅ Sanitização básica via DOMParser
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            // Verificar se o parse retornou algo válido e seguro
+            if (doc.body.children.length === 0 && html.trim().length > 0) {
+                 container.textContent = 'Erro ao processar conteúdo da página.';
+            } else {
+                container.replaceChildren(...Array.from(doc.body.children).map(child => child.cloneNode(true)));
+            }
+            
             this.currentPage = pageId;
 
             // Enter animation

@@ -1,9 +1,6 @@
-const path = require('path');
-const express = require('express');
-const http = require('http');
-const cors = require('cors');
-const { Server } = require('socket.io');
 const localtunnel = require('localtunnel');
+const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
 
 const db = require('./database');
 const { registerMappingsRoutes } = require('./mappings-routes');
@@ -13,7 +10,29 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     const expressApp = express();
     const server = http.createServer(expressApp);
 
-    expressApp.use(cors());
+    const ALLOWED_ORIGINS = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        process.env.FRONTEND_URL || "http://localhost:3000"
+    ];
+
+    expressApp.use(cors({
+        origin: ALLOWED_ORIGINS,
+        credentials: true
+    }));
+
+    // Rate Limiting para a API
+    const apiLimiter = rateLimit({
+        windowMs: 15 * 60 * 1000, // 15 minutos
+        max: 100, // limite de 100 requisições por IP
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: { error: 'Muitas requisições vindo deste IP, tente novamente após 15 minutos' }
+    });
+    expressApp.use('/api/', apiLimiter);
+
     expressApp.use(express.static(path.join(rootDir, 'frontend')));
     expressApp.use(express.json());
 
@@ -22,9 +41,10 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     registerMappingsRoutes(expressApp, db.mappings);
 
     let tunnelUrl = null;
+    let tunnelToken = crypto.randomBytes(32).toString('hex');
 
     expressApp.get('/api/config', (req, res) => {
-        res.json({ localIp, port, tunnelUrl });
+        res.json({ localIp, port, tunnelUrl, tunnelToken });
     });
 
     expressApp.post('/api/tunnel/toggle', async (req, res) => {
@@ -58,7 +78,9 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
             tunnelUrl = tunnel.url;
             console.log('====================================');
             console.log(`Túnel Seguro Ativo (HTTPS) [Tentativa ${retryCount + 1}]:`);
-            console.log(tunnelUrl);
+            console.log(`URL: ${tunnelUrl}`);
+            console.log(`Token de Acesso: ${tunnelToken}`);
+            console.log(`Acesse via: ${tunnelUrl}?token=${tunnelToken}`);
             console.log('====================================');
 
             tunnel.on('close', () => {
@@ -110,7 +132,10 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
         try {
             const aiRes = await fetch('http://127.0.0.1:3002/chat', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-API-Key': process.env.AI_API_KEY || ''
+                },
                 body: JSON.stringify(req.body),
                 signal: controller.signal
             });
@@ -141,7 +166,10 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
         try {
             const aiRes = await fetch('http://127.0.0.1:3002/analyze-feedback', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-API-Key': process.env.AI_API_KEY || ''
+                },
                 body: JSON.stringify(req.body)
             });
             const data = await aiRes.json();
@@ -155,7 +183,10 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
         try {
             const aiRes = await fetch('http://127.0.0.1:3002/train', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-API-Key': process.env.AI_API_KEY || ''
+                },
                 body: JSON.stringify(req.body)
             });
             const data = await aiRes.json();
@@ -171,7 +202,10 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
         try {
             const aiRes = await fetch('http://127.0.0.1:3002/acoustic_analysis', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-API-Key': process.env.AI_API_KEY || ''
+                },
                 body: JSON.stringify(req.body),
                 signal: controller.signal
             });
@@ -214,10 +248,28 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
 
     const io = new Server(server, {
         cors: {
-            origin: '*',
-            methods: ['GET', 'POST']
-        }
+            origin: ALLOWED_ORIGINS,
+            methods: ['GET', 'POST'],
+            credentials: true
+        },
+        maxHttpBufferSize: 1e6, // 1MB limit
+        pingTimeout: 60000,
+        pingInterval: 25000
     });
+
+    // Middleware de Autenticação para Socket.IO (Tunnel)
+    io.use((socket, next) => {
+        const token = socket.handshake.auth.token || socket.handshake.query.token;
+        const address = socket.handshake.address;
+        const isLocal = address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+
+        if (!isLocal && token !== tunnelToken) {
+            console.warn(`[Socket.IO] Acesso negado para ${address} (Token inválido ou ausente)`);
+            return next(new Error('Authentication error: Invalid tunnel token'));
+        }
+        next();
+    });
+
     registerSocketHandlers(io, dbDir);
 
     return { server, io };

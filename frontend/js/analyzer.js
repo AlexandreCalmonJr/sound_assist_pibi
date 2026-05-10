@@ -240,6 +240,11 @@ document.addEventListener('page-loaded', (e) => {
     }
 });
 
+// Cleanup global ao sair da página ou fechar aba
+window.addEventListener('beforeunload', () => {
+    if (isAnalyzing) stopAnalyzer();
+});
+
 async function startAnalyzer() {
     try {
         const deviceId = micSelect?.value || 'default';
@@ -303,15 +308,47 @@ async function startAnalyzer() {
     }
 }
 
-function stopAnalyzer() {
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-    }
-    if (audioCtx) {
-        audioCtx.close();
-    }
+async function stopAnalyzer() {
+    console.log('[Analyzer] Parando analisador e limpando recursos...');
+    
     isAnalyzing = false;
-    cancelAnimationFrame(animationId);
+    if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
+
+    if (stream) {
+        stream.getTracks().forEach(track => {
+            console.log(`[Analyzer] Parando track: ${track.kind}`);
+            track.stop();
+        });
+        stream = null;
+    }
+
+    if (audioCtx) {
+        if (audioCtx.state !== 'closed') {
+            try {
+                await audioCtx.close();
+                console.log('[Analyzer] AudioContext fechado.');
+            } catch (e) {
+                console.warn('[Analyzer] Erro ao fechar AudioContext:', e);
+            }
+        }
+        audioCtx = null;
+    }
+
+    // Limpeza de nós específicos
+    analyser = null;
+    source = null;
+    audioWorkletNode = null;
+    if (pinkNoiseNode) {
+        pinkNoiseNode.disconnect();
+        pinkNoiseNode = null;
+    }
+    if (sineWaveNode) {
+        sineWaveNode.disconnect();
+        sineWaveNode = null;
+    }
     
     if (canvasCtx && canvas) canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
     if (rmsBar) rmsBar.style.width = '0%';
@@ -319,12 +356,8 @@ function stopAnalyzer() {
     // Update UI - Header
     const dot = document.getElementById('mic-status-dot');
     const text = document.getElementById('mic-status-text');
-    if (dot) {
-        dot.classList.remove('online');
-    }
-    if (text) {
-        text.innerText = 'Mic Offline';
-    }
+    if (dot) dot.classList.remove('online');
+    if (text) text.innerText = 'Mic Offline';
     
     // Update UI - Page Buttons
     const btnStart = document.getElementById('btn-start-audio');
