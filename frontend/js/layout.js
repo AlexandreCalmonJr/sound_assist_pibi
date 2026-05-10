@@ -46,14 +46,6 @@
                 { id: 'debug',    label: 'Console de Depuração' },
             ]
         },
-        training: {
-            title: 'Centro de Treino',
-            items: [
-                { id: 'tutorials-library',  label: 'Biblioteca Técnica' },
-                { id: 'tutorials-workflow', label: 'Workflow Pro' },
-                { id: 'tutorials-tools',    label: 'Ferramentas IA' },
-            ]
-        }
     };
 
     let activeCategory = null;
