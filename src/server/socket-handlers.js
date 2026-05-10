@@ -225,6 +225,16 @@ function registerSocketHandlers(io) {
             }
         });
 
+        socket.on('set_delay', (data) => {
+            if (!actions.ensureMixer(socket)) return;
+            try {
+                const msg = actions.setDelay(data.target, data.id, data.ms);
+                socket.emit('feedback_cut_success', { msg });
+            } catch (error) {
+                socket.emit('mixer_status', { connected: true, msg: error.message });
+            }
+        });
+
         socket.on('run_clean_sound_preset', (data) => {
             if (!actions.ensureMixer(socket)) return;
             try {
@@ -319,9 +329,22 @@ function registerSocketHandlers(io) {
                         if (doc.state.inputs && Array.isArray(doc.state.inputs)) {
                             doc.state.inputs.forEach((inputState, idx) => {
                                 const ch = idx + 1;
-                                // Para simplificar, restauramos apenas os volumes por enquanto via logica de dB
-                                // Em uso real, aplicaríamos HPF, Gate, etc.
-                                mixer.master.input(ch).setFaderLevel && mixer.master.input(ch).setFaderLevel(inputState.level);
+                                const input = mixer.master.input(ch);
+                                if (!input) return;
+
+                                // Restauração robusta de parâmetros
+                                if (typeof input.setFaderLevel === 'function') {
+                                    input.setFaderLevel(inputState.level);
+                                } else if (typeof input.changeFaderLevelDB === 'function') {
+                                    // Fallback para dB se fader linear não existir
+                                    const currentDb = inputState.levelDb || -100;
+                                    input.changeFaderLevelDB(currentDb - (mixerState.inputs[idx]?.levelDb || -100));
+                                }
+                                
+                                // Restaura Mute se disponível
+                                if (typeof input.setMute === 'function') {
+                                    input.setMute(inputState.mute);
+                                }
                             });
                         }
                         

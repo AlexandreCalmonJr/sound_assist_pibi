@@ -183,24 +183,41 @@
         const btnRefresh = document.getElementById('btn-refresh-history');
         if (!btnRefresh) return;
 
+        // Registrar listener para dados reais (apenas uma vez)
+        if (window.SocketService && !window._benchmarkingListenerSet) {
+            window.SocketService.on('acoustic_history_data', (data) => {
+                const emptyEl = document.getElementById('bench-empty-rt60');
+                const fullEl = document.getElementById('bench-full-rt60');
+                
+                if (emptyEl) {
+                    const val = data.benchmark?.empty?.rt60 || 0;
+                    emptyEl.innerText = val > 0 ? `${val.toFixed(2)}s` : 'Sem dados';
+                }
+                if (fullEl) {
+                    const val = data.benchmark?.full?.rt60 || 0;
+                    fullEl.innerText = val > 0 ? `${val.toFixed(2)}s` : 'Sem dados';
+                }
+                AppStore.addLog('Benchmarking atualizado via histórico acústico real.');
+            });
+            window._benchmarkingListenerSet = true;
+        }
+
         btnRefresh.onclick = () => {
-            const emptyEl = document.getElementById('bench-empty-rt60');
-            const fullEl = document.getElementById('bench-full-rt60');
-            
-            // Simulação de busca no histórico (Vazio vs Cheio)
-            // Em uma versão futura, isso buscará no historyService
-            if (emptyEl) {
-                emptyEl.innerText = '1.82s';
-                emptyEl.classList.add('animate-pulse');
-                setTimeout(() => emptyEl.classList.remove('animate-pulse'), 1000);
+            if (window.SocketService) {
+                window.SocketService.emit('get_acoustic_history');
+                
+                const emptyEl = document.getElementById('bench-empty-rt60');
+                const fullEl = document.getElementById('bench-full-rt60');
+                if (emptyEl) emptyEl.classList.add('animate-pulse');
+                if (fullEl) fullEl.classList.add('animate-pulse');
+                
+                setTimeout(() => {
+                    if (emptyEl) emptyEl.classList.remove('animate-pulse');
+                    if (fullEl) fullEl.classList.remove('animate-pulse');
+                }, 1000);
+            } else {
+                alert('SocketService não disponível.');
             }
-            if (fullEl) {
-                fullEl.innerText = '1.45s';
-                fullEl.classList.add('animate-pulse');
-                setTimeout(() => fullEl.classList.remove('animate-pulse'), 1000);
-            }
-            
-            AppStore.addLog('Benchmarking atualizado via histórico acústico.');
         };
     }
 

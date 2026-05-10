@@ -110,6 +110,21 @@ function createMixerActions(getMixer) {
         return `Gerador de ruído ${enabled ? 'ligado' : 'desligado'}.`;
     }
 
+    function setDelay(target, id, ms) {
+        const delayValue = clamp(ms, 0, 500); // soundcraft ui24r delay max usually 500ms
+        let path = '';
+        if (target === 'master') {
+            path = 'm.delay';
+        } else if (target === 'aux') {
+            const auxIdx = Number(id) - 1;
+            path = `a.${auxIdx}.delay`;
+        } else {
+            throw new Error('Alvo de delay invalido (use master ou aux).');
+        }
+        sendUi(path, delayValue);
+        return `Delay de ${delayValue}ms aplicado no ${target} ${id || ''}.`;
+    }
+
     function executeMixerCommand(cmd) {
         const mixer = getMixer();
         if (!cmd || !cmd.action) {
@@ -169,6 +184,9 @@ function createMixerActions(getMixer) {
         if (cmd.action === 'run_clean_sound_preset') {
             return runCleanSoundPreset(cmd.channel || 1, cmd);
         }
+        if (cmd.action === 'set_delay') {
+            return setDelay(cmd.target || 'aux', cmd.aux || 9, cmd.ms || 0);
+        }
 
         if (cmd.action === 'log') {
             return `INFO: ${cmd.desc}`;
@@ -188,6 +206,7 @@ function createMixerActions(getMixer) {
         setAfs,
         setAuxLevel,
         setFxLevel,
+        setDelay,
         runCleanSoundPreset
     };
 }

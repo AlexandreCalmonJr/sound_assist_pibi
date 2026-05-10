@@ -3,7 +3,7 @@ const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
-// const localtunnel = require('localtunnel');
+const localtunnel = require('localtunnel');
 
 const db = require('./database');
 const { registerMappingsRoutes } = require('./mappings-routes');
@@ -16,6 +16,10 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     expressApp.use(cors());
     expressApp.use(express.static(path.join(rootDir, 'frontend')));
     expressApp.use(express.json());
+
+    // Inicializa banco centralizado IMEDIATAMENTE (presets + mappings no mesmo diretório)
+    db.initDatabase(dbDir);
+    registerMappingsRoutes(expressApp, db.mappings);
 
     let tunnelUrl = null;
 
@@ -38,10 +42,13 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     const MAX_TUNNEL_RETRIES = 10;
 
     async function startTunnel(retryCount = 0) {
-        console.log('[Tunnel] O túnel está desativado para garantir a performance local.');
-        /*
+        if (retryCount >= MAX_TUNNEL_RETRIES) {
+            console.error('[Tunnel] Limite de tentativas atingido.');
+            return;
+        }
+
         try {
-            const sub = retryCount < 3 ? 'soundmaster-pibi' : `soundmaster-pro-${Math.random().toString(36).substring(2, 6)}`;
+            const sub = 'soundmaster-pibi';
             
             const tunnel = await localtunnel({ 
                 port: port,
@@ -72,13 +79,29 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
             const delay = Math.min(5000 * Math.pow(2, retryCount), 60000);
             setTimeout(() => startTunnel(retryCount + 1), delay);
         }
-        */
     }
-    // startTunnel(); // Comentado para não pesar o app no início
+    startTunnel(); 
 
-    // Inicializa banco centralizado (presets + mappings no mesmo diretório)
-    db.initDatabase(dbDir);
-    registerMappingsRoutes(expressApp, db.mappings);
+    // Rotas de Calibração (NeDB)
+    expressApp.get('/api/calibration', (req, res) => {
+        db.settings.findOne({ type: 'calibration' }, (err, doc) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(doc || { calibrationData: [], splOffset: 0 });
+        });
+    });
+
+    expressApp.post('/api/calibration', (req, res) => {
+        const { calibrationData, splOffset } = req.body;
+        db.settings.update(
+            { type: 'calibration' },
+            { $set: { calibrationData, splOffset, timestamp: Date.now() } },
+            { upsert: true },
+            (err) => {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ success: true });
+            }
+        );
+    });
 
     // Proxy para IA (permite acesso mobile)
     expressApp.post('/api/ai', async (req, res) => {
@@ -107,6 +130,34 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     expressApp.get('/api/ai/health', async (req, res) => {
         try {
             const aiRes = await fetch('http://127.0.0.1:3002/');
+            const data = await aiRes.json();
+            res.json(data);
+        } catch (error) {
+            res.status(500).json({ error: 'IA offline' });
+        }
+    });
+
+    expressApp.post('/api/ai/analyze-feedback', async (req, res) => {
+        try {
+            const aiRes = await fetch('http://127.0.0.1:3002/analyze-feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(req.body)
+            });
+            const data = await aiRes.json();
+            res.json(data);
+        } catch (error) {
+            res.status(500).json({ error: 'IA offline' });
+        }
+    });
+
+    expressApp.post('/api/ai/train', async (req, res) => {
+        try {
+            const aiRes = await fetch('http://127.0.0.1:3002/train', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(req.body)
+            });
             const data = await aiRes.json();
             res.json(data);
         } catch (error) {

@@ -40,6 +40,19 @@ class AcousticRequest(BaseModel):
     surface_area: float = 600
     alpha: float = 0.1
 
+class FeedbackRequest(BaseModel):
+    freq: float
+    db: float
+    prevDb: float
+    gain: float = 0
+
+class TrainRequest(BaseModel):
+    freq: float
+    db: float
+    prevDb: float
+    gain: float
+    isFeedback: bool
+
 @app.get("/")
 async def root():
     return {"status": "online", "engine": "SoundMaster Pro AI", "active_sessions": len(sessions)}
@@ -66,6 +79,28 @@ async def acoustic_analysis_endpoint(request: AcousticRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/analyze-feedback")
+async def analyze_feedback_endpoint(request: FeedbackRequest):
+    try:
+        # Lógica simples de risco baseada em delta de dB
+        risk = 0.0
+        delta = request.db - request.prevDb
+        if delta > 3: risk = 0.5
+        if delta > 6: risk = 0.8
+        if request.db > -10: risk += 0.2
+        return {"risk": min(1.0, risk)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/train")
+async def train_endpoint(request: TrainRequest):
+    try:
+        # Simulação de treinamento (apenas log por enquanto)
+        print(f"[AI Train] Evento recebido: {request}")
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/diagnose")
 async def diagnose_endpoint(session_id: str = "default"):

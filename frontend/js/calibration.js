@@ -15,7 +15,13 @@
             status.className = 'text-green-400 font-bold';
         }
         
-        localStorage.setItem('mic_calibration', JSON.stringify(calibrationData));
+        // Persistência via API (NeDB) em vez de localStorage
+        fetch('/api/calibration', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ calibrationData, splOffset })
+        }).catch(err => console.error('[Calibration] Erro ao salvar:', err));
+        
         alert('Arquivo de calibração carregado com sucesso!');
     }
 
@@ -93,7 +99,13 @@
         splOffset = 94 - currentRawDb;
         const disp = document.getElementById('spl-offset-display');
         if(disp) disp.innerText = `${splOffset.toFixed(1)} dB`;
-        localStorage.setItem('spl_offset', splOffset.toString());
+        
+        fetch('/api/calibration', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ calibrationData, splOffset })
+        }).catch(err => console.error('[Calibration] Erro ao salvar SPL:', err));
+        
         alert(`Offset global ajustado para ${splOffset.toFixed(1)} dB`);
     }
 
@@ -102,8 +114,12 @@
         splOffset = 0;
         offsetCache = null;
         lastBinCount = 0;
-        localStorage.removeItem('mic_calibration');
-        localStorage.removeItem('spl_offset');
+        
+        fetch('/api/calibration', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ calibrationData: [], splOffset: 0 })
+        }).catch(err => console.error('[Calibration] Erro ao limpar:', err));
         
         const status = document.getElementById('cal-status');
         if(status) {
@@ -134,21 +150,25 @@
             const btnClear = document.getElementById('btn-clear-calibration');
             if(btnClear) btnClear.addEventListener('click', clearCalibration);
             
-            const saved = localStorage.getItem('mic_calibration');
-            if(saved) {
-                calibrationData = JSON.parse(saved);
-                const status = document.getElementById('cal-status');
-                if(status) {
-                    status.innerText = 'Microfone Calibrado (Recuperado) ✅';
-                    status.className = 'text-green-400 font-bold';
-                }
-            }
-            const savedSpl = localStorage.getItem('spl_offset');
-            if(savedSpl) {
-                splOffset = parseFloat(savedSpl);
-                const disp = document.getElementById('spl-offset-display');
-                if(disp) disp.innerText = `${splOffset.toFixed(1)} dB`;
-            }
+            // Recupera do servidor
+            fetch('/api/calibration')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.calibrationData && data.calibrationData.length > 0) {
+                        calibrationData = data.calibrationData;
+                        const status = document.getElementById('cal-status');
+                        if(status) {
+                            status.innerText = 'Microfone Calibrado (Recuperado do DB) ✅';
+                            status.className = 'text-green-400 font-bold';
+                        }
+                    }
+                    if (data.splOffset) {
+                        splOffset = data.splOffset;
+                        const disp = document.getElementById('spl-offset-display');
+                        if(disp) disp.innerText = `${splOffset.toFixed(1)} dB`;
+                    }
+                })
+                .catch(err => console.warn('[Calibration] Falha ao recuperar do servidor:', err));
             
             // Listener para o botão de Calibrar SPL
             const btnSpl = document.getElementById('btn-calibrate-spl');

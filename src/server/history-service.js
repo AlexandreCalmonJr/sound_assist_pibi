@@ -47,16 +47,27 @@ class HistoryService {
                     full: { rt60: 0, count: 0 }
                 };
 
+                if (!docs || docs.length === 0) {
+                    return resolve(stats);
+                }
+
                 docs.forEach(doc => {
-                    const status = doc.crowdStatus || 'empty';
-                    if (doc.rt60) {
-                        stats[status].rt60 += parseFloat(doc.rt60);
-                        stats[status].count++;
+                    // Normalização do status (vazio/empty vs cheio/full)
+                    let status = (doc.crowdStatus || 'empty').toLowerCase();
+                    if (status === 'vazio') status = 'empty';
+                    if (status === 'cheio') status = 'full';
+                    
+                    if (stats[status] && doc.rt60) {
+                        const val = parseFloat(doc.rt60);
+                        if (!isNaN(val)) {
+                            stats[status].rt60 += val;
+                            stats[status].count++;
+                        }
                     }
                 });
 
-                if (stats.empty.count > 0) stats.empty.rt60 /= stats.empty.count;
-                if (stats.full.count > 0) stats.full.rt60 /= stats.full.count;
+                if (stats.empty.count > 0) stats.empty.rt60 = Number((stats.empty.rt60 / stats.empty.count).toFixed(2));
+                if (stats.full.count > 0) stats.full.rt60 = Number((stats.full.rt60 / stats.full.count).toFixed(2));
 
                 resolve(stats);
             });

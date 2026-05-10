@@ -60,6 +60,7 @@ class AIEngine:
             self.session.add_analysis(analysis)
 
         # 1. Dados Técnicos (FFT) - Atua no que está vindo do PA (Todos os canais somados)
+        fft_response = None
         if 'peakHz' in analysis and analysis.get('peakHz', 0) > 0:
             peak = int(analysis.get('peakHz'))
             is_pink = analysis.get('isPinkNoise', False)
@@ -71,50 +72,48 @@ class AIEngine:
                     room_suggestion = profile.get('suggestion', '')
 
             if is_pink or "rosa" in text:
-                return {
+                fft_response = {
                     "text": f"Ouvindo a mesa completa: Pico em {peak}Hz. {room_suggestion}",
                     "command": self.command("eq_cut", f"Ajuste Geral {peak}Hz", target="master", hz=peak, gain=-3, q=1.0)
                 }
 
-            if "microfonia" in text or "apito" in text:
-                 return {
+            elif "microfonia" in text or "apito" in text:
+                 fft_response = {
                     "text": f"ALERTA GERAL: Microfonia em {peak}Hz. Aplicando Notch no Master para proteger todos os canais.",
                     "command": self.command("eq_cut", f"Notch Global {peak}Hz", target="master", hz=peak, gain=-8, q=5.0, band=4)
                 }
             
             # Se não especificou canal, a sugestão é para o Master (Ouvindo a sala)
-            if not has_specific_channel:
-                return {
+            elif not has_specific_channel:
+                fft_response = {
                     "text": f"Análise Global: Identifiquei acúmulo em {peak}Hz no som da sala. {room_suggestion or 'Sugiro limpar o Master.'}",
                     "command": self.command("eq_cut", f"Limpeza Sala {peak}Hz", target="master", hz=peak, gain=-2, q=1.5)
                 }
 
         # 1.5 Análise de RT60 Multibanda (Baseada na IEC 60268-16)
+        rt60_response = None
         if analysis and 'rt60_multiband' in analysis:
             bands = analysis['rt60_multiband'] # Ex: {'125': 2.1, '500': 1.6, '1k': 1.1, '4k': 0.8}
             
-            # Análise focada na inteligibilidade (voz)
-            max_rt60 = max(bands.values())
-            
             # Subgraves (125Hz) costumam mascarar a voz se > 2.0s
             if bands.get('125', 0) > 2.0:
-                return {
+                rt60_response = {
                     "text": f"O RT60 em 125Hz está crítico ({bands['125']}s), o que gera graves embolados. Sugiro um filtro HPF ou corte de prateleira (Low-Shelf) no Master.",
                     "command": self.command("eq_cut", "Corte RT60 Grave", target="master", hz=125, gain=-4, q=1.0)
                 }
             
             # Inteligibilidade de voz (500Hz a 4kHz) - Norma IEC 60268-16
-            avg_mid = (bands.get('500', 0) + bands.get('1k', 0)) / 2
-            if avg_mid > 1.5:
-                return {
-                    "text": f"A reverberação média nas frequências de voz ({avg_mid:.1f}s) excede a norma IEC 60268-16 para inteligibilidade (>1.5s). Sugiro reduzir entre 500-1kHz no Master.",
-                    "command": self.command("eq_cut", "Melhorar Inteligibilidade", target="master", hz=800, gain=-3, q=1.2)
-                }
-            
-            return {
-                "text": "A sala apresenta bons tempos de reverberação para voz e música. Nenhuma correção grave necessária no momento.",
-                "command": self.command("log", "RT60 em conformidade", target="master")
-            }
+            else:
+                avg_mid = (bands.get('500', 0) + bands.get('1k', 0)) / 2
+                if avg_mid > 1.5:
+                    rt60_response = {
+                        "text": f"A reverberação média nas frequências de voz ({avg_mid:.1f}s) excede a norma IEC 60268-16 para inteligibilidade (>1.5s). Sugiro reduzir entre 500-1kHz no Master.",
+                        "command": self.command("eq_cut", "Melhorar Inteligibilidade", target="master", hz=800, gain=-3, q=1.2)
+                    }
+
+        # Retorna a análise técnica prioritária (RT60 tem precedência sobre FFT simples se ambos existirem)
+        if rt60_response: return rt60_response
+        if fft_response: return fft_response
 
         # 2. Respostas por Texto (Keywords)
         if re.search(r'(voz|pregador|pregação|pastor)', text):
@@ -141,6 +140,17 @@ class AIEngine:
                 "text": f"Ouvindo o brilho excessivo no canal {channel}. Vou reduzir a aspereza nos médios-agudos para tornar o som mais suave.",
                 "command": self.command("eq_cut", f"Aspereza Ch {channel}", target="channel", channel=channel, hz=3200, gain=-3, q=1.5, band=3)
             }
+
+        # Perfil de Sala Dinâmico
+        if re.search(r'(perfil|ambiente|sala)\s+(vidro|janela)', text):
+            self.session.room_profile = 'janelas_vidro'
+            return {"text": "Perfil de sala alterado para: Janelas/Vidro. Vou priorizar cortes em 3kHz.", "command": None}
+        if re.search(r'(perfil|ambiente|sala)\s+(teto|alto|galpao)', text):
+            self.session.room_profile = 'teto_alto'
+            return {"text": "Perfil de sala alterado para: Teto Alto/Galpão. Vou priorizar controle de subgraves.", "command": None}
+        if re.search(r'(perfil|ambiente|sala)\s+(parede|paralela|eco)', text):
+            self.session.room_profile = 'paredes_paralelas'
+            return {"text": "Perfil de sala alterado para: Paredes Paralelas. Vou priorizar limpeza nos médios.", "command": None}
 
         if re.search(r'(delay|atraso|distancia|metros|fundo)', text):
             # Tenta extrair a distância em metros
