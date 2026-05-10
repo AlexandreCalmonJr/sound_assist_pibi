@@ -100,8 +100,30 @@ async function runTestbed() {
         toggleSolo: () => console.log(`   [Mixer] Canal ${ch} SOLO Alternado`),
         setPan: (v) => console.log(`   [Mixer] Canal ${ch} Pan -> ${v}`),
         setDelay: (ms) => console.log(`   [Mixer] Canal ${ch} Delay -> ${ms}ms`),
+        aux: (auxId) => ({
+            setFaderLevel: (v) => console.log(`   [Mixer] Ch ${ch} -> AUX ${auxId} Level: ${v}`),
+            setPost: (v) => console.log(`   [Mixer] Ch ${ch} -> AUX ${auxId} Mode: ${v === 1 ? 'POST' : 'PRE'}`),
+            setPostProc: (v) => console.log(`   [Mixer] Ch ${ch} -> AUX ${auxId} Proc: ${v === 1 ? 'POST-PROC' : 'PRE-PROC'}`),
+            setPan: (v) => console.log(`   [Mixer] Ch ${ch} -> AUX ${auxId} Pan: ${v}`)
+        }),
+        fx: (fxId) => ({
+            setFaderLevel: (v) => console.log(`   [Mixer] Ch ${ch} -> FX ${fxId} Level: ${v}`),
+            setPost: (v) => console.log(`   [Mixer] Ch ${ch} -> FX ${fxId} Mode: ${v === 1 ? 'POST' : 'PRE'}`)
+        }),
         eq: () => ({
             setHpfFreq: (f) => console.log(`   [Mixer] Ch ${ch} HPF -> ${f}Hz`)
+        })
+    });
+
+    mixer.hw = (id) => ({
+        setGain: (v) => console.log(`   [Mixer] Hardware Input ${id} Gain -> ${v}`),
+        phantomOn: () => console.log(`   [Mixer] Hardware Input ${id} 48V ON ⚠️`),
+        phantomOff: () => console.log(`   [Mixer] Hardware Input ${id} 48V OFF`),
+        oscillator: () => ({
+            enable: () => console.log('   [Mixer] OSC ON'),
+            disable: () => console.log('   [Mixer] OSC OFF'),
+            setType: (t) => console.log(`   [Mixer] OSC Type -> ${t}`),
+            setFaderLevel: (v) => console.log(`   [Mixer] OSC Level -> ${v}dB`)
         })
     });
 
@@ -112,7 +134,13 @@ async function runTestbed() {
         { action: 'set_delay', target: 'master', ms: 150 },
         { action: 'toggle_solo', ch: 3 },
         { action: 'set_channel_pan', ch: 5, val: 0.8 },
-        { action: 'set_delay', target: 'channel', id: 2, ms: 45 }
+        { action: 'set_delay', target: 'channel', id: 2, ms: 45 },
+        { action: 'set_aux_post', channel: 1, aux: 2, enabled: 0 }, 
+        { action: 'set_aux_post_proc', channel: 1, aux: 2, enabled: 1 },
+        { action: 'set_aux_pan', channel: 4, aux: 1, val: 0.3 },
+        { action: 'set_fx_post', channel: 2, fx: 1, enabled: 1 },
+        { action: 'set_hw_gain', input: 1, val: 0.65 },
+        { action: 'set_phantom', input: 1, enabled: 1 }
     ];
 
     tests.forEach(t => {

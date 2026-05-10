@@ -84,11 +84,38 @@ function createMixerActions(getMixer) {
         return `AUX ${aux} do canal ${channel} ajustado para ${Math.round(faderVal * 100)}%.`;
     }
 
+    function setAuxPost(channel, aux, isPost) {
+        getMixer().input(channel).aux(aux).setPost(isPost ? 1 : 0);
+        return `AUX ${aux} do canal ${channel} configurado como ${isPost ? 'POST' : 'PRE'}-Fader.`;
+    }
+
+    function setAuxPostProc(channel, aux, isPostProc) {
+        getMixer().input(channel).aux(aux).setPostProc(isPostProc ? 1 : 0);
+        return `AUX ${aux} do canal ${channel} configurado como ${isPostProc ? 'POST' : 'PRE'}-PROC.`;
+    }
+
     function setFxLevel(channel, fx, level) {
         const input = getMixer().input(channel);
         const faderVal = clamp(level, 0, 1);
         input.fx(fx).setFaderLevel(faderVal);
         return `FX ${fx} do canal ${channel} ajustado para ${Math.round(faderVal * 100)}%.`;
+    }
+
+    function setFxPost(channel, fx, isPost) {
+        getMixer().input(channel).fx(fx).setPost(isPost ? 1 : 0);
+        return `FX ${fx} do canal ${channel} configurado como ${isPost ? 'POST' : 'PRE'}-Fader.`;
+    }
+
+    function setHwGain(input, gain) {
+        getMixer().hw(input).setGain(clamp(gain, 0, 1));
+        return `Ganho de Hardware (Pré-amp) da entrada ${input} ajustado para ${Math.round(gain * 100)}%.`;
+    }
+
+    function setPhantom(input, enabled) {
+        const hw = getMixer().hw(input);
+        if (enabled) hw.phantomOn();
+        else hw.phantomOff();
+        return `Phantom Power (48V) da entrada ${input} ${enabled ? 'LIGADO ⚠️' : 'DESLIGADO'}.`;
     }
 
     function runCleanSoundPreset(channel, opts = {}) {
@@ -189,7 +216,17 @@ function createMixerActions(getMixer) {
             }
             case 'set_oscillator': return applyOscillator(cmd.enabled !== 0, cmd.type, cmd.level);
             case 'set_aux_level': return setAuxLevel(cmd.channel || 1, cmd.aux || 1, cmd.level || 0);
+            case 'set_aux_post': return setAuxPost(cmd.channel || 1, cmd.aux || 1, cmd.enabled !== 0);
+            case 'set_aux_post_proc': return setAuxPostProc(cmd.channel || 1, cmd.aux || 1, cmd.enabled !== 0);
+            case 'set_aux_pan': {
+                const ch = cmd.channel || cmd.ch || 1;
+                getMixer().input(ch).aux(cmd.aux || 1).setPan(clamp(cmd.val || 0.5, 0, 1));
+                return `Pan do AUX ${cmd.aux} (Canal ${ch}) ajustado para ${cmd.val}`;
+            }
             case 'set_fx_level': return setFxLevel(cmd.channel || 1, cmd.fx || 1, cmd.level || 0);
+            case 'set_fx_post': return setFxPost(cmd.channel || 1, cmd.fx || 1, cmd.enabled !== 0);
+            case 'set_hw_gain': return setHwGain(cmd.input || cmd.channel || 1, cmd.val || 0.5);
+            case 'set_phantom': return setPhantom(cmd.input || cmd.channel || 1, cmd.enabled !== 0);
             case 'run_clean_sound_preset': return runCleanSoundPreset(cmd.channel || 1, cmd);
             case 'set_delay': {
                 const id = cmd.channel || cmd.ch || cmd.aux || cmd.id || 1;
