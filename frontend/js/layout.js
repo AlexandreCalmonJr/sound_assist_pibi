@@ -43,6 +43,7 @@
             title: 'Configurações',
             items: [
                 { id: 'settings', label: 'Preferências' },
+                { id: 'debug',    label: 'Console de Depuração' },
             ]
         },
         training: {

@@ -22,6 +22,7 @@ const ROUTE_MAP = {
     'voice-presets':     { path: 'pages/voice-presets.html',      title: 'Presets de Voz',      category: 'Mixer' },
     'systems':           { path: 'pages/systems.html',           title: 'Conexão Ui24R',       category: 'Rede' },
     'aes67':             { path: 'pages/aes67.html',             title: 'Saúde de Cabos',      category: 'Rede' },
+    'debug':             { path: 'pages/debug.html',             title: 'Console de Depuração', category: 'Rede' },
     'ai-chat':           { path: 'pages/ai-chat.html',           title: 'Assistente IA',       category: null },
     'mobile':            { path: 'pages/mobile.html',            title: 'Modo Remoto',         category: null },
     'settings':          { path: 'pages/settings.html',          title: 'Configurações',       category: null },

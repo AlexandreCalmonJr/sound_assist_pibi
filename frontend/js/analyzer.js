@@ -185,6 +185,10 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
         waterfallCanvasEl = document.getElementById('waterfall-canvas');
         if (waterfallCanvasEl) waterfallCtx = waterfallCanvasEl.getContext('2d');
 
+        // Novos elementos de sugestão IA
+        const aiBox = document.getElementById('ai-suggestions-box');
+        const aiText = document.getElementById('ai-suggestions-text');
+
         // Listeners locais da página de análise
         document.getElementById('btn-start-audio')?.addEventListener('click', startAnalyzer);
         document.getElementById('btn-stop-audio')?.addEventListener('click', stopAnalyzer);
@@ -607,18 +611,22 @@ function buildAcousticSummary(freqData, timeData) {
     const peakHz = peak.index * audioCtx.sampleRate / analyser.fftSize;
     const lowAvg = getBandAverage(freqData, audioCtx.sampleRate, 20, 250, analyser.fftSize);
     const lowMidAvg = getBandAverage(freqData, audioCtx.sampleRate, 250, 800, analyser.fftSize);
-    const midAvg = getBandAverage(freqData, audioCtx.sampleRate, 800, 3000, analyser.fftSize);
-    const highAvg = getBandAverage(freqData, audioCtx.sampleRate, 3000, 12000, analyser.fftSize);
+    const midAvg = getBandAverage(freqData, audioCtx.sampleRate, 800, 2000, analyser.fftSize);
+    const highMidAvg = getBandAverage(freqData, audioCtx.sampleRate, 2000, 5000, analyser.fftSize);
+    const highAvg = getBandAverage(freqData, audioCtx.sampleRate, 5000, 16000, analyser.fftSize);
 
     const notes = [];
     if (lowAvg > midAvg + 6) notes.push('grave muito presente');
     else if (lowAvg < midAvg - 6) notes.push('grave fraco');
-    if (highAvg < midAvg - 6) notes.push('agudos apagados');
-    else if (highAvg > midAvg + 6) notes.push('agudos vivos');
-    if (peak.db > -18 && peakHz > 200 && peakHz < 8000) notes.push(`pico estreito em ${Math.round(peakHz)} Hz`);
+    
+    if (highMidAvg > midAvg + 5) notes.push('médio-agudos proeminentes (atenção a sibilância)');
+    if (highAvg < highMidAvg - 6) notes.push('falta de brilho nos agudos superiores');
+    else if (highAvg > highMidAvg + 6) notes.push('agudos muito vivos');
 
-    const summaryText = `RMS ${formatDb(rmsDb)} dB; pico ${Math.round(peakHz)} Hz (${formatDb(peak.db)} dB). Graves ${formatDb(lowAvg)} dB, Low-Mid ${formatDb(lowMidAvg)} dB, Médios ${formatDb(midAvg)} dB, Agudos ${formatDb(highAvg)} dB.` +
-        (notes.length ? ' Observações: ' + notes.join('; ') + '.' : ' Resposta de frequência bem distribuída.');
+    if (peak.db > -18 && peakHz > 20 && peakHz < 8000) notes.push(`pico estreito em ${Math.round(peakHz)} Hz`);
+
+    const summaryText = `RMS ${formatDb(rmsDb)} dB; pico ${Math.round(peakHz)} Hz (${formatDb(peak.db)} dB). G:${formatDb(lowAvg)} | LM:${formatDb(lowMidAvg)} | M:${formatDb(midAvg)} | HM:${formatDb(highMidAvg)} | A:${formatDb(highAvg)}.` +
+        (notes.length ? ' Obs: ' + notes.join('; ') + '.' : ' Resposta de frequência equilibrada.');
 
     return {
         text: summaryText,
@@ -630,6 +638,7 @@ function buildAcousticSummary(freqData, timeData) {
                 low: formatDb(lowAvg),
                 lowMid: formatDb(lowMidAvg),
                 mid: formatDb(midAvg),
+                highMid: formatDb(highMidAvg),
                 high: formatDb(highAvg)
             }
         }
@@ -645,6 +654,7 @@ function renderAnalysisDetails(summary, pink) {
         `Graves: ${summary.details.bands.low} dB`,
         `Low-Mid: ${summary.details.bands.lowMid} dB`,
         `Médios: ${summary.details.bands.mid} dB`,
+        `Altos Médios: ${summary.details.bands.highMid} dB`,
         `Agudos: ${summary.details.bands.high} dB`
     ];
     if (pink) {
@@ -805,7 +815,8 @@ function analyze() {
     // --- Detecção de Pico Global (Usando analyserFast para precisão temporal) ---
     let peakDb = -Infinity;
     let peakIndex = 0;
-    for (let i = 0; i < fastBufferLength; i++) {
+    const minBin = Math.floor(20 * analyserFast.fftSize / audioCtx.sampleRate); // ✅ Filtro 20Hz para evitar 1Hz fake
+    for (let i = minBin; i < fastBufferLength; i++) {
         if (fastFreqData[i] > peakDb) {
             peakDb = fastFreqData[i];
             peakIndex = i;
@@ -1028,36 +1039,36 @@ async function sendAnalysisToAI() {
     const channelInput = document.getElementById('ai-target-channel');
     const channel = channelInput ? Number(channelInput.value) : 1;
     
-    // Se o Assistente IA estiver carregado, use a função dele para mostrar no chat
-    if (window.SoundMasterAIChat && typeof window.SoundMasterAIChat.sendAnalysis === 'function') {
-        window.SoundMasterAIChat.sendAnalysis(false);
-        // Navega para a aba da IA para o usuário ver
-        const aiTab = document.querySelector('[data-target="ai-chat"]');
-        if (aiTab) aiTab.click();
-        return;
-    }
-
-    if (!window.AIService) {
-        alert('IA indisponível. Aguarde a inicialização do assistente.');
-        return;
-    }
+    const aiBox = document.getElementById('ai-suggestions-box');
+    const aiText = document.getElementById('ai-suggestions-text');
+    
+    if (aiBox) aiBox.classList.remove('hidden');
+    if (aiText) aiText.innerText = 'Processando dados com IA...';
 
     const payload = {
         summary: lastAnalysis.text,
         bands: lastAnalysis.details.bands,
         peakHz: lastAnalysis.details.peakHz,
         peakDb: lastAnalysis.details.peakDb,
-        rmsDb: lastAnalysis.details.rmsDb
+        rmsDb: lastAnalysis.details.rmsDb,
+        isPinkNoise: pinkMeasurementActive
     };
-    if (lastAnalysis.pinkReport) {
-        payload.pinkReport = lastAnalysis.pinkReport;
-    }
 
-    const result = await AIService.ask('Análise acústica do salão', channel, payload);
-
-    if (feedbackAlert) {
-        feedbackAlert.className = 'alert warning';
-        feedbackAlert.innerHTML = `IA: ${result.text}`;
+    try {
+        const result = await AIService.ask('Análise acústica do ambiente', channel, payload);
+        if (aiText) aiText.innerText = result.text || result.answer;
+        
+        const actionsArea = document.getElementById('ai-actions');
+        if (actionsArea && result.command) {
+            actionsArea.innerHTML = `
+                <button class="px-3 py-1.5 bg-cyan-600/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-[10px] font-bold uppercase hover:bg-cyan-500 hover:text-white transition-all" onclick="MixerService.executeAICommand('${result.command}')">
+                    Executar Correção Sugerida
+                </button>
+            `;
+        }
+    } catch (err) {
+        if (aiText) aiText.innerText = 'Erro ao consultar a IA. Verifique sua conexão.';
+        console.error('[Analyzer] AI Error:', err);
     }
 }
 

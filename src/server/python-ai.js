@@ -1,6 +1,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const Logger = require('./logger');
 
 function startPythonAI(rootDir) {
     const pythonScript = path.join(rootDir, 'ai_server.py');
@@ -53,17 +54,24 @@ function _trySpawn(command, scriptPath) {
 
         proc.stdout.on('data', (data) => {
             started = true;
-            console.log(`[Python AI]: ${data.toString().trim()}`);
+            const msg = data.toString().trim();
+            console.log(`[Python AI]: ${msg}`);
+            Logger.getInstance().info('PYTHON', 'PYTHON_STDOUT', msg);
         });
 
         proc.stderr.on('data', (data) => {
             const msg = data.toString().trim();
             // uvicorn imprime info no stderr — não tratar como erro fatal
-            if (msg.includes('Uvicorn running') || msg.includes('Started')) {
+            if (msg.includes('Uvicorn running') || msg.includes('Started') || msg.startsWith('INFO:')) {
                 started = true;
                 console.log(`[Python AI]: ${msg}`);
+                Logger.getInstance().info('PYTHON', 'PYTHON_STDOUT', msg);
+            } else if (msg.includes('DeprecationWarning')) {
+                // Silenciar ou baixar nível de avisos de depreciação para não assustar o usuário
+                Logger.getInstance().warn('PYTHON', 'PYTHON_WARN', msg);
             } else {
                 console.error(`[Python AI ERRO]: ${msg}`);
+                Logger.getInstance().error('PYTHON', 'PYTHON_STDERR', msg);
             }
         });
 

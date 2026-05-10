@@ -81,7 +81,13 @@ const schemas = {
 };
 
 function registerSocketHandlers(io, appDataDir = './logs') {
-    const logger = new Logger(appDataDir);
+    const logger = Logger.getInstance(appDataDir);
+    
+    // ✅ Novo: Broadcast de todos os logs para clientes conectados na página de Debug
+    logger.onLog = (entry) => {
+        io.emit('system_log', entry);
+    };
+
     let activeConnections = 0;
 
     // Função auxiliar para throttle - Correção: retorna função que executa imediatamente se permitido
@@ -131,6 +137,8 @@ function registerSocketHandlers(io, appDataDir = './logs') {
         }, 50);
 
         logger.info(socket.id, 'CLIENT_CONNECTED', { activeConnections });
+        
+        // Envia logs iniciais se necessário (opcional)
 
         socket.on('connect_mixer', async (ip) => {
             try {
