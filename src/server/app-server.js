@@ -14,7 +14,7 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     const server = http.createServer(expressApp);
 
     expressApp.use(cors());
-    expressApp.use(express.static(path.join(rootDir, 'frontend')));
+    expressApp.use(express.static(path.join(rootDir, 'frontend-react/dist')));
     expressApp.use(express.json());
 
     // Inicializa banco centralizado IMEDIATAMENTE (presets + mappings no mesmo diretório)

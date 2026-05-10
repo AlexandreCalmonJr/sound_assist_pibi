@@ -8,7 +8,8 @@
     "build:css": "tailwindcss -i css/input.css -o css/styles.css --watch",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build:ui": "cd frontend-react && npm run build",
+    "test": "vitest run"
   },
   "build": {
     "appId": "com.soundmaster.app",

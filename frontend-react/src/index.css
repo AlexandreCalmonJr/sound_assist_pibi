@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-primary: #22d3ee;
+  --color-brand-secondary: #0891b2;
+  --color-surface-0: #09090b;
+  --color-surface-1: #0c0c0e;
+  --color-surface-2: #111318;
+  --color-surface-3: #1a1c23;
+  
+  --color-text-primary: #e2e8f0;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+
+  --font-sans: "Outfit", "Inter", system-ui, sans-serif;
+  
+  --size-rail-width: 76px;
+  --size-panel-width: 220px;
+  --size-header-height: 64px;
+  --size-mixer-width: 400px;
+}
+
+@layer base {
+  :root {
+    --rail-width: 76px;
+    --panel-width: 220px;
+    --header-height: 64px;
+    --mixer-width: 400px;
+    --transition-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  body {
+    @apply bg-surface-0 text-text-primary antialiased;
+    margin: 0;
+    font-family: var(--font-sans);
+    height: 100vh;
+    overflow: hidden;
+  }
+}
+
+/* Custom Scrollbar for Mixer and Main Area */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
+}
+
+/* Page Transitions */
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter {
+  animation: pageEnter 0.35s var(--transition-smooth) forwards;
+}
