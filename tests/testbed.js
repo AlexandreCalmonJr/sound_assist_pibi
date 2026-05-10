@@ -127,6 +127,31 @@ async function runTestbed() {
         })
     });
 
+    mixer.volume = {
+        solo: { setFaderLevel: (v) => console.log(`   [Mixer] SOLO Volume -> ${v}`) },
+        headphone: (id) => ({
+            setFaderLevel: (v) => console.log(`   [Mixer] Headphone ${id} Volume -> ${v}`)
+        })
+    };
+
+    mixer.channelSync = {
+        selectChannel: (type, num, id) => console.log(`   [Mixer] SYNC: Selecionando ${type} ${num || ''} no SyncID: ${id}`)
+    };
+
+    mixer.player = {
+        play: () => console.log('   [Mixer] Player -> PLAY'),
+        pause: () => console.log('   [Mixer] Player -> PAUSE'),
+        stop: () => console.log('   [Mixer] Player -> STOP'),
+        next: () => console.log('   [Mixer] Player -> NEXT'),
+        loadPlaylist: (name) => console.log(`   [Mixer] Player -> Carregando Playlist: ${name}`)
+    };
+
+    mixer.recorderDualTrack = {
+        recordStart: () => console.log('   [Mixer] RECORDER -> Gravando 🔴'),
+        recordStop: () => console.log('   [Mixer] RECORDER -> Parado ⏹️'),
+        recordToggle: () => console.log('   [Mixer] RECORDER -> Alternando Gravação')
+    };
+
     const tests = [
         { action: 'toggle_dim' },
         { action: 'set_master_pan', val: 0.2 },
@@ -140,7 +165,14 @@ async function runTestbed() {
         { action: 'set_aux_pan', channel: 4, aux: 1, val: 0.3 },
         { action: 'set_fx_post', channel: 2, fx: 1, enabled: 1 },
         { action: 'set_hw_gain', input: 1, val: 0.65 },
-        { action: 'set_phantom', input: 1, enabled: 1 }
+        { action: 'set_phantom', input: 1, enabled: 1 },
+        { action: 'set_monitor_volume', target: 'solo', val: 0.7 },
+        { action: 'set_monitor_volume', target: 'hp1', val: 0.5 },
+        { action: 'select_channel', type: 'input', ch: 8 },
+        { action: 'select_channel', type: 'master' },
+        { action: 'player_cmd', action_type: 'play' },
+        { action: 'player_cmd', action_type: 'load_playlist', val: 'Hinos_PIBI' },
+        { action: 'recorder_cmd', action_type: 'start' }
     ];
 
     tests.forEach(t => {

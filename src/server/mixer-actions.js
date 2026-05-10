@@ -118,6 +118,65 @@ function createMixerActions(getMixer) {
         return `Phantom Power (48V) da entrada ${input} ${enabled ? 'LIGADO ⚠️' : 'DESLIGADO'}.`;
     }
 
+    function setMonitorVolume(target, level) {
+        const mixer = getMixer();
+        const faderVal = clamp(level, 0, 1);
+        if (target === 'solo') {
+            mixer.volume.solo.setFaderLevel(faderVal);
+        } else if (target === 'hp1') {
+            mixer.volume.headphone(1).setFaderLevel(faderVal);
+        } else if (target === 'hp2') {
+            mixer.volume.headphone(2).setFaderLevel(faderVal);
+        }
+        return `Volume de monitoramento (${target}) ajustado para ${Math.round(faderVal * 100)}%.`;
+    }
+
+    function selectChannelSync(type, num, syncId = 'SYNC_ID') {
+        const mixer = getMixer();
+        if (type === 'master') {
+            mixer.channelSync.selectChannel('master', syncId);
+            return `Master selecionado nos clientes (SyncID: ${syncId}).`;
+        }
+        
+        // Mapeamento de tipos simplificado para os códigos da biblioteca
+        const typeMap = {
+            'input': 'i', 'channel': 'i', 'ch': 'i',
+            'line': 'l', 'player': 'p', 'fx': 'f',
+            'sub': 's', 'subgroup': 's', 'aux': 'a', 'vca': 'v'
+        };
+        const shortType = typeMap[type.toLowerCase()] || type;
+        mixer.channelSync.selectChannel(shortType, num, syncId);
+        return `Canal ${type} ${num} selecionado nos clientes (SyncID: ${syncId}).`;
+    }
+
+    function playerControl(action, value = null) {
+        const p = getMixer().player;
+        switch (action) {
+            case 'play': p.play(); break;
+            case 'pause': p.pause(); break;
+            case 'stop': p.stop(); break;
+            case 'next': p.next(); break;
+            case 'prev': p.prev(); break;
+            case 'shuffle': p.setShuffle(value ? 1 : 0); break;
+            case 'auto': p.setAuto(); break;
+            case 'manual': p.setManual(); break;
+            case 'load_playlist': p.loadPlaylist(value); break;
+            default: return `Ação do player desconhecida: ${action}`;
+        }
+        return `Player: comando ${action} executado.`;
+    }
+
+    function recorderControl(action) {
+        const r = getMixer().recorderDualTrack;
+        switch (action) {
+            case 'start': r.recordStart(); break;
+            case 'stop': r.recordStop(); break;
+            case 'toggle': r.recordToggle(); break;
+            default: return `Ação do gravador desconhecida: ${action}`;
+        }
+        return `Gravador: comando ${action} executado.`;
+    }
+
     function runCleanSoundPreset(channel, opts = {}) {
         const steps = [
             applyChannelHpf(channel, opts.hpf || 100),
@@ -227,6 +286,10 @@ function createMixerActions(getMixer) {
             case 'set_fx_post': return setFxPost(cmd.channel || 1, cmd.fx || 1, cmd.enabled !== 0);
             case 'set_hw_gain': return setHwGain(cmd.input || cmd.channel || 1, cmd.val || 0.5);
             case 'set_phantom': return setPhantom(cmd.input || cmd.channel || 1, cmd.enabled !== 0);
+            case 'set_monitor_volume': return setMonitorVolume(cmd.target || 'hp1', cmd.val || 0.5);
+            case 'select_channel': return selectChannelSync(cmd.type || 'input', cmd.channel || cmd.ch || 1, cmd.syncId || 'SYNC_ID');
+            case 'player_cmd': return playerControl(cmd.action_type, cmd.val);
+            case 'recorder_cmd': return recorderControl(cmd.action_type);
             case 'run_clean_sound_preset': return runCleanSoundPreset(cmd.channel || 1, cmd);
             case 'set_delay': {
                 const id = cmd.channel || cmd.ch || cmd.aux || cmd.id || 1;
