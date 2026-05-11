@@ -6,6 +6,7 @@ const historyService = require('./history-service');
 const aiPredictor = require('./ai-predictor');
 const Logger = require('./logger');
 const mixerSingleton = require('./mixer-singleton');
+const loopbackService = require('./loopback-service');
 
 // --- Esquemas de Validação ---
 // ... (esquemas omitidos para brevidade, mantidos no arquivo)
@@ -97,6 +98,9 @@ function registerSocketHandlers(io, appDataDir = './logs') {
     logger.onLog = (entry) => {
         io.emit('system_log', entry);
     };
+
+    // ✅ Inicializa a extração de áudio Loopback (AES67 -> WebSocket)
+    loopbackService.init(io);
     
     let activeConnections = 0;
     let feedbackCooldowns = new Map();

@@ -47,6 +47,9 @@ let waterfallCanvasEl, waterfallCtx;
 // Web Workers & Worklets
 let acousticWorker = null;
 let audioWorkletNode = null;
+let transferFunctionNode = null; // ✅ Novo: Nó de Função de Transferência
+let refSource = null; // ✅ Novo: Fonte de Referência (Loopback)
+let latestTFData = null; // ✅ Novo: Cache para snapshot
 
 // --- Novas Variáveis de Melhoria ---
 let peakHold = { hz: 0, db: -100, timer: 0 };
@@ -174,6 +177,9 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
         canvasCtx = canvas.getContext('2d');
         _initManualControls();
         _initAutomixControls();
+
+        // Inicializa Visualizador de Transfer Function
+        if (window.SoundMasterVisualizer) window.SoundMasterVisualizer.init();
         
         // Captura de elementos
         rmsBar = document.getElementById('rms-bar');
@@ -199,6 +205,21 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
         btnSendAnalysis?.addEventListener('click', sendAnalysisToAI);
         btnMeasurePink?.addEventListener('click', startPinkNoiseMeasurement);
         btnLogSweep?.addEventListener('click', startLogarithmicSweep);
+
+        // Listeners Função de Transferência
+        document.getElementById('btn-capture-tf')?.addEventListener('click', () => {
+            if (latestTFData && window.SoundMasterVisualizer) {
+                window.SoundMasterVisualizer.captureCurrentTrace(
+                    latestTFData.magnitude, 
+                    latestTFData.phase, 
+                    latestTFData.coherence
+                );
+            }
+        });
+
+        document.getElementById('btn-clear-tf-traces')?.addEventListener('click', () => {
+            if (window.SoundMasterVisualizer) window.SoundMasterVisualizer.clearTraces();
+        });
         
         // Popula lista de microfones
         _populateDeviceList();
@@ -334,10 +355,24 @@ async function startAnalyzer() {
         
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         
-        // Carrega AudioWorklet para processamento em thread separada
+        // Carrega AudioWorklets para processamento em thread separada
         try {
             await audioCtx.audioWorklet.addModule('js/core/audio-processor.js');
+            await audioCtx.audioWorklet.addModule('js/core/transfer-function-processor.js');
+            
             audioWorkletNode = new AudioWorkletNode(audioCtx, 'soundmaster-processor');
+            
+            // Instancia o Nó de Transfer Function com 2 entradas
+            transferFunctionNode = new AudioWorkletNode(audioCtx, 'transfer-function-processor', {
+                numberOfInputs: 2,
+                numberOfOutputs: 1
+            });
+
+            transferFunctionNode.port.onmessage = (e) => {
+                if (e.data.type === 'transfer-function') {
+                    _handleTransferFunctionData(e.data);
+                }
+            };
         } catch (e) {
             console.warn('[Analyzer] AudioWorklet falhou, usando fallback.', e);
         }
@@ -360,6 +395,16 @@ async function startAnalyzer() {
             silentGain.gain.value = 0;
             audioWorkletNode.connect(silentGain);
             silentGain.connect(audioCtx.destination);
+        }
+
+        // ✅ Conecta fontes ao Nó de Transfer Function
+        if (transferFunctionNode) {
+            // Canal 1: Medição (Microfone RTA)
+            source.connect(transferFunctionNode, 0, 1);
+
+            // Canal 0: Referência (Loopback via AES67/WebSocket)
+            // Criamos um destino silencioso para o nó de referência
+            _setupReferenceSource(audioCtx, transferFunctionNode);
         }
 
         // ✅ Novo: Analisador rápido para detecção de feedback (baixa latência)
@@ -796,6 +841,73 @@ function stopPinkNoise() {
     btnPink && (btnPink.innerHTML = '🔊 Ruído Rosa (Pink)');
     btnPink && btnPink.classList.remove('primary');
     btnPink && btnPink.classList.add('secondary');
+}
+
+/**
+ * ✅ Novo: Configura a fonte de referência via WebSocket PCM Stream
+ */
+function _setupReferenceSource(ctx, targetNode) {
+    // Criamos um ScriptProcessor ou AudioWorklet para injetar samples vindos do socket
+    // Para simplificar a integração AES67 -> WebSocket -> WebAudio:
+    const bufferSize = 4096;
+    refSource = ctx.createScriptProcessor(bufferSize, 1, 1);
+    
+    let audioQueue = [];
+
+    // Ouve samples brutos vindos do backend (AES67 loopback)
+    SocketService.on('reference_audio_stream', (data) => {
+        // data.samples deve ser um Float32Array ou Int16 que convertemos
+        audioQueue.push(...data.samples);
+        if (audioQueue.length > 48000) audioQueue.splice(0, audioQueue.length - 48000); // Buffer de 1s
+    });
+
+    refSource.onaudioprocess = (e) => {
+        const output = e.outputBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            output[i] = audioQueue.shift() || 0;
+        }
+    };
+
+    // Conecta a referência ao Canal 0 do Transfer Function
+    refSource.connect(targetNode, 0, 0);
+    
+    // Conecta a uma saída silenciosa para manter o clock do ScriptProcessor
+    const silent = ctx.createGain();
+    silent.gain.value = 0;
+    refSource.connect(silent);
+    silent.connect(ctx.destination);
+}
+
+/**
+ * ✅ Novo: Processa dados da Função de Transferência para a UI
+ */
+function _handleTransferFunctionData(data) {
+    latestTFData = data; // Armazena para snapshot
+    const { magnitude, phase, coherence, delayMs } = data;
+    
+    // 1. Atualiza o valor do Delay Finder na UI
+    const delayEl = document.getElementById('delay-finder-value');
+    if (delayEl) {
+        delayEl.innerText = `${delayMs.toFixed(2)} ms`;
+        // Se o delay for muito alto (> 100ms), destaca em amarelo
+        delayEl.style.color = delayMs > 100 ? '#facc15' : '#22d3ee';
+    }
+
+    // 2. Atualiza a Coerência Média (Avg Coherence)
+    const avgCoherence = coherence.reduce((a, b) => a + b, 0) / coherence.length;
+    const coherenceEl = document.getElementById('coherence-value');
+    if (coherenceEl) {
+        coherenceEl.innerText = `${avgCoherence.toFixed(0)}%`;
+        // Escala de cor para coerência
+        if (avgCoherence > 80) coherenceEl.style.color = '#4ade80'; // Verde (Bom)
+        else if (avgCoherence > 50) coherenceEl.style.color = '#facc15'; // Amarelo (Médio)
+        else coherenceEl.style.color = '#f87171'; // Vermelho (Ruim)
+    }
+
+    // 3. Dispara o renderizador de gráficos (Magnitude/Fase/Coerência)
+    if (window.SoundMasterVisualizer) {
+        window.SoundMasterVisualizer.drawTransferFunction(magnitude, phase, coherence);
+    }
 }
 
 function stopPinkNoiseMeasurement() {
