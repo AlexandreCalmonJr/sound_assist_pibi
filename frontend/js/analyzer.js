@@ -50,6 +50,8 @@ let audioWorkletNode = null;
 let transferFunctionNode = null; // ✅ Novo: Nó de Função de Transferência
 let refSource = null; // ✅ Novo: Fonte de Referência (Loopback)
 let latestTFData = null; // ✅ Novo: Cache para snapshot
+let isDemoMode = false; // ✅ Novo: Estado de simulação digital
+let refAudioQueue = []; // ✅ Fila global de áudio de referência (singleton)
 
 // --- Novas Variáveis de Melhoria ---
 let peakHold = { hz: 0, db: -100, timer: 0 };
@@ -206,20 +208,7 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
         btnMeasurePink?.addEventListener('click', startPinkNoiseMeasurement);
         btnLogSweep?.addEventListener('click', startLogarithmicSweep);
 
-        // Listeners Função de Transferência
-        document.getElementById('btn-capture-tf')?.addEventListener('click', () => {
-            if (latestTFData && window.SoundMasterVisualizer) {
-                window.SoundMasterVisualizer.captureCurrentTrace(
-                    latestTFData.magnitude, 
-                    latestTFData.phase, 
-                    latestTFData.coherence
-                );
-            }
-        });
-
-        document.getElementById('btn-clear-tf-traces')?.addEventListener('click', () => {
-            if (window.SoundMasterVisualizer) window.SoundMasterVisualizer.clearTraces();
-        });
+        // Listeners Função de Transferência (Movidos para delegação global para maior robustez)
         
         // Popula lista de microfones
         _populateDeviceList();
@@ -350,6 +339,10 @@ async function startAnalyzer() {
                 channelCount: 1
             }
         };
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error('O navegador não suporta captura de áudio ou você está em uma conexão não segura (HTTP). Use Localhost ou HTTPS.');
+        }
 
         stream = await navigator.mediaDevices.getUserMedia(constraints);
         
@@ -852,19 +845,12 @@ function _setupReferenceSource(ctx, targetNode) {
     const bufferSize = 4096;
     refSource = ctx.createScriptProcessor(bufferSize, 1, 1);
     
-    let audioQueue = [];
-
-    // Ouve samples brutos vindos do backend (AES67 loopback)
-    SocketService.on('reference_audio_stream', (data) => {
-        // data.samples deve ser um Float32Array ou Int16 que convertemos
-        audioQueue.push(...data.samples);
-        if (audioQueue.length > 48000) audioQueue.splice(0, audioQueue.length - 48000); // Buffer de 1s
-    });
-
+    // ❌ Listener removido daqui (movido para escopo global abaixo)
+    
     refSource.onaudioprocess = (e) => {
         const output = e.outputBuffer.getChannelData(0);
         for (let i = 0; i < bufferSize; i++) {
-            output[i] = audioQueue.shift() || 0;
+            output[i] = refAudioQueue.shift() || 0;
         }
     };
 
@@ -1435,6 +1421,7 @@ function ensureAudioCtx() {
 
     // --- Exportação da API Pública ---
     window.SoundMasterAnalyzer = {
+        init: initAnalyzer, // ✅ Agora exposto globalmente
         start: startAnalyzer,
         stop: stopAnalyzer,
         toggle: toggleAnalyzer,
@@ -1448,11 +1435,59 @@ function ensureAudioCtx() {
         getMeasurementPosition: () => lastMeasurementPosition
     };
 
-    // Ouvir eventos do roteador para Detector de Feedback
-    document.addEventListener('page-loaded', (e) => {
-        if (e.detail.pageId === 'feedback-detector') {
-            console.log('[Analyzer] Página de Feedback ativa. Vinculando monitoramento...');
+    // ✅ Listener Único para Áudio de Referência (Loopback)
+    // Previne que múltiplas instâncias do analisador criem listeners redundantes
+    SocketService.on('reference_audio_stream', (data) => {
+        if (!data || !data.samples) return;
+        
+        // Empilha samples na fila global
+        refAudioQueue.push(...data.samples);
+        
+        // Limita o buffer para evitar lag (máx 1 segundo de áudio acumulado)
+        if (refAudioQueue.length > 48000) {
+            refAudioQueue.splice(0, refAudioQueue.length - 48000);
         }
     });
+
+    // Ouvir eventos do roteador para Detector de Feedback
+    document.addEventListener('page-loaded', (e) => {
+        console.log(`[Analyzer] Page loaded event: ${e.detail.pageId}`);
+        if (e.detail.pageId === 'analyzer') {
+            initAnalyzer(); 
+        }
+    });
+
+    // ✅ Delegação de Eventos Global para Botões da Transfer Function (mais robusto para SPA)
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn || !btn.id) return;
+
+        if (btn.id === 'btn-capture-tf') {
+            console.log('[Analyzer] Capturando trace...');
+            if (latestTFData && window.SoundMasterVisualizer) {
+                window.SoundMasterVisualizer.captureCurrentTrace(
+                    latestTFData.magnitude, 
+                    latestTFData.phase, 
+                    latestTFData.coherence
+                );
+            }
+        } else if (btn.id === 'btn-clear-tf-traces') {
+            if (window.SoundMasterVisualizer) window.SoundMasterVisualizer.clearTraces();
+        } else if (btn.id === 'btn-demo-tf') {
+            isDemoMode = !isDemoMode;
+            btn.classList.toggle('bg-amber-500/20', isDemoMode);
+            btn.classList.toggle('text-amber-300', isDemoMode);
+            console.log(`[Analyzer] Modo Demo: ${isDemoMode ? 'ON' : 'OFF'}`);
+            
+            if (transferFunctionNode) {
+                transferFunctionNode.port.postMessage({ type: 'set-demo-mode', value: isDemoMode });
+            }
+        }
+    });
+
+    // Se o script for carregado e a página já for a de analyzer, inicializa
+    if (document.getElementById('fft-canvas')) {
+        initAnalyzer();
+    }
 
 })();

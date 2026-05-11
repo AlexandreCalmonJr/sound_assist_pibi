@@ -11,11 +11,17 @@
     let capturedTraces = []; // ✅ Armazena snapshots de medição
 
     function init() {
+        console.log('[TF-Visualizer] Inicializando canvases...');
         magCanvas = document.getElementById('tf-magnitude-canvas');
         phaseCanvas = document.getElementById('tf-phase-canvas');
         if (magCanvas) magCtx = magCanvas.getContext('2d');
         if (phaseCanvas) phaseCtx = phaseCanvas.getContext('2d');
         
+        if (!magCanvas || !phaseCanvas) {
+            console.warn('[TF-Visualizer] Canvases não encontrados no DOM.');
+        }
+
+        window.removeEventListener('resize', resize);
         window.addEventListener('resize', resize);
         resize();
     }

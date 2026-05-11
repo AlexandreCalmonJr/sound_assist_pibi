@@ -15,16 +15,34 @@ class LoopbackService {
     init(io) {
         this.io = io;
         
-        // Inicia o receptor AES67 se ainda não estiver ativo
-        if (!aes67.isStreaming) {
+        const mixer = require('./mixer-singleton').getMixer();
+        const isSimulated = mixer && mixer.isSimulated;
+
+        if (isSimulated) {
+            console.log('[Loopback] Modo SIMULADO ativo. Gerando ruído rosa interno.');
+            this.startSimulation();
+        } else if (!aes67.isStreaming) {
             aes67.start();
+            aes67.on('multi-channel-audio', (data) => {
+                this.processAudio(data);
+            });
         }
 
-        aes67.on('multi-channel-audio', (data) => {
-            this.processAudio(data);
-        });
-
         console.log(`[Loopback] Extraindo canal de referência ${this.referenceChannel + 1} via AES67.`);
+    }
+
+    startSimulation() {
+        // Envia blocos de ruído a cada ~42ms (equivalente a 2048 samples a 48kHz)
+        setInterval(() => {
+            if (!this.io) return;
+            const simulatedSamples = new Float32Array(this.maxBufferSize);
+            for (let i = 0; i < this.maxBufferSize; i++) {
+                simulatedSamples[i] = (Math.random() * 2 - 1) * 0.5; // Ruído Branco simples
+            }
+            this.io.emit('reference_audio_stream', {
+                samples: Array.from(simulatedSamples)
+            });
+        }, 42);
     }
 
     processAudio({ buffer, channels, bitDepth }) {
