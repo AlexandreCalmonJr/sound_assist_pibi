@@ -16,6 +16,7 @@ const ROUTE_MAP = {
     'mixer-aux':         { path: 'pages/mixer-aux.html',         title: 'Monitores & Aux',     category: 'Mixer' },
     'mixer-fx':          { path: 'pages/mixer-fx.html',          title: 'Efeitos',             category: 'Mixer' },
     'voice-presets':     { path: 'pages/voice-presets.html',      title: 'Presets de Voz',      category: 'Mixer' },
+    'stage-plot':        { path: 'pages/stage-plot.html',         title: 'Palco Virtual',       category: 'Mixer' },
     'systems':           { path: 'pages/systems.html',           title: 'Conexão Ui24R',       category: 'Rede' },
     'aes67':             { path: 'pages/aes67.html',             title: 'Saúde de Cabos',      category: 'Rede' },
     'debug':             { path: 'pages/debug.html',             title: 'Console de Depuração', category: 'Rede' },

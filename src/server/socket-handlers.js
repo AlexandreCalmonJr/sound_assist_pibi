@@ -170,8 +170,28 @@ function registerSocketHandlers(io, appDataDir = './logs') {
 
         logger.info(socket.id, 'CLIENT_CONNECTED', { activeConnections });
 
+        // ── T25: Zero-latency State Tree load ─────────────────────────────────
+        // Novo cliente recebe imediatamente o cache completo da mesa.
+        // Não é preciso pedir dados à Ui24R — elimina round-trip e stress.
+        mixerSingleton.dispatchStateTreeTo(socket);
+
         // ── Handlers de diagnóstico de rede ───────────────────────────────────
         netDiag.registerNetDiagHandlers(socket);
+
+        // ── T26: Delta Update (reconexão passiva) ─────────────────────────────
+        // O cliente reconectado solicita apenas o que mudou. O State Tree é
+        // sempre actual no servidor (proxy singleton), pelo que respondemos com
+        // o snapshot completo marcado como delta. O cliente aplica com Lerp.
+        socket.on('request_state_delta', ({ windowSecs } = {}) => {
+            const stateTree = mixerSingleton.getStateTree();
+            socket.emit('mixer_state_full', {
+                ...stateTree,
+                _source:    'delta',
+                _windowSecs: windowSecs || 10,
+                _ts:         Date.now(),
+            });
+            logger.info(socket.id, 'STATE_DELTA_SENT', { windowSecs });
+        });
 
         socket.on('connect_mixer', async (ip) => {
             try {

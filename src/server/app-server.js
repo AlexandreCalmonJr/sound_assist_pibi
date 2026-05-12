@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const db = require('./database');
 const { registerMappingsRoutes } = require('./mappings-routes');
 const { registerSocketHandlers } = require('./socket-handlers');
+const { getPool } = require('./worker-pool');
 
 function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     const expressApp = express();
@@ -199,14 +200,19 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
             methods: ['GET', 'POST'],
             credentials: true
         },
-        maxHttpBufferSize: 1e6, // 1MB limit
+        maxHttpBufferSize: 1e6,
         pingTimeout: 60000,
         pingInterval: 25000
     });
 
-    // Middleware de Autenticação para Socket.IO (Removido Túnel)
+    // ── Tópico 25/29: injeta io no singleton e inicia monitors ─────────────
+    mixerSingleton.setIo(io);
+    mixerSingleton.startEventLoopMonitor((msg) => console.warn(msg));
+    // Inicia Worker Pool (aquece os workers na inicialização)
+    getPool();
+
+    // Middleware de Autenticação para Socket.IO
     io.use((socket, next) => {
-        // Acesso liberado para rede local conforme solicitado pelo usuário
         next();
     });
 

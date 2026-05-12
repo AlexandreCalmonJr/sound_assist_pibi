@@ -69,6 +69,28 @@
 
     let currentMix = { type: 'master', id: null };
 
+    // ─── Optimistic UI helpers (T28) ────────────────────────────────────────
+    // _lerpTo: anima suavemente o slider do valor local para o valor real da mesa
+    // quando o lock expirar, evitando o salto brusco (rubber-banding).
+    let _lerpAnimId = null;
+    function _lerpTo(slider, targetPct, durationMs = 120) {
+        if (!slider) return;
+        if (_lerpAnimId) cancelAnimationFrame(_lerpAnimId);
+        const startPct = Number(slider.value);
+        const delta    = targetPct - startPct;
+        if (Math.abs(delta) < 0.5) { slider.value = targetPct; return; }  // diff negligível
+        const startTs  = performance.now();
+        const step = (now) => {
+            const t = Math.min(1, (now - startTs) / durationMs);
+            // Ease-out cubic
+            const eased = 1 - Math.pow(1 - t, 3);
+            slider.value = String(Math.round(startPct + delta * eased));
+            if (t < 1) _lerpAnimId = requestAnimationFrame(step);
+            else        _lerpAnimId = null;
+        };
+        _lerpAnimId = requestAnimationFrame(step);
+    }
+
     // -------------------------------------------------------------------------
     // Helpers de renderização
     // -------------------------------------------------------------------------
@@ -244,9 +266,20 @@
             if (tab) tab.click();
         });
 
-        // Slider master — atualiza UI durante arraste, envia ao soltar
+        // Slider master — Optimistic UI (T28)
+        // Input: bloqueia updates externos + atualiza UI otimisticamente
+        // Change: envia comando à mesa + inicia debounce de unlock
+        let _masterDebounce = null;
+
+        els.masterSlider && els.masterSlider.addEventListener('pointerdown', () => {
+            const level = Number(els.masterSlider.value) / 100;
+            if (window.SocketService) SocketService.lockFader('master', level);
+        });
+
         els.masterSlider && els.masterSlider.addEventListener('input', function () {
             const level = Number(els.masterSlider.value) / 100;
+            // Atualiza UI imediatamente (otimismo)
+            if (window.SocketService) SocketService.lockFader('master', level);
             _renderMasterLevel(level, AppStore.getState().masterDb);
         });
 
@@ -261,6 +294,11 @@
                 const ch = _getQuickChannel();
                 if (ch) MixerService.setFxLevel(ch, currentMix.id, level);
             }
+            // Debounce: liberta lock 300ms após o utilizador soltar
+            clearTimeout(_masterDebounce);
+            _masterDebounce = setTimeout(() => {
+                if (window.SocketService) SocketService.unlockFader('master');
+            }, 300);
         });
 
         // Botões +1% / -1%
@@ -391,6 +429,9 @@
         });
 
         AppStore.subscribe('masterLevel', function (level) {
+            if (window.SocketService && SocketService.isFaderLocked('master')) return;
+            const targetPct = Math.round(_clamp01(level) * 100);
+            _lerpTo(els.masterSlider, targetPct);
             _renderMasterLevel(level, AppStore.getState().masterDb);
         });
 
