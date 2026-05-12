@@ -252,6 +252,7 @@
     function _positionTooltip(tooltip, step) {
         let x = 0, y = 0;
         let targetEl = null;
+        const tw = 320;
 
         if (step.target) {
             targetEl = document.getElementById(step.target);
@@ -263,7 +264,6 @@
             const rect = targetEl.getBoundingClientRect();
             const vw = window.innerWidth;
             const vh = window.innerHeight;
-            const tw = 320;
 
             switch (step.position) {
                 case 'top':
