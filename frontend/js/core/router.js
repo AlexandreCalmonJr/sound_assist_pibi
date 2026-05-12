@@ -24,6 +24,10 @@ const ROUTE_MAP = {
     'debug':             { path: 'pages/debug.html',             title: 'Console de Depuração', category: 'Rede' },
     'ai-chat':           { path: 'pages/ai-chat.html',           title: 'Assistente IA',       category: null },
     'mobile':            { path: 'pages/mobile.html',            title: 'Modo Remoto',         category: null },
+    'volunteer-mode':    { path: 'pages/volunteer-mode.html',  title: 'Modo Voluntário',     category: null },
+    'semantic-eq':       { path: 'pages/semantic-eq.html',       title: 'EQ Semântico',        category: 'Análise' },
+    'automixer':         { path: 'pages/automixer.html',         title: 'Auto-Mixer Dugan',   category: 'Mixer' },
+    'scene-builder':     { path: 'pages/scene-builder.html',     title: 'Scene Builder',      category: 'Mixer' },
     'settings':          { path: 'pages/settings.html',          title: 'Configurações',       category: null },
 };
 

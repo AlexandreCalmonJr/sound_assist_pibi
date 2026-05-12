@@ -40,7 +40,19 @@ document.addEventListener('DOMContentLoaded', async function () {
         window.SoundMasterMixerPanel.init();
     }
 
-    // 5. Navigate to Home or Mobile
+    // 5. Init Onboarding Tour
+    if (window.SoundMasterTour) {
+        window.SoundMasterTour.init();
+    }
+
+    // 6. Help button
+    document.getElementById('btn-help')?.addEventListener('click', () => {
+        if (window.SoundMasterTour) {
+            window.SoundMasterTour.openHelpModal();
+        }
+    });
+
+    // 7. Navigate to Home or Mobile
     if (window.router) {
         const urlParams = new URLSearchParams(window.location.search);
         const isMobileMode = urlParams.get('mode') === 'mobile' || window.innerWidth < 768;

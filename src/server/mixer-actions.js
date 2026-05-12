@@ -383,10 +383,21 @@ function createMixerActions(getMixer) {
                 mixer.master.setFaderLevel(clamp(cmd.level || 0.7, 0, 1));
                 return `Master ajustado para ${Math.round((cmd.level || 0.7) * 100)}%`;
             }
-            case 'set_channel_level': {
+            case 'master_mute': {
+                if (cmd.enabled) mixer.master.mute(); else mixer.master.unmute();
+                return `Master ${cmd.enabled ? 'MUTADO' : 'DESMUTADO'}.`;
+            }
+            case 'set_channel_level':
+            case 'channel_fader': {
                 const ch = cmd.channel || cmd.ch || 1;
                 mixer.input(ch).setFaderLevel(clamp(cmd.level || 0.7, 0, 1));
                 return `Canal ${ch} ajustado para ${Math.round((cmd.level || 0.7) * 100)}%`;
+            }
+            case 'channel_mute': {
+                const ch = cmd.channel || cmd.ch || 1;
+                if (cmd.enabled) mixer.input(ch).mute();
+                else mixer.input(ch).unmute();
+                return `Canal ${ch} ${cmd.enabled ? 'MUTADO' : 'DESMUTADO'}.`;
             }
             case 'toggle_dim': {
                 mixer.master.toggleDim();
@@ -456,7 +467,7 @@ function createMixerActions(getMixer) {
         applyChannelCompressor, applyChannelGate, applyChannelHpf, applyEqCut,
         applyOscillator, ensureMixer, executeMixerCommand, setAfs,
         setAuxLevel, setFxLevel, setDelay, runCleanSoundPreset,
-        setPhantom, setChannelName, cutFeedback
+        setPhantom, setChannelName, cutFeedback, automixAssignChannel
     };
 }
 

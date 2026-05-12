@@ -177,7 +177,11 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
         btnGroupB?.addEventListener('click', () => updateGroupUI('b'));
     }
 
+    let SoundMasterAnalyzerReady = false;
+
     function initAnalyzer() {
+        if (SoundMasterAnalyzerReady) return;
+        SoundMasterAnalyzerReady = true;
         console.log('[Analyzer] Inicializando elementos do DOM...');
         canvas = document.getElementById('fft-canvas');
         if (!canvas) return;
@@ -323,6 +327,9 @@ document.addEventListener('page-loaded', (e) => {
     // Sempre inicializa os serviços globais se ainda não foram
     if (!acousticWorker) initGlobalAnalyzer();
 
+    if (e.detail.pageId === 'analyzer') {
+        initAnalyzer();
+    }
     if (e.detail.pageId === 'rt60') {
         // Inicializa controles de RT60 na página específica
         document.getElementById('btn-trigger-pulse')?.addEventListener('click', () => {
@@ -1666,5 +1673,19 @@ function ensureAudioCtx() {
     if (document.getElementById('fft-canvas')) {
         initAnalyzer();
     }
+
+    return {
+    isAnalyzing: () => isAnalyzing,
+    getFrequencyData: () => lastAnalysis ? [...lastAnalysis.fftData] : [],
+    getRt60: () => lastRt60Result,
+    startSweep: triggerImpulseMeasure,
+    getTransferFunctionData: () => latestTFData,
+    reset: () => {
+        stopAnalyzer();
+        isDemoMode = false;
+        if (window.SoundMasterVisualizer) window.SoundMasterVisualizer.clearTraces();
+    }
+};
+
 
 })();

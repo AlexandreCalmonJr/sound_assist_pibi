@@ -21,6 +21,7 @@
                 { id: 'analyzer',          label: 'FFT & Waterfall' },
                 { id: 'feedback-detector', label: 'Detector Feedback' },
                 { id: 'eq-guide',          label: 'Guia de EQ' },
+                { id: 'semantic-eq',       label: 'EQ Semântico (NLP)' },
             ]
         },
         mixer: {
@@ -30,6 +31,8 @@
                 { id: 'mixer-aux',     label: 'Monitores & Aux' },
                 { id: 'mixer-fx',      label: 'Envios de Efeito' },
                 { id: 'voice-presets', label: 'Presets de Voz' },
+                { id: 'automixer',     label: 'Auto-Mixer Dugan' },
+                { id: 'scene-builder', label: 'Scene Builder' },
             ]
         },
         network: {

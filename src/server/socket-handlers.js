@@ -825,6 +825,14 @@ function registerSocketHandlers(io, appDataDir = './logs') {
             }
         });
 
+        socket.on('automix_assign', (data) => {
+            const channel = Number(data?.channel) || 1;
+            const group = data?.group || 'none';
+            const weight = Number(data?.weight) || 0.5;
+            const msg = actions.automixAssignChannel(channel, group, weight);
+            socket.emit('mixer_log', { msg });
+        });
+
         socket.on('ping_mixer', () => {
             socket.emit('pong_mixer');
         });

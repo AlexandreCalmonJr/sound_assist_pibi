@@ -400,6 +400,37 @@
         return _emit('set_channel_name', { channel: ch, name: cleanName });
     }
 
+    function setMasterMute(enabled) {
+        const state = enabled ? 1 : 0;
+        AppStore.setState({ masterMute: !!enabled });
+        return _emit('execute_ai_command', {
+            action: 'master_mute',
+            enabled: state
+        }, enabled ? 'Master MUTADO.' : 'Master DESMUTADO.');
+    }
+
+    function setChannelMute(channel, enabled) {
+        const ch = _validateChannel(channel);
+        const state = enabled ? 1 : 0;
+        AppStore.setState({ [`mute_ch_${ch}`]: !!enabled });
+        return _emit('execute_ai_command', {
+            action: 'channel_mute',
+            channel: ch,
+            enabled: state
+        }, enabled ? `Canal ${ch} MUTADO.` : `Canal ${ch} DESMUTADO.`);
+    }
+
+    function setChannelLevel(channel, level) {
+        const ch = _validateChannel(channel);
+        const clamped = _clamp(level, 0, 1);
+        AppStore.setState({ [`ch_${ch}_level`]: clamped });
+        return _emit('execute_ai_command', {
+            action: 'channel_fader',
+            channel: ch,
+            level: clamped
+        }, `Canal ${ch} -> ${Math.round(clamped * 100)}%.`);
+    }
+
     // -------------------------------------------------------------------------
     // Exportação
     // -------------------------------------------------------------------------
@@ -408,6 +439,9 @@
         disconnect,
         setMasterLevel,
         adjustMasterLevel,
+        setMasterMute,
+        setChannelMute,
+        setChannelLevel,
         applyHpf,
         applyGate,
         applyCompressor,
