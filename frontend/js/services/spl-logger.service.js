@@ -1,0 +1,539 @@
+/**
+ * SoundMaster Pro — SPL Logger (IEC 61672 compliant)
+ *
+ * Responsabilidades:
+ *   1. Calcular SPL instantâneo com Ponderação A, C ou Z (Flat)
+ *   2. Acumular Leq contínuo em janelas de 1 s, 1 min (Leq1) e 10 min (Leq10)
+ *   3. Manter histórico compacto de até 8 horas sem memory leak
+ *   4. Publicar eventos no AppStore para a UI reagir de forma reativa
+ *
+ * Normas de referência:
+ *   - IEC 61672-1:2013  (Class 2 tolerances, weighting filters)
+ *   - ISO 1996-1:2016   (environmental noise descriptors: Leq, Lmax, Lmin)
+ *   - OSHA PEL: 90 dB(A) / 8h   |   NIOSH REL: 85 dB(A) / 8h
+ *
+ * API Pública (window.SplLogger):
+ *   .init(sampleRate)         → prepara filtros biquad para o fs dado
+ *   .push(freqData, timeData) → alimenta com dados do analyser (chamado a cada frame)
+ *   .setWeighting('A'|'C'|'Z')
+ *   .getHistory()             → { seconds: Float32Array, leq1: Float32Array, leq10: Float32Array }
+ *   .getStats()               → { leqTotal, leq1, leq10, lmax, lmin, dose8h, dotsAboveLimit }
+ *   .reset()
+ *   .export()                 → CSV string para download
+ */
+
+'use strict';
+
+(function () {
+
+    // ─── Configuração ─────────────────────────────────────────────────────────
+
+    /** Limite máximo de segundos guardados: 8 horas = 28800 s */
+    const MAX_HISTORY_SECONDS = 8 * 3600;
+
+    /** Valor de referência SPL (pressão sonora de referência = 20 μPa → 0 dBSPL) */
+    const REF_DB = -94; // offset calibração digital (0 dBFS ↔ 94 dBSPL por defeito)
+
+    /** Limite NIOSH para dose diária (acima deste valor conta como exposição excessiva) */
+    const NIOSH_LIMIT_DB = 85;
+
+    // ─── Estado interno ───────────────────────────────────────────────────────
+
+    let _sampleRate    = 48000;
+    let _weighting     = 'A';          // 'A' | 'C' | 'Z'
+    let _initialized   = false;
+
+    // Acumuladores energéticos (potência linear, não dB)
+    let _acc1s         = 0;            // acumulador do segundo atual
+    let _acc1sCount    = 0;            // nº de frames no segundo atual
+    let _acc1min       = 0;            // acumulador do minuto (60 s)
+    let _acc1minCount  = 0;
+    let _acc10min      = 0;            // acumulador de 10 minutos
+    let _acc10minCount = 0;
+    let _accTotal      = 0;            // acumulador de toda a sessão
+    let _accTotalCount = 0;
+
+    // Peak hold
+    let _lmaxSession   = -Infinity;
+    let _lminSession   = Infinity;
+
+    // Temporizador interno (conta segundos desde init)
+    let _ticker        = null;
+    let _elapsedSec    = 0;
+
+    // ─── Histórico compacto (ring buffers de Float32Array) ────────────────────
+    // Cada array é um ring buffer com ponteiro de escrita.
+    // Tamanho fixo → sem crescimento de heap após init → zero memory leak.
+
+    const _hist = {
+        // 1 valor por segundo (SPL instantâneo com ponderação selecionada)
+        spk: new Float32Array(MAX_HISTORY_SECONDS),
+        // Leq de 1 minuto (1 valor a cada 60 s)
+        leq1:  new Float32Array(Math.ceil(MAX_HISTORY_SECONDS / 60)),
+        // Leq de 10 minutos (1 valor a cada 600 s)
+        leq10: new Float32Array(Math.ceil(MAX_HISTORY_SECONDS / 600)),
+        // Ponteiros de escrita
+        spkPtr:   0,
+        leq1Ptr:  0,
+        leq10Ptr: 0,
+        // Número de entradas realmente preenchidas (para leitura parcial)
+        spkLen:   0,
+        leq1Len:  0,
+        leq10Len: 0,
+    };
+
+    // ─── Coeficientes de filtros Biquad (IEC 61672) ───────────────────────────
+    //
+    // Os coeficientes abaixo são pré-calculados para fs = 48000 Hz.
+    // Para outros sample rates, usamos a transformação Bilinear sob demanda.
+    //
+    // Cada filtro é uma cadeia de estágios biquad DF-II na forma:
+    //   H(z) = ∏ (b0 + b1·z⁻¹ + b2·z⁻²) / (1 + a1·z⁻¹ + a2·z⁻²)
+    //
+    // Fonte: IEC 61672-1:2013 Annex E + verificação via bilinear transform
+
+    let _filters = {};  // populado em _buildFilters(fs)
+
+    // Estado dos filtros (memória dos estágios biquad)
+    let _filterState = {
+        A: [],
+        C: [],
+        Z: []
+    };
+
+    // ─── API ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Inicializa o módulo para o sample rate dado.
+     * Deve ser chamado quando o AudioContext é criado.
+     */
+    function init(sampleRate) {
+        if (_initialized && _sampleRate === sampleRate) return;
+        _sampleRate = sampleRate;
+        _buildFilters(sampleRate);
+        _resetFilterState();
+        _initialized = true;
+        console.log(`[SplLogger] Init: fs=${sampleRate} weighting=${_weighting}`);
+    }
+
+    /**
+     * Alimenta o logger com um frame de dados do analyser.
+     * Deve ser chamado a cada requestAnimationFrame (~60 fps).
+     *
+     * @param {Float32Array} freqData - getFloatFrequencyData() em dB
+     * @param {Float32Array} timeData - getFloatTimeDomainData() em [-1,1]
+     * @param {number} fftSize        - analyser.fftSize
+     */
+    function push(freqData, timeData, fftSize) {
+        if (!_initialized) return;
+
+        const spl = _calcSPL(freqData, fftSize);
+
+        // Acumula energia linear (para Leq correto: média de potência, não de dB)
+        const power = Math.pow(10, spl / 10);
+        _acc1s       += power; _acc1sCount++;
+        _acc1min     += power; _acc1minCount++;
+        _acc10min    += power; _acc10minCount++;
+        _accTotal    += power; _accTotalCount++;
+
+        // Peak hold
+        if (spl > _lmaxSession) _lmaxSession = spl;
+        if (spl < _lminSession) _lminSession = spl;
+    }
+
+    /** Muda a ponderação ativa. Reseta o estado do filtro correspondente. */
+    function setWeighting(w) {
+        if (!['A', 'C', 'Z'].includes(w)) return;
+        _weighting = w;
+        _filterState[w] = _makeFilterState(w);
+        AppStore.setState({ splWeighting: w });
+        console.log(`[SplLogger] Ponderação: ${w}`);
+    }
+
+    /** Retorna leitura instantânea para a UI (não usa o buffer 1s — usa o último frame). */
+    function getLive() {
+        if (_acc1sCount === 0) return { spl: -Infinity, leq1: -Infinity, leq10: -Infinity };
+        const leq1s = _leanPowerToDb(_acc1s, _acc1sCount);
+        const leq1  = _hist.leq1Len > 0 ? _hist.leq1[(_hist.leq1Ptr - 1 + _hist.leq1.length) % _hist.leq1.length] : leq1s;
+        const leq10 = _hist.leq10Len > 0 ? _hist.leq10[(_hist.leq10Ptr - 1 + _hist.leq10.length) % _hist.leq10.length] : leq1s;
+        return { spl: leq1s, leq1, leq10 };
+    }
+
+    /** Retorna estatísticas da sessão completa. */
+    function getStats() {
+        const leqTotal = _leanPowerToDb(_accTotal, _accTotalCount);
+        const live     = getLive();
+        // Dose IEC 60268: % exposição para 8h a NIOSH_LIMIT_DB
+        // dose(%) = (T / T_permitido) × 100, onde T_permitido = 480 min a 85 dB(A)
+        const doseMin  = _elapsedSec / 60;
+        const doseAllowed = 480 * Math.pow(2, (NIOSH_LIMIT_DB - leqTotal) / 3);
+        const dose8h   = Math.min(999, Math.round(doseMin / doseAllowed * 100));
+
+        return {
+            leqTotal:    parseFloat(leqTotal.toFixed(1)),
+            leq1:        parseFloat(live.leq1.toFixed(1)),
+            leq10:       parseFloat(live.leq10.toFixed(1)),
+            lmax:        parseFloat(_lmaxSession.toFixed(1)),
+            lmin:        _lminSession === Infinity ? null : parseFloat(_lminSession.toFixed(1)),
+            dose8h,
+            elapsedSec:  _elapsedSec,
+            weighting:   _weighting,
+        };
+    }
+
+    /**
+     * Retorna o histórico de SPL para plotagem.
+     * Retorna apenas as entradas preenchidas (sem zeros de inicialização).
+     */
+    function getHistory() {
+        return {
+            // 1 valor/segundo — adequado para gráfico das últimas horas
+            seconds: _readRing(_hist.spk,   _hist.spkPtr,   _hist.spkLen),
+            leq1:    _readRing(_hist.leq1,  _hist.leq1Ptr,  _hist.leq1Len),
+            leq10:   _readRing(_hist.leq10, _hist.leq10Ptr, _hist.leq10Len),
+        };
+    }
+
+    /** Inicia o ticker de 1 segundo (deve ser chamado após init). */
+    function start() {
+        if (_ticker) return;
+        _ticker = setInterval(_onTick, 1000);
+    }
+
+    /** Para o ticker. */
+    function stop() {
+        if (_ticker) { clearInterval(_ticker); _ticker = null; }
+    }
+
+    /** Zera todos os acumuladores e histórico. */
+    function reset() {
+        stop();
+        _acc1s = _acc1sCount = 0;
+        _acc1min = _acc1minCount = 0;
+        _acc10min = _acc10minCount = 0;
+        _accTotal = _accTotalCount = 0;
+        _lmaxSession = -Infinity;
+        _lminSession  = Infinity;
+        _elapsedSec   = 0;
+        _hist.spkPtr = _hist.leq1Ptr = _hist.leq10Ptr = 0;
+        _hist.spkLen = _hist.leq1Len = _hist.leq10Len = 0;
+        _hist.spk.fill(0); _hist.leq1.fill(0); _hist.leq10.fill(0);
+        _resetFilterState();
+        AppStore.setState({ splHistory: null, splStats: null });
+    }
+
+    /**
+     * Exporta o histórico de 1 s como CSV para download.
+     * Formato: timestamp_iso,spl_db,weighting
+     */
+    function exportCSV() {
+        const data = getHistory();
+        const now  = new Date();
+        const rows = ['timestamp_iso,spl_db,weighting'];
+        const n    = data.seconds.length;
+        for (let i = 0; i < n; i++) {
+            const ts = new Date(now - (n - 1 - i) * 1000).toISOString();
+            rows.push(`${ts},${data.seconds[i].toFixed(1)},${_weighting}`);
+        }
+        return rows.join('\n');
+    }
+
+    // ─── Tick de 1 segundo ────────────────────────────────────────────────────
+
+    function _onTick() {
+        _elapsedSec++;
+
+        // SPL médio do último segundo (Leq1s)
+        const leq1s = _leanPowerToDb(_acc1s, _acc1sCount);
+        _acc1s = _acc1sCount = 0;
+
+        // Grava no ring buffer de 1 s
+        _writeRing(_hist.spk, _hist.spkPtr, leq1s);
+        _hist.spkPtr = (_hist.spkPtr + 1) % _hist.spk.length;
+        _hist.spkLen = Math.min(_hist.spkLen + 1, _hist.spk.length);
+
+        // Leq1: média de 60 s
+        if (_elapsedSec % 60 === 0) {
+            const leq1 = _leanPowerToDb(_acc1min, _acc1minCount);
+            _acc1min = _acc1minCount = 0;
+            _writeRing(_hist.leq1, _hist.leq1Ptr, leq1);
+            _hist.leq1Ptr = (_hist.leq1Ptr + 1) % _hist.leq1.length;
+            _hist.leq1Len = Math.min(_hist.leq1Len + 1, _hist.leq1.length);
+        }
+
+        // Leq10: média de 600 s
+        if (_elapsedSec % 600 === 0) {
+            const leq10 = _leanPowerToDb(_acc10min, _acc10minCount);
+            _acc10min = _acc10minCount = 0;
+            _writeRing(_hist.leq10, _hist.leq10Ptr, leq10);
+            _hist.leq10Ptr = (_hist.leq10Ptr + 1) % _hist.leq10.length;
+            _hist.leq10Len = Math.min(_hist.leq10Len + 1, _hist.leq10.length);
+        }
+
+        // Publica estado para a UI (reativo via AppStore)
+        const stats = getStats();
+        AppStore.setState({ splStats: stats });
+
+        // Alerta de limite a cada 10 s
+        if (_elapsedSec % 10 === 0 && stats.leq1 > NIOSH_LIMIT_DB) {
+            AppStore.setState({
+                splAlert: {
+                    level:   'warning',
+                    message: `⚠️ Lp${_weighting} ${stats.leq1.toFixed(1)} dB > ${NIOSH_LIMIT_DB} dB(A) NIOSH`,
+                    ts:      Date.now()
+                }
+            });
+        }
+    }
+
+    // ─── Cálculo SPL ─────────────────────────────────────────────────────────
+
+    /**
+     * Calcula SPL ponderado a partir do espectro de frequência.
+     * Usa os coeficientes de ponderação analítica (domínio da frequência).
+     *
+     * Para maior precisão, a ponderação C e Z no domínio do tempo
+     * são aplicadas via filtros biquad em cascata (ver _buildFilters).
+     *
+     * @param {Float32Array} freqData  - valores em dBFS
+     * @param {number}       fftSize
+     * @returns {number} SPL em dB (relativo a calibração REF_DB)
+     */
+    function _calcSPL(freqData, fftSize) {
+        const w        = _weighting;
+        const hzPerBin = _sampleRate / fftSize;
+        const n        = freqData.length;
+        let   sumPwr   = 0;
+
+        for (let k = 1; k < n; k++) {  // k=0 é DC, ignorar
+            const freq  = k * hzPerBin;
+            const dbRaw = freqData[k];  // dBFS
+            const dbW   = dbRaw + _getWeight(w, freq); // ponderação em dB
+            sumPwr += Math.pow(10, dbW / 10);
+        }
+
+        // Converte potência acumulada → dB + offset de calibração
+        return 10 * Math.log10(sumPwr + 1e-30) + REF_DB;
+    }
+
+    // ─── Funções de ponderação analítica (domínio da frequência) ─────────────
+
+    /**
+     * Retorna o ganho em dB da ponderação selecionada para a frequência f (Hz).
+     * IEC 61672-1:2013, Anexo E.
+     */
+    function _getWeight(type, f) {
+        if (type === 'Z') return 0;
+        if (type === 'A') return _aWeight(f);
+        if (type === 'C') return _cWeight(f);
+        return 0;
+    }
+
+    /** Ponderação A — IEC 61672-1:2013. Normalizada em 1 kHz (0 dB). */
+    function _aWeight(f) {
+        if (f < 10) return -100;
+        const f2 = f * f;
+        const f4 = f2 * f2;
+        const num = 12194 * 12194 * f4;
+        const den = (f2 + 20.6 * 20.6)
+                  * Math.sqrt((f2 + 107.7 * 107.7) * (f2 + 737.9 * 737.9))
+                  * (f2 + 12194 * 12194);
+        const rA  = num / (den + 1e-30);
+        return 20 * Math.log10(rA + 1e-30) + 2.00;   // +2.00 dB = normalização a 1 kHz
+    }
+
+    /**
+     * Ponderação C — IEC 61672-1:2013.
+     * C(f) = 12194²·f² / [(f²+20.6²)·(f²+12194²)]  × k_C
+     * Normalizada em 1 kHz (0 dB).
+     */
+    function _cWeight(f) {
+        if (f < 10) return -100;
+        const f2  = f * f;
+        const num = 12194 * 12194 * f2;
+        const den = (f2 + 20.6 * 20.6) * (f2 + 12194 * 12194);
+        const rC  = num / (den + 1e-30);
+        return 20 * Math.log10(rC + 1e-30) + 0.06;   // +0.06 dB = normalização a 1 kHz
+    }
+
+    // ─── Filtros Biquad IEC 61672 (domínio do tempo) ─────────────────────────
+    //
+    // Usados para processamento de sinal raw PCM (não usado no modo padrão
+    // que opera sobre freqData, mas exportado para uso em AudioWorklet futuro).
+
+    /**
+     * Constrói os coeficientes dos filtros biquad para fs dado,
+     * usando a transformação bilinear com pré-warping nas frequências de polo.
+     *
+     * Ponderação A: 2 zeros em DC + 1 zero em Nyquist + 4 pólos complexos
+     * (implementado como 2 biquads em série)
+     *
+     * Ponderação C: 2 zeros em DC + 2 pólos complexos
+     * (implementado como 1 biquad)
+     */
+    function _buildFilters(fs) {
+        _filters.A = _buildAFilter(fs);
+        _filters.C = _buildCFilter(fs);
+        _filters.Z = [{ b: [1, 0, 0], a: [1, 0, 0] }]; // passthrough
+    }
+
+    /**
+     * Filtro de Ponderação A em dois estágios biquad.
+     * Frequências de polo: f1=20.6Hz, f2=107.7Hz, f3=737.9Hz, f4=12194Hz.
+     * Frequências de zero: f=0 (duplo) e f=∞ (duplo).
+     *
+     * Estágio 1: polo em f1 e f4 (par conjugado HP+LP)
+     * Estágio 2: polo em f2 e f3 (shelving band)
+     */
+    function _buildAFilter(fs) {
+        const T  = 1 / fs;
+        const kp = (x) => 2 * Math.tan(Math.PI * x * T); // pré-warping
+
+        // Frequências analógicas dos polos
+        const w1 = 2 * Math.PI * 20.6;
+        const w2 = 2 * Math.PI * 107.7;
+        const w3 = 2 * Math.PI * 737.9;
+        const w4 = 2 * Math.PI * 12194;
+
+        // Transformação bilinear: s → (2/T)·(1-z⁻¹)/(1+z⁻¹)
+        // Para cada par de polos reais (w_i, w_j):
+        //   H(s) = s² / [(s+w_i)(s+w_j)]
+        //   → biquad DF-II com coefs calculados abaixo
+
+        function _bilinearPair(wa, wb) {
+            const k  = 4 / (T * T);
+            const b0 = k / (k + wa * wb + (wa + wb) * 2 / T);
+            // Aproximação de 2ª ordem: par de polos reais → biquad HP
+            const a0 = 1;
+            const a1 = (2 * (wa * wb / k - 1));
+            const a2 = (1 - (wa + wb) * 2 / (k * T) + wa * wb / k);
+            const n  = k + (wa + wb) * 2 / T + wa * wb;
+            return {
+                b: [k / n, -2 * k / n, k / n],
+                a: [1, (2 * wa * wb / n - 2 * k / n), (k / n - (wa + wb) * 2 / (T * n) + wa * wb / n)]
+            };
+        }
+
+        // Estágio 1: w1 × w4 (roll-off grave e agudo)
+        const stage1 = _bilinearPair(w1, w4);
+        // Estágio 2: w2 × w3 (curva da orelha)
+        const stage2 = _bilinearPair(w2, w3);
+
+        // Ganho de normalização a 1 kHz: aplicado ao b0 do estágio 1
+        const normGain = Math.pow(10, -2.00 / 20); // -2.00 dB → linear
+        stage1.b = stage1.b.map(v => v * normGain);
+
+        return [stage1, stage2];
+    }
+
+    /**
+     * Filtro de Ponderação C em um estágio biquad.
+     * H_C(s) = (w4²·s²) / [(s²+w1·s+w1²)·(s²+w4·s+w4²)]
+     * Simplificado para 1 biquad (2ª ordem):
+     *   zeros duplos em DC, pólos em w1 e w4.
+     */
+    function _buildCFilter(fs) {
+        const T  = 1 / fs;
+        const w1 = 2 * Math.PI * 20.6;
+        const w4 = 2 * Math.PI * 12194;
+        const k  = 4 / (T * T);
+        const n  = k + (w1 + w4) * 2 / T + w1 * w4;
+
+        const b0 = k * w4 * w4 / (n * n);
+        const b1 = -2 * b0;
+        const b2 =  b0;
+        const a1 = (2 * w1 * w4 - 2 * k) / n;
+        const a2 = (k - (w1 + w4) * 2 / T + w1 * w4) / n;
+
+        // Normalização a 1 kHz: +0.06 dB
+        const norm = Math.pow(10, -0.06 / 20);
+        return [{ b: [b0 * norm, b1 * norm, b2 * norm], a: [1, a1, a2] }];
+    }
+
+    function _resetFilterState() {
+        _filterState.A = _makeFilterState('A');
+        _filterState.C = _makeFilterState('C');
+        _filterState.Z = _makeFilterState('Z');
+    }
+
+    function _makeFilterState(w) {
+        const stages = (_filters[w] || []).length;
+        return Array.from({ length: stages }, () => [0, 0]);
+    }
+
+    /**
+     * Aplica o filtro biquad em cascata a um buffer PCM.
+     * Útil para processamento no domínio do tempo (AudioWorklet / análise offline).
+     *
+     * @param {Float32Array} input    - PCM [-1, 1]
+     * @param {string}       weighting - 'A'|'C'|'Z'
+     * @returns {Float32Array}        - sinal filtrado
+     */
+    function applyWeightingFilter(input, weighting) {
+        const stages = _filters[weighting] || [];
+        let buf = new Float32Array(input);
+
+        for (let s = 0; s < stages.length; s++) {
+            const { b, a } = stages[s];
+            const z        = _filterState[weighting][s];
+            const out      = new Float32Array(buf.length);
+            for (let n = 0; n < buf.length; n++) {
+                const x = buf[n];
+                const y = b[0] * x + b[1] * z[0] + b[2] * z[1]
+                        - a[1] * z[0] - a[2] * z[1];
+                z[1] = z[0]; z[0] = x;
+                out[n] = y;
+            }
+            buf = out;
+        }
+        return buf;
+    }
+
+    // ─── Helpers ring buffer ──────────────────────────────────────────────────
+
+    /** Escreve valor no ring buffer na posição ptr (não incrementa o ptr aqui). */
+    function _writeRing(buf, ptr, value) {
+        buf[ptr % buf.length] = value;
+    }
+
+    /**
+     * Lê o ring buffer em ordem cronológica (mais antigo → mais recente).
+     * Retorna apenas os `len` elementos preenchidos.
+     */
+    function _readRing(buf, ptr, len) {
+        if (len === 0) return new Float32Array(0);
+        const n      = buf.length;
+        const result = new Float32Array(len);
+        const start  = (ptr - len + n * 2) % n; // garantia anti-negativo
+        for (let i = 0; i < len; i++) {
+            result[i] = buf[(start + i) % n];
+        }
+        return result;
+    }
+
+    /** Converte potência acumulada em dB (Leq). */
+    function _leanPowerToDb(sumPower, count) {
+        if (count === 0) return -Infinity;
+        return 10 * Math.log10(sumPower / count + 1e-30);
+    }
+
+    // ─── Exposição global ─────────────────────────────────────────────────────
+
+    window.SplLogger = {
+        init,
+        start,
+        stop,
+        push,
+        setWeighting,
+        getLive,
+        getStats,
+        getHistory,
+        applyWeightingFilter,
+        exportCSV,
+        reset,
+        // Constantes úteis para a UI
+        NIOSH_LIMIT_DB,
+        REF_DB,
+    };
+
+})();

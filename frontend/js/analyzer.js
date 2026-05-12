@@ -419,7 +419,13 @@ async function startAnalyzer() {
         analyserFast.minDecibels = -100;
         analyserFast.maxDecibels = -10;
         source.connect(analyserFast);
-        
+
+        // ── SPL Logger (IEC 61672): inicializa e arranca ticker de 1s ───────────
+        if (window.SplLogger) {
+            SplLogger.init(audioCtx.sampleRate);
+            SplLogger.start();
+        }
+
         isAnalyzing = true;
         
         // Update UI - Header
@@ -475,6 +481,10 @@ async function stopAnalyzer() {
     analyserFast = null;
     source = null;
     audioWorkletNode = null;
+
+    // ── SPL Logger: para o ticker ─────────────────────────────────────────
+    if (window.SplLogger) SplLogger.stop();
+
     if (pinkNoiseNode) {
         pinkNoiseNode.disconnect();
         pinkNoiseNode = null;
@@ -943,6 +953,13 @@ function analyze() {
     }
     
     analyser.getFloatTimeDomainData(timeData);
+
+    // ── SPL Logger (IEC 61672) ──────────────────────────────────────────────
+    // Alimenta o logger com os dados de frequência já calibrados.
+    // O SplLogger acumula energia internamente e publica no AppStore via ticker de 1s.
+    if (window.SplLogger) {
+        SplLogger.push(freqData, timeData, analyser.fftSize);
+    }
 
     // ✅ Novo: Detecção de Clipping (Saturação Digital)
     let isClipping = false;
