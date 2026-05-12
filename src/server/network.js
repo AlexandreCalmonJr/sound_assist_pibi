@@ -657,6 +657,7 @@ module.exports = {
     stop,
     registerNetDiagHandlers,
     getDeviceList: _getDeviceList,
+    getLocalIp: _getLocalIp,
     getStats: () => ({ ..._state.stats }),
     THRESHOLDS: DEFAULT_THRESHOLDS,
 };

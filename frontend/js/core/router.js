@@ -12,6 +12,7 @@ const ROUTE_MAP = {
     'feedback-detector': { path: 'pages/feedback-detector.html', title: 'Detector Feedback',   category: 'Análise' },
     'eq-guide':          { path: 'pages/eq-guide.html',          title: 'Guia de EQ',          category: 'Análise' },
     'eq':                { path: 'pages/eq.html',                title: 'Equalização',         category: 'Análise' },
+    'auto-eq':           { path: 'pages/auto-eq.html',           title: 'Auto-EQ / Target Curve', category: 'Análise' },
     'mixer-input':       { path: 'pages/mixer-input.html',       title: 'Canais de Entrada',   category: 'Mixer' },
     'mixer-aux':         { path: 'pages/mixer-aux.html',         title: 'Monitores & Aux',     category: 'Mixer' },
     'mixer-fx':          { path: 'pages/mixer-fx.html',          title: 'Efeitos',             category: 'Mixer' },
