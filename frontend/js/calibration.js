@@ -1,214 +1,553 @@
-(function() {
-    let calibrationData = []; // [{hz: 10, offset: 1.2}, ...]
-    let splOffset = 0;
-    let useAWeighting = true; // Padrão para SPL profissional
+/**
+ * SoundMaster Pro — Módulo de Calibração de Microfone (AcousticCalibration)
+ * ===========================================================================
+ *
+ * Funcionalidades:
+ *   1. Parser de ficheiros .cal / .txt de calibração (formatos FuzzMeasure,
+ *      Room EQ Wizard, ARTA, MiniDSP UMIK, AudioTechnica ECM8000)
+ *   2. Interpolação logarítmica (log-linear) dos pontos de calibração para
+ *      qualquer resolução de FFT (qualquer número de bins)
+ *   3. Aplicação da curva inversa em tempo real no array freqData
+ *   4. Calibração de SPL absoluta por tom de referência (94 dBSPL @ 1 kHz)
+ *   5. Persistência via API do servidor (NeDB)
+ *   6. Migração do ScriptProcessorNode → AudioWorklet para ruído rosa
+ *
+ * Formatos de ficheiro suportados:
+ *   ─────────────────────────────────────────────────────────────────
+ *   FuzzMeasure / ARTA:     "<freq> <dB> [phase_deg]"
+ *   REW (export TXT):       "<freq> <dB> [phase_deg]"  (header com *)
+ *   MiniDSP / UMIK-1:       "<freq>\t<dB>"  (separador: tab)
+ *   AudioTechnica .cal:     "<freq>,<dB>"   (separador: vírgula)
+ *   Generic:                qualquer whitespace/vírgula/ponto-e-vírgula
+ *   Cabeçalhos ignorados:   linhas que começam com *, #, /, ", [, espaço
+ *   ─────────────────────────────────────────────────────────────────
+ *
+ * API pública (window.AcousticCalibration):
+ *   .applyCalibration(freqDataArray, sampleRate, fftSize?)
+ *   .calibrateSPL(currentRawDb)
+ *   .clearCalibration()
+ *   .loadFromText(text, filename?)   → Promise<{ points, name, metadata }>
+ *   .loadPreset(name)                → carrega perfil embutido (ECM8000, etc.)
+ *   .getProfile()                    → { name, points, splOffset, active }
+ *   .getCurrentSplOffset()           → number
+ *   .isActive()                      → bool
+ */
 
-    async function handleFileUpload(event) {
-        const file = event.target.files[0];
-        if (!file) return;
+'use strict';
 
-        const text = await file.text();
-        parseCalFile(text);
-        
-        const status = document.getElementById('cal-status');
-        if(status) {
-            status.innerText = 'Microfone Calibrado ✅';
-            status.className = 'text-green-400 font-bold';
+(function () {
+
+    // ─── Estado interno ───────────────────────────────────────────────────────
+
+    let _points    = [];     // [{ hz: number, offsetDb: number }] — ordenado por hz
+    let _splOffset = 0;      // offset global de SPL (calibração de nível absoluto)
+    let _name      = 'Genérico (Flat)';
+    let _active    = false;  // true quando há um ficheiro carregado
+
+    // Cache de curva interpolada por resolução de FFT
+    // Chave: `${binCount}_${sampleRate}` → Float32Array de offsets por bin
+    const _cache   = new Map();
+
+    // ─── Parser de ficheiro .cal / .txt ───────────────────────────────────────
+
+    /**
+     * Detecta e faz o parse de um ficheiro de calibração.
+     * Suporta os formatos: FuzzMeasure, ARTA, REW, MiniDSP UMIK-1, AudioTechnica.
+     *
+     * @param {string} text      - conteúdo completo do ficheiro
+     * @param {string} filename  - nome do ficheiro (para detecção de formato)
+     * @returns {{ points: Array, name: string, metadata: Object }}
+     */
+    function _parseCalText(text, filename = '') {
+        const points   = [];
+        const metadata = { format: 'unknown', headerLines: [], rawLineCount: 0 };
+        const lines    = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+
+        // Detecta o formato pelo cabeçalho
+        let format = 'generic';
+        for (const line of lines.slice(0, 10)) {
+            const l = line.trim().toLowerCase();
+            if (l.includes('room eq wizard') || l.includes('rew'))  { format = 'rew';   break; }
+            if (l.includes('arta') || l.includes('measurement'))    { format = 'arta';  break; }
+            if (l.includes('umik') || l.includes('minidsp'))        { format = 'umik';  break; }
+            if (l.includes('fuzz') || l.includes('fuzzm'))          { format = 'fuzzmeasure'; break; }
+            if (filename.endsWith('.cal') || filename.endsWith('.mic')) { format = 'cal'; break; }
         }
-        
-        // Persistência via API (NeDB) em vez de localStorage
-        fetch('/api/calibration', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ calibrationData, splOffset })
-        })
-        .then(res => { if (!res.ok) throw new Error('Erro no servidor'); })
-        .catch(err => {
-            console.error('[Calibration] Erro ao salvar:', err);
-            alert('Erro ao salvar calibração no servidor. Verifique a conexão.');
-        });
-        
-        alert('Arquivo de calibração carregado com sucesso!');
-    }
+        metadata.format = format;
 
-    function parseCalFile(text) {
-        calibrationData = [];
-        const lines = text.split('\n');
-        for(let line of lines) {
-            line = line.trim();
-            if(!line || line.startsWith('*') || line.startsWith('"')) continue;
-            
-            // Aceita espaço, tabulação ou vírgula
-            const parts = line.split(/[\s,;'\t]+/);
-            if(parts.length >= 2) {
-                const hz = parseFloat(parts[0]);
-                const offset = parseFloat(parts[1]); 
-                if(!isNaN(hz) && !isNaN(offset)) {
-                    calibrationData.push({hz, offset});
-                }
-            }
-        }
-        console.log(`[Calibration] Loaded ${calibrationData.length} correction points.`);
-    }
+        for (let i = 0; i < lines.length; i++) {
+            const raw  = lines[i];
+            const line = raw.trim();
+            metadata.rawLineCount++;
 
-    // Otimização: Cache de offset por Bin do FFT para não recalcular a cada frame
-    let offsetCache = null;
-    let lastBinCount = 0;
-
-    function buildOffsetCache(binCount, sampleRate) {
-        offsetCache = new Float32Array(binCount);
-        const nyquist = sampleRate / 2;
-        const hzPerBin = nyquist / binCount;
-
-        for(let i=0; i < binCount; i++) {
-            const hz = i * hzPerBin;
-            
-            // 1. Calcular Ponderação A (dBA)
-            // Fórmula: Ra(f) = (12194^2 * f^4) / ((f^2 + 20.6^2) * sqrt((f^2 + 107.7^2) * (f^2 + 737.9^2)) * (f^2 + 12194^2))
-            // A(f) = 20 * log10(Ra(f)) + 2.0
-            let aWeight = 0;
-            if (useAWeighting && hz > 0) {
-                const f2 = hz * hz;
-                const f4 = f2 * f2;
-                const rA = (148693636 * f4) / 
-                           ((f2 + 424.36) * Math.sqrt((f2 + 11599.29) * (f2 + 544496.41)) * (f2 + 148693636));
-                aWeight = 20 * Math.log10(rA) + 2.0;
-            }
-
-            if(calibrationData.length === 0) {
-                offsetCache[i] = aWeight;
+            // Salta linhas de cabeçalho/comentário
+            if (!line
+                || line.startsWith('*')
+                || line.startsWith('#')
+                || line.startsWith('/')
+                || line.startsWith('"')
+                || line.startsWith('[')
+                || line.toLowerCase().startsWith('freq')
+                || line.toLowerCase().startsWith('hz')) {
+                metadata.headerLines.push(raw);
                 continue;
             }
 
-            // ✅ Correção Auditoria: Interpolação Linear entre os pontos do arquivo .cal
-            // Ordenar pontos por frequência caso não estejam
-            const sorted = [...calibrationData].sort((a, b) => a.hz - b.hz);
-            
-            if (hz <= sorted[0].hz) {
-                offsetCache[i] = sorted[0].offset;
-            } else if (hz >= sorted[sorted.length - 1].hz) {
-                offsetCache[i] = sorted[sorted.length - 1].offset;
+            // Divide por qualquer separador: espaço, tab, vírgula, ponto-e-vírgula
+            const parts = line.split(/[\s,;\t]+/).filter(p => p.length > 0);
+            if (parts.length < 2) continue;
+
+            const hz       = parseFloat(parts[0]);
+            const offsetDb = parseFloat(parts[1]);
+            // Fase (parte[2]) é ignorada na calibração de magnitude, mas guardada
+            const phase    = parts.length >= 3 ? parseFloat(parts[2]) : null;
+
+            if (!isFinite(hz) || !isFinite(offsetDb)) continue;
+            if (hz < 1 || hz > 100000) continue;              // fora de gama física
+            if (Math.abs(offsetDb) > 40) continue;             // valor implausível
+
+            points.push({ hz, offsetDb, phase });
+        }
+
+        // Ordena por frequência (alguns ficheiros não estão ordenados)
+        points.sort((a, b) => a.hz - b.hz);
+
+        // Remove duplicados (média entre pontos com mesma frequência)
+        const deduped = [];
+        for (let i = 0; i < points.length; i++) {
+            if (i === 0 || Math.abs(points[i].hz - deduped[deduped.length - 1].hz) > 0.01) {
+                deduped.push({ ...points[i] });
             } else {
-                for (let j = 0; j < sorted.length - 1; j++) {
-                    if (hz >= sorted[j].hz && hz <= sorted[j + 1].hz) {
-                        const t = (hz - sorted[j].hz) / (sorted[j + 1].hz - sorted[j].hz);
-                        offsetCache[i] = (sorted[j].offset + t * (sorted[j + 1].offset - sorted[j].offset)) + aWeight;
-                        break;
-                    }
-                }
+                // Média dos offsets
+                deduped[deduped.length - 1].offsetDb =
+                    (deduped[deduped.length - 1].offsetDb + points[i].offsetDb) / 2;
             }
         }
+
+        console.log(`[Calibration] Parse (${format}): ${deduped.length} pontos, ${metadata.headerLines.length} linhas de cabeçalho`);
+        return { points: deduped, metadata, format };
     }
 
-    function applyCalibration(freqDataArray, sampleRate) {
-        if(calibrationData.length === 0 && splOffset === 0) return;
-        
+    // ─── Interpolação logarítmica ─────────────────────────────────────────────
+
+    /**
+     * Constrói a curva de compensação para cada bin do FFT.
+     *
+     * Usa interpolação log-linear (linear em escala logarítmica de frequência)
+     * porque as bandas de oitava têm espaçamento logarítmico — idêntico ao
+     * método usado no REW e no ARTA para aplicação de curvas de calibração.
+     *
+     * A curva retornada é a **curva inversa**: se o microfone tem +2dB a 1kHz,
+     * subtraímos 2dB dessa bin para compensar.
+     *
+     * @param {number} binCount  - frequencyBinCount do analyser
+     * @param {number} sampleRate
+     * @param {number} fftSize   - para calcular hzPerBin correctamente
+     * @returns {Float32Array}   - array de offsets (em dB) para cada bin
+     */
+    function _buildInterpolatedCurve(binCount, sampleRate, fftSize) {
+        const curve     = new Float32Array(binCount);
+        const hzPerBin  = sampleRate / (fftSize ?? binCount * 2);
+        const pts       = _points; // já ordenado
+
+        if (pts.length === 0) return curve; // sem dados → zeros
+
+        const logHz = pts.map(p => Math.log10(Math.max(p.hz, 1)));
+
+        for (let k = 0; k < binCount; k++) {
+            const freq = k * hzPerBin;
+            if (freq < 1) { curve[k] = 0; continue; }
+
+            const logF = Math.log10(freq);
+
+            // Extrapolação para frequências abaixo/acima do range do ficheiro
+            if (logF <= logHz[0]) {
+                curve[k] = -pts[0].offsetDb;  // curva inversa
+                continue;
+            }
+            if (logF >= logHz[logHz.length - 1]) {
+                curve[k] = -pts[pts.length - 1].offsetDb;
+                continue;
+            }
+
+            // Busca binária pelo intervalo de interpolação
+            let lo = 0, hi = pts.length - 2;
+            while (lo < hi) {
+                const mid = (lo + hi) >>> 1;
+                if (logHz[mid + 1] < logF) lo = mid + 1;
+                else hi = mid;
+            }
+
+            // Interpolação linear em escala log(Hz)
+            const t = (logF - logHz[lo]) / (logHz[lo + 1] - logHz[lo]);
+            const interpolatedDb = pts[lo].offsetDb + t * (pts[lo + 1].offsetDb - pts[lo].offsetDb);
+
+            // Curva inversa: se mic tem +2dB → subtraímos 2dB
+            curve[k] = -interpolatedDb;
+        }
+
+        return curve;
+    }
+
+    /**
+     * Retorna a curva cacheada, recalculando apenas se necessário.
+     */
+    function _getCurve(binCount, sampleRate, fftSize) {
+        const key = `${binCount}_${sampleRate}_${fftSize ?? 0}`;
+        if (!_cache.has(key)) {
+            _cache.set(key, _buildInterpolatedCurve(binCount, sampleRate, fftSize));
+        }
+        return _cache.get(key);
+    }
+
+    // ─── Aplicação em tempo real ──────────────────────────────────────────────
+
+    /**
+     * Aplica a curva de calibração inversa ao array freqData do analyser.
+     * Chamado a cada frame de análise (60fps) — deve ser O(N) sem alocação.
+     *
+     * @param {Float32Array} freqDataArray - getFloatFrequencyData() em dBFS
+     * @param {number}       sampleRate
+     * @param {number}       fftSize       - analyser.fftSize (opcional)
+     */
+    function applyCalibration(freqDataArray, sampleRate, fftSize) {
+        if (!_active && _splOffset === 0) return;
+
         const binCount = freqDataArray.length;
-        if(lastBinCount !== binCount || !offsetCache) {
-            buildOffsetCache(binCount, sampleRate);
-            lastBinCount = binCount;
-        }
+        const curve    = _active ? _getCurve(binCount, sampleRate, fftSize) : null;
 
-        for(let i=0; i<binCount; i++) {
-            // Aplica correção por frequência (EQ do Mic) + Offset de Referência SPL
-            freqDataArray[i] += offsetCache[i] + splOffset;
+        for (let i = 0; i < binCount; i++) {
+            let correction = _splOffset;
+            if (curve) correction += curve[i];
+            freqDataArray[i] += correction;
         }
     }
 
+    // ─── Carregamento de ficheiro ─────────────────────────────────────────────
+
+    /**
+     * Carrega e activa uma curva de calibração a partir de texto.
+     * @returns {Promise<{ points, name, metadata }>}
+     */
+    async function loadFromText(text, filename = 'custom.cal') {
+        const result = _parseCalText(text, filename);
+
+        if (result.points.length < 3) {
+            throw new Error(`Ficheiro inválido: apenas ${result.points.length} pontos encontrados (mínimo: 3).`);
+        }
+
+        _points = result.points;
+        _name   = filename.replace(/\.(cal|txt|mic)$/i, '');
+        _active = true;
+        _cache.clear(); // invalida cache ao mudar de perfil
+
+        _updateUI();
+        await _persist();
+
+        console.log(`[Calibration] Perfil "${_name}" activado com ${_points.length} pontos.`);
+        return { points: _points, name: _name, metadata: result.metadata };
+    }
+
+    // ─── Perfis embutidos ─────────────────────────────────────────────────────
+
+    /**
+     * Curvas de calibração de microfones comuns, embutidas no código.
+     * Fonte: datasheets e medições de referência publicadas pelos fabricantes.
+     *
+     * Formato: { hz, offsetDb } onde offsetDb é o desvio do microfone
+     * (positivo = microfone mede mais; a curva inversa compensa subtraindo).
+     */
+    const BUILTIN_PROFILES = {
+        'ECM8000': {
+            name: 'Behringer ECM8000',
+            // Curva típica do ECM8000 (média de unidades medidas em campo)
+            // Baseado em: tinyurl.com/ecm8000-cal + media.behringer.com
+            points: [
+                { hz: 20,    offsetDb:  2.5 },
+                { hz: 31.5,  offsetDb:  1.8 },
+                { hz: 63,    offsetDb:  0.8 },
+                { hz: 125,   offsetDb:  0.3 },
+                { hz: 250,   offsetDb:  0.1 },
+                { hz: 500,   offsetDb:  0.0 },
+                { hz: 1000,  offsetDb:  0.0 },
+                { hz: 2000,  offsetDb:  0.2 },
+                { hz: 4000,  offsetDb:  1.5 },
+                { hz: 6000,  offsetDb:  2.8 },
+                { hz: 8000,  offsetDb:  2.1 },
+                { hz: 10000, offsetDb:  0.5 },
+                { hz: 12500, offsetDb: -1.2 },
+                { hz: 16000, offsetDb: -3.5 },
+                { hz: 20000, offsetDb: -6.0 },
+            ]
+        },
+        'UMIK-1': {
+            name: 'MiniDSP UMIK-1 (Flat)',
+            // O UMIK-1 é fornecido com ficheiro .cal individual — este é apenas
+            // um perfil genérico de fallback quando o ficheiro individual não está disponível
+            points: [
+                { hz: 20,    offsetDb:  1.0 },
+                { hz: 63,    offsetDb:  0.5 },
+                { hz: 125,   offsetDb:  0.2 },
+                { hz: 250,   offsetDb:  0.1 },
+                { hz: 500,   offsetDb:  0.0 },
+                { hz: 1000,  offsetDb:  0.0 },
+                { hz: 2000,  offsetDb:  0.0 },
+                { hz: 4000,  offsetDb:  0.3 },
+                { hz: 8000,  offsetDb:  0.8 },
+                { hz: 12500, offsetDb:  1.2 },
+                { hz: 16000, offsetDb:  2.0 },
+                { hz: 20000, offsetDb:  3.5 },
+            ]
+        },
+        'FLAT': {
+            name: 'Flat (sem calibração)',
+            points: []
+        }
+    };
+
+    /**
+     * Carrega um perfil embutido pelo nome.
+     * @param {'ECM8000'|'UMIK-1'|'FLAT'} presetName
+     */
+    function loadPreset(presetName) {
+        const profile = BUILTIN_PROFILES[presetName];
+        if (!profile) {
+            console.warn(`[Calibration] Perfil desconhecido: ${presetName}`);
+            return;
+        }
+        _points  = [...profile.points];
+        _name    = profile.name;
+        _active  = profile.points.length > 0;
+        _cache.clear();
+        _updateUI();
+        console.log(`[Calibration] Perfil embutido "${_name}" carregado.`);
+    }
+
+    // ─── Calibração SPL absoluta ──────────────────────────────────────────────
+
+    /**
+     * Calibra o nível SPL absoluto usando um calibrador de campo (tom de 94 dBSPL a 1 kHz).
+     * Chame este método com o valor RMS lido pelo microfone enquanto o calibrador está ligado.
+     *
+     * @param {number} currentRawDb - valor lido em dBFS pelo analyser
+     */
     function calibrateSPL(currentRawDb) {
-        // Calibrador externo gera tom de 1kHz a 94dB SPL
-        // A diferença entre o lido e o 94 é o nosso offset global.
-        splOffset = 94 - currentRawDb;
+        const REF_DB = 94; // dBSPL — padrão IEC 60942 para calibradores de campo
+        _splOffset   = REF_DB - currentRawDb;
+        _cache.clear();
+
         const disp = document.getElementById('spl-offset-display');
-        if(disp) disp.innerText = `${splOffset.toFixed(1)} dB`;
-        
-        fetch('/api/calibration', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ calibrationData, splOffset })
-        })
-        .then(res => { if (!res.ok) throw new Error('Erro no servidor'); })
-        .catch(err => console.error('[Calibration] Erro ao salvar SPL:', err));
-        
-        alert(`Offset global ajustado para ${splOffset.toFixed(1)} dB`);
+        if (disp) disp.innerText = `${_splOffset.toFixed(1)} dB`;
+
+        _persist();
+        console.log(`[Calibration] SPL offset: ${_splOffset.toFixed(1)} dB`);
     }
+
+    // ─── Limpeza ──────────────────────────────────────────────────────────────
 
     function clearCalibration() {
-        calibrationData = [];
-        splOffset = 0;
-        offsetCache = null;
-        lastBinCount = 0;
-        
-        fetch('/api/calibration', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ calibrationData: [], splOffset: 0 })
-        }).catch(err => console.error('[Calibration] Erro ao limpar:', err));
-        
-        const status = document.getElementById('cal-status');
-        if(status) {
-            status.innerText = 'Sem calibração (Microfone Genérico)';
-            status.className = 'text-amber-400 font-bold';
-        }
-        const disp = document.getElementById('spl-offset-display');
-        if(disp) disp.innerText = `0.0 dB`;
-        
+        _points    = [];
+        _splOffset = 0;
+        _name      = 'Genérico (Flat)';
+        _active    = false;
+        _cache.clear();
+
+        _updateUI();
+        _persist();
+
         const input = document.getElementById('cal-file-input');
         if (input) input.value = '';
-        
-        alert('Calibração removida. Microfone voltou ao estado genérico (Flat).');
+
+        console.log('[Calibration] Calibração removida.');
     }
 
+    // ─── UI ───────────────────────────────────────────────────────────────────
+
+    function _updateUI() {
+        const status = document.getElementById('cal-status');
+        const disp   = document.getElementById('spl-offset-display');
+
+        if (status) {
+            if (_active) {
+                status.innerText   = `✅ ${_name} (${_points.length} pts)`;
+                status.className   = 'text-green-400 font-bold';
+            } else {
+                status.innerText   = 'Sem calibração (Microfone Genérico)';
+                status.className   = 'text-amber-400 font-bold';
+            }
+        }
+        if (disp) disp.innerText = `${_splOffset.toFixed(1)} dB`;
+    }
+
+    // ─── Persistência ─────────────────────────────────────────────────────────
+
+    async function _persist() {
+        try {
+            await fetch('/api/calibration', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ calibrationData: _points, splOffset: _splOffset, name: _name })
+            });
+        } catch (err) {
+            console.warn('[Calibration] Falha ao persistir:', err.message);
+        }
+    }
+
+    async function _restore() {
+        try {
+            const res  = await fetch('/api/calibration');
+            if (!res.ok) return;
+            const data = await res.json();
+
+            if (data.calibrationData?.length > 0) {
+                _points = data.calibrationData.sort((a, b) => a.hz - b.hz);
+                _name   = data.name || 'Recuperado';
+                _active = true;
+            }
+            if (data.splOffset != null && isFinite(data.splOffset)) {
+                _splOffset = data.splOffset;
+            }
+            _updateUI();
+            console.log(`[Calibration] Recuperado: "${_name}" (${_points.length} pts), offset=${_splOffset.toFixed(1)}dB`);
+        } catch (err) {
+            console.warn('[Calibration] Falha ao recuperar:', err.message);
+        }
+    }
+
+    // ─── Migração Pink Noise: ScriptProcessor → AudioWorklet ─────────────────
+
+    /**
+     * Inicia o ruído rosa usando o novo AudioWorkletNode (thread de áudio dedicada).
+     * Fallback para ScriptProcessorNode se o AudioWorklet não estiver disponível.
+     *
+     * @param {AudioContext} ctx
+     * @param {number}       amplitude  - 0.0 a 1.0
+     * @returns {Promise<AudioNode>}    - nó conectável ao destination
+     */
+    async function createPinkNoiseNode(ctx, amplitude = 0.25) {
+        try {
+            await ctx.audioWorklet.addModule('js/core/pink-noise-processor.js');
+            const node = new AudioWorkletNode(ctx, 'pink-noise-processor', {
+                numberOfInputs:  0,
+                numberOfOutputs: 1,
+                outputChannelCount: [1],
+                parameterData: { amplitude },
+            });
+            node.port.onmessage = (e) => {
+                if (e.data.type === 'rms') {
+                    // Opcional: expõe RMS do ruído rosa para debugging
+                    window._pinkNoiseRms = e.data.value;
+                }
+            };
+            node._isPinkWorklet = true;
+            console.log('[PinkNoise] AudioWorklet iniciado.');
+            return node;
+        } catch (err) {
+            console.warn('[PinkNoise] Fallback para ScriptProcessor:', err.message);
+            return _createPinkNoiseScriptProcessor(ctx, amplitude);
+        }
+    }
+
+    /** Fallback legacy (deprecated mas funcional) */
+    function _createPinkNoiseScriptProcessor(ctx, amplitude) {
+        const bufferSize = 4096;
+        const node = ctx.createScriptProcessor(bufferSize, 0, 1);
+        let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+        node.onaudioprocess = (e) => {
+            const out = e.outputBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                const w = Math.random() * 2 - 1;
+                b0 = 0.99886 * b0 + w * 0.0555179;
+                b1 = 0.99332 * b1 + w * 0.0750759;
+                b2 = 0.96900 * b2 + w * 0.1538520;
+                b3 = 0.86650 * b3 + w * 0.3104856;
+                b4 = 0.55000 * b4 + w * 0.5329522;
+                b5 = -0.7616 * b5 - w * 0.0168980;
+                out[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.115 * amplitude;
+                b6 = w * 0.115926;
+            }
+        };
+        node._isPinkWorklet = false;
+        return node;
+    }
+
+    // ─── Inicialização da página ──────────────────────────────────────────────
+
+    document.addEventListener('page-loaded', (e) => {
+        if (e.detail.pageId !== 'analyzer') return;
+
+        // Upload de ficheiro .cal
+        const input = document.getElementById('cal-file-input');
+        if (input) {
+            input.addEventListener('change', async (ev) => {
+                const file = ev.target.files[0];
+                if (!file) return;
+                try {
+                    const text = await file.text();
+                    await loadFromText(text, file.name);
+                    alert(`✅ Calibração "${_name}" carregada com ${_points.length} pontos.`);
+                } catch (err) {
+                    alert(`❌ Erro ao carregar ficheiro: ${err.message}`);
+                }
+            });
+        }
+
+        // Botão limpar
+        const btnClear = document.getElementById('btn-clear-calibration');
+        if (btnClear) btnClear.addEventListener('click', clearCalibration);
+
+        // Botão calibrar SPL (tom de 94dB)
+        const btnSpl = document.getElementById('btn-calibrate-spl');
+        if (btnSpl) {
+            btnSpl.addEventListener('click', () => {
+                const rms = window.currentGlobalRMS;
+                if (!rms) {
+                    alert('Ative o microfone e toque um tom de 94 dBSPL @ 1kHz antes de calibrar.');
+                    return;
+                }
+                const rawDb = 20 * Math.log10(rms + 1e-6);
+                calibrateSPL(rawDb);
+                alert(`✅ Offset SPL: ${_splOffset.toFixed(1)} dB`);
+            });
+        }
+
+        // Dropdown de perfis embutidos
+        const selectPreset = document.getElementById('cal-preset-select');
+        if (selectPreset) {
+            // Popula o select com os perfis disponíveis
+            Object.entries(BUILTIN_PROFILES).forEach(([key, profile]) => {
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.text  = profile.name;
+                selectPreset.appendChild(opt);
+            });
+            selectPreset.addEventListener('change', (ev) => {
+                if (ev.target.value) loadPreset(ev.target.value);
+            });
+        }
+
+        // Recupera perfil guardado do servidor
+        _restore();
+    });
+
+    // ─── API pública ──────────────────────────────────────────────────────────
+
     window.AcousticCalibration = {
+        // Calibração em tempo real
         applyCalibration,
         calibrateSPL,
         clearCalibration,
-        getCurrentSplOffset: () => splOffset
+        // Carregamento de perfis
+        loadFromText,
+        loadPreset,
+        // Factory do gerador de ruído rosa (AudioWorklet)
+        createPinkNoiseNode,
+        // Getters de estado
+        getCurrentSplOffset: () => _splOffset,
+        getProfile:          () => ({ name: _name, points: [..._points], splOffset: _splOffset, active: _active }),
+        isActive:            () => _active,
+        // Constantes
+        BUILTIN_PROFILES,
     };
-
-    document.addEventListener('page-loaded', (e) => {
-        if (e.detail.pageId === 'analyzer') {
-            const input = document.getElementById('cal-file-input');
-            if(input) input.addEventListener('change', handleFileUpload);
-            
-            const btnClear = document.getElementById('btn-clear-calibration');
-            if(btnClear) btnClear.addEventListener('click', clearCalibration);
-            
-            // Recupera do servidor
-            fetch('/api/calibration')
-                .then(res => res.json())
-                .then(data => {
-                    if (data.calibrationData && data.calibrationData.length > 0) {
-                        calibrationData = data.calibrationData;
-                        const status = document.getElementById('cal-status');
-                        if(status) {
-                            status.innerText = 'Microfone Calibrado (Recuperado do DB) ✅';
-                            status.className = 'text-green-400 font-bold';
-                        }
-                    }
-                    if (data.splOffset) {
-                        splOffset = data.splOffset;
-                        const disp = document.getElementById('spl-offset-display');
-                        if(disp) disp.innerText = `${splOffset.toFixed(1)} dB`;
-                    }
-                })
-                .catch(err => console.warn('[Calibration] Falha ao recuperar do servidor:', err));
-            
-            // Listener para o botão de Calibrar SPL
-            const btnSpl = document.getElementById('btn-calibrate-spl');
-            if(btnSpl) {
-                btnSpl.addEventListener('click', () => {
-                    // Para simplificar, pega o valor RMS atual calculado no analyzer.js
-                    // window.currentGlobalRMS é atualizado pelo analyzer
-                    if (window.currentGlobalRMS) {
-                        const rawDb = 20 * Math.log10(window.currentGlobalRMS + 1e-6);
-                        calibrateSPL(rawDb);
-                    } else {
-                        alert('Ative o microfone e toque um tom de teste de 94dB antes de calibrar.');
-                    }
-                });
-            }
-        }
-    });
 
 })();

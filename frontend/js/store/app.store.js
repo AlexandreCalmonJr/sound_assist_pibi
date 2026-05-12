@@ -45,6 +45,10 @@
         splAlert: null,       // { level, message, ts } ou null
         splHistory: null,     // referência ao getter — não guarda array aqui
 
+        // MTW Spectrum (Multi-Time Windowing)
+        mtwSpectrum: null,    // { frequencies: Float32Array, magnitudes: Float32Array }
+        mtwWindow: 'blackman', // janela activa
+
         // Logs
         mixerLog: [],         // [{ time, text }]
     };

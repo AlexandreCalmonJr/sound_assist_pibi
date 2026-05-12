@@ -426,6 +426,16 @@ async function startAnalyzer() {
             SplLogger.start();
         }
 
+        // ── MTW Processor: alta resolução espectral (Multi-Time Windowing) ────────
+        if (window.MtwManager) {
+            MtwManager.start(audioCtx, source).then(() => {
+                MtwManager.onSpectrum((spectrum) => {
+                    // Publica no AppStore para qualquer componente de UI subscrever
+                    AppStore.setState({ mtwSpectrum: spectrum });
+                });
+            });
+        }
+
         isAnalyzing = true;
         
         // Update UI - Header
@@ -484,6 +494,9 @@ async function stopAnalyzer() {
 
     // ── SPL Logger: para o ticker ─────────────────────────────────────────
     if (window.SplLogger) SplLogger.stop();
+
+    // ── MTW Manager: desliga análise multi-banda ─────────────────────────
+    if (window.MtwManager) MtwManager.stop();
 
     if (pinkNoiseNode) {
         pinkNoiseNode.disconnect();
@@ -813,50 +826,37 @@ function finishPinkNoiseMeasurement() {
     }
 }
 
-function startPinkNoise(autoStop = false) {
-    if (!pinkNoiseNode) {
-        const bufferSize = 4096;
-        pinkNoiseNode = audioCtx.createScriptProcessor(bufferSize, 1, 1);
-        let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-        pinkNoiseNode.onaudioprocess = function(e) {
-            const output = e.outputBuffer.getChannelData(0);
-            for (let i = 0; i < bufferSize; i++) {
-                let white = Math.random() * 2 - 1;
-                b0 = 0.99886 * b0 + white * 0.0555179;
-                b1 = 0.99332 * b1 + white * 0.0750759;
-                b2 = 0.96900 * b2 + white * 0.1538520;
-                b3 = 0.86650 * b3 + white * 0.3104856;
-                b4 = 0.55000 * b4 + white * 0.5329522;
-                b5 = -0.7616 * b5 - white * 0.0168980;
-                output[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
-                output[i] *= 0.05;
-                b6 = white * 0.115926;
-            }
-        };
+async function startPinkNoise(autoStop = false) {
+    ensureAudioCtx();
+
+    // Cria o nó apenas uma vez (AudioWorklet com fallback ScriptProcessor)
+    if (!pinkNoiseNode && window.AcousticCalibration) {
+        pinkNoiseNode = await AcousticCalibration.createPinkNoiseNode(audioCtx, 0.25);
     }
-    pinkNoiseNode.connect(audioCtx.destination);
+
+    if (pinkNoiseNode) pinkNoiseNode.connect(audioCtx.destination);
     isPinkNoisePlaying = true;
     btnPink && (btnPink.innerHTML = '⏹ Parar Ruído Rosa');
     btnPink && btnPink.classList.remove('secondary');
     btnPink && btnPink.classList.add('primary');
+
     if (autoStop) {
         setTimeout(() => {
-            if (pinkMeasurementActive) {
-                finishPinkNoiseMeasurement();
-            }
+            if (pinkMeasurementActive) finishPinkNoiseMeasurement();
         }, 4000);
     }
 }
 
 function stopPinkNoise() {
     if (pinkNoiseNode) {
-        pinkNoiseNode.disconnect();
+        try { pinkNoiseNode.disconnect(); } catch (_) {}
     }
     isPinkNoisePlaying = false;
     btnPink && (btnPink.innerHTML = '🔊 Ruído Rosa (Pink)');
     btnPink && btnPink.classList.remove('primary');
     btnPink && btnPink.classList.add('secondary');
 }
+
 
 /**
  * ✅ Novo: Configura a fonte de referência via WebSocket PCM Stream
