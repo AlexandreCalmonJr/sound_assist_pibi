@@ -282,6 +282,12 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
                 if (e.data.type === 'rt60-result') {
                     _handleRT60Result(e.data.result);
                 }
+                if (e.data.type === 'ir-result') {
+                    _handleSweepAnalysisResult(e.data.result);
+                }
+                if (e.data.type === 'error') {
+                    console.error('[AcousticWorker]', e.data.message);
+                }
             };
         }
 
@@ -1262,36 +1268,8 @@ function toggleAnalyzer() {
 // --- Geradores de Sinais de Áudio Avançados ---
 
 function startLogarithmicSweep() {
-    ensureAudioCtx();
-    const duration = 10;
-    const startFreq = 20;
-    const endFreq = 20000;
-
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(startFreq, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(endFreq, audioCtx.currentTime + duration);
-
-    gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.5, audioCtx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0.5, audioCtx.currentTime + duration - 0.1);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-
-    osc.start();
-    osc.stop(audioCtx.currentTime + duration);
-
-    if (pinkMeasureSummary) {
-        pinkMeasureSummary.innerText = 'Executando Sweep Logarítmico (20Hz - 20kHz)...';
-    }
-
-    osc.onended = () => {
-        if (pinkMeasureSummary) pinkMeasureSummary.innerText = 'Sweep concluído.';
-    };
+    // Delega para o pipeline completo com deconvolução
+    triggerImpulseMeasure();
 }
 
 /**
@@ -1314,14 +1292,8 @@ async function startSweepMeasurement() {
     if (isSweepActive) return;
     ensureAudioCtx();
 
-    const sweepDuration = 12;
-    const captureDuration = sweepDuration + 6;
-    const sampleRate = audioCtx.sampleRate;
-
-    sweepRecordingBuffer = new Float32Array(sampleRate * captureDuration);
-    sweepRecordingIdx = 0;
-    sweepCaptureActive = true;
     isSweepActive = true;
+    sweepCaptureActive = true;
 
     const summaryEl = document.getElementById('pink-measure-summary');
     if (summaryEl) summaryEl.innerText = 'Iniciando Log-Sine Sweep...';
@@ -1329,72 +1301,63 @@ async function startSweepMeasurement() {
     try {
         await audioCtx.audioWorklet.addModule('js/core/log-sweep-processor.js');
     } catch (e) {
-        console.warn('[Sweep] Worklet offline, usando fallback ScriptProcessor.', e);
+        console.warn('[Sweep] Worklet indisponível, usando fallback.', e);
         await startSweepMeasurementFallback();
         return;
     }
 
+    // Worklet com microfone como input[0] (captura simultânea à reprodução)
     sweepNode = new AudioWorkletNode(audioCtx, 'log-sweep-processor', {
         numberOfInputs: 1,
-        numberOfOutputs: 1
+        numberOfOutputs: 1,
+        outputChannelCount: [1]
     });
 
-    sweepNode.port.onmessage = (e) => {
-        const { type, data } = e.data;
-        if (type === 'sweep-started') {
-            console.log(`[Sweep] Disparado! Duração: ${data.duration}s, ${data.startFreq}Hz - ${data.endFreq}Hz`);
-            if (summaryEl) summaryEl.innerText = `Log-Sine Sweep em progresso (${data.duration}s)...`;
-        }
-    };
-
-    const micDestination = audioCtx.createMediaStreamDestination();
-    source.connect(micDestination);
-    micDestination.stream.getAudioTracks().forEach(track => {
-        track.onended = () => {
-            if (isSweepActive) finishSweepMeasurement();
-        };
-    });
-
+    // Conecta microfone como entrada do worklet para captura sincronizada
+    if (source) source.connect(sweepNode);
+    // Reproduz o sweep para os alto-falantes
     sweepNode.connect(audioCtx.destination);
 
-    const captureScript = audioCtx.createScriptProcessor(4096, 1, 1);
-    captureScript.onaudioprocess = (ev) => {
-        if (!sweepCaptureActive) return;
-        const inputData = ev.inputBuffer.getChannelData(0);
-        for (let i = 0; i < inputData.length; i++) {
-            if (sweepRecordingIdx < sweepRecordingBuffer.length) {
-                sweepRecordingBuffer[sweepRecordingIdx++] = inputData[i];
-            }
+    sweepNode.port.onmessage = (e) => {
+        const msg = e.data;
+
+        if (msg.type === 'sweep-ready') {
+            const dur = msg.duration;
+            console.log(`[Sweep] Pronto: ${dur}s, ${msg.f0}Hz → ${msg.f1}Hz, ${msg.totalSamples} samples`);
+            if (summaryEl) summaryEl.innerText = `🎵 Log-Sine Sweep em progresso (${dur}s)...`;
+        }
+
+        if (msg.type === 'progress') {
+            if (summaryEl) summaryEl.innerText = `🎵 Sweep: ${msg.pct}%...`;
+        }
+
+        if (msg.type === 'sweep-done') {
+            // O worklet entrega tanto a gravação quanto a referência
+            _onSweepWorkletDone(msg.recording, msg.reference, msg.sampleRate);
+        }
+
+        if (msg.type === 'sweep-cancelled') {
+            isSweepActive = false;
+            sweepCaptureActive = false;
+            if (summaryEl) summaryEl.innerText = 'Sweep cancelado.';
         }
     };
 
-    micDestination.connect(captureScript);
+    const sweepParams = {
+        f0: 20, f1: 20000, duration: 10,
+        amplitude: 0.85, silencePre: 0.5, silencePost: 2.0,
+        fadeInMs: 20, fadeOutMs: 100
+    };
 
-    sweepNode.port.postMessage({
-        type: 'start-sweep',
-        data: {
-            startFreq: 20,
-            endFreq: 20000,
-            duration: sweepDuration,
-            amplitude: 0.8,
-            fadeOutMs: 500
-        }
-    });
+    sweepNode.port.postMessage({ type: 'start', params: sweepParams });
 
+    // Timeout de segurança: 20s (silencePre + duration + silencePost + margem)
+    const safetyMs = (sweepParams.silencePre + sweepParams.duration + sweepParams.silencePost + 5) * 1000;
     setTimeout(() => {
-        finishSweepMeasurement();
-    }, (sweepDuration + 5) * 1000);
-
-    setTimeout(() => {
-        if (sweepNode) {
-            sweepNode.port.postMessage({ type: 'stop-sweep' });
+        if (isSweepActive && sweepNode) {
+            sweepNode.port.postMessage({ type: 'stop' });
         }
-        if (captureScript) captureScript.disconnect();
-        if (sweepNode) {
-            sweepNode.disconnect();
-            sweepNode = null;
-        }
-    }, sweepDuration * 1000);
+    }, safetyMs);
 }
 
 async function startSweepMeasurementFallback() {
@@ -1448,27 +1411,50 @@ async function startSweepMeasurementFallback() {
     }, sweepDuration * 1000);
 }
 
+/**
+ * Callback do worklet: recebe recording + reference via zero-copy.
+ * Processa localmente via acoustic.worker.js e envia ao backend Python se disponível.
+ */
+function _onSweepWorkletDone(recording, reference, sampleRate) {
+    isSweepActive = false;
+    sweepCaptureActive = false;
+
+    // Cleanup do grafo de áudio
+    if (sweepNode) {
+        try { sweepNode.disconnect(); } catch (_) {}
+        sweepNode = null;
+    }
+
+    const summaryEl = document.getElementById('pink-measure-summary');
+    if (summaryEl) summaryEl.innerText = '⚙️ Deconvoluindo IR...';
+
+    console.log(`[Sweep] Done: rec=${recording.length} ref=${reference.length} fs=${sampleRate}`);
+
+    // 1. Processamento local (Worker JS — sem dependência de backend)
+    if (acousticWorker) {
+        acousticWorker.postMessage(
+            { type: 'deconvolve-sweep', data: { recording, reference, sampleRate } },
+            [recording.buffer, reference.buffer]
+        );
+    }
+
+    // 2. Processamento avançado no backend Python (STI + multibanda)
+    SocketService.emit('analyze_sweep_ir', {
+        recording: Array.from(recording),
+        reference: Array.from(reference),
+        sampleRate,
+        sweepParams: { f0: 20, f1: 20000, duration: 10, amplitude: 0.85 }
+    });
+}
+
+/** Fallback de finalização (não usado com o novo worklet, mantido para compatibilidade) */
 async function finishSweepMeasurement() {
     if (!isSweepActive) return;
-    sweepCaptureActive = false;
     isSweepActive = false;
-
-    const recordedSamples = sweepRecordingBuffer.subarray(0, sweepRecordingIdx);
-    const summaryEl = document.getElementById('pink-measure-summary');
-    if (summaryEl) summaryEl.innerText = 'Processando IR via deconvolução...';
-
-    console.log(`[Sweep] Gravação completa: ${recordedSamples.length} samples. Enviando para análise...`);
-
-    SocketService.emit('analyze_sweep_ir', {
-        recording: Array.from(recordedSamples),
-        sweepParams: {
-            start_freq: 20,
-            end_freq: 20000,
-            duration: 12,
-            amplitude: 0.8,
-            fade_out_ms: 500
-        }
-    });
+    sweepCaptureActive = false;
+    if (sweepNode) {
+        try { sweepNode.port.postMessage({ type: 'stop' }); } catch (_) {}
+    }
 }
 
 function _handleSweepAnalysisResult(result) {

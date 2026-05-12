@@ -1,88 +1,284 @@
 /**
- * SoundMaster Pro - Acoustic Analysis Worker
- * Cálculos matemáticos pesados em background.
+ * SoundMaster Pro — Acoustic Analysis Worker
+ * Cálculos matemáticos pesados executados em background thread.
+ *
+ * Mensagens recebidas:
+ *   { type: 'calculate-rt60',           data: { buffer, sampleRate } }
+ *   { type: 'calculate-rt60-schroeder', data: { buffer, sampleRate } }
+ *   { type: 'deconvolve-sweep',         data: { recording, reference, sampleRate } }
+ *
+ * Mensagens enviadas:
+ *   { type: 'rt60-result',     result: { rt60, t20, t30, edt, snr, curve, warning } }
+ *   { type: 'ir-result',       result: { ir_db, schroeder, edt, t20, t30, rt60_est, snr_db, warning } }
+ *   { type: 'error',           message: string }
  */
-self.onmessage = function(e) {
+
+'use strict';
+
+self.onmessage = function (e) {
     const { type, data } = e.data;
 
-    if (type === 'calculate-rt60' || type === 'calculate-rt60-schroeder') {
-        const { buffer, sampleRate } = data;
-        const rt60 = calculateSchroederRT60(buffer, sampleRate);
-        self.postMessage({ type: 'rt60-result', result: rt60 });
+    try {
+        if (type === 'calculate-rt60' || type === 'calculate-rt60-schroeder') {
+            const result = _schroederRT60(data.buffer, data.sampleRate);
+            self.postMessage({ type: 'rt60-result', result });
+
+        } else if (type === 'deconvolve-sweep') {
+            const result = _deconvolveSweep(data.recording, data.reference, data.sampleRate);
+            self.postMessage({ type: 'ir-result', result });
+
+        } else {
+            self.postMessage({ type: 'error', message: `Tipo desconhecido: ${type}` });
+        }
+    } catch (err) {
+        self.postMessage({ type: 'error', message: err.message });
     }
 };
 
+// ─── Deconvolução ESS → IR (frontend) ────────────────────────────────────────
+
 /**
- * Método de Schroeder: Integração reversa da energia
+ * Deconvolução espectral com regularização Tikhonov.
+ * H(f) = conj(REF(f)) · REC(f) / (|REF(f)|² + ε)
+ *
+ * Retorna EDT, T20, T30, curva de Schroeder e IR em dB.
  */
-function calculateSchroederRT60(buffer, sampleRate) {
+function _deconvolveSweep(recording, reference, sampleRate) {
+    const rec = Float64Array.from(recording);
+    const ref = Float64Array.from(reference);
+    const nFft = _nextPow2(rec.length + ref.length - 1);
+
+    // FFT de ambos
+    const [recRe, recIm] = _realFFT(rec, nFft);
+    const [refRe, refIm] = _realFFT(ref, nFft);
+
+    // Regularização: ε = 1e-4 × max(|REF|²)
+    let maxRefPwr = 0;
+    const h = (nFft >>> 1) + 1;
+    for (let k = 0; k < h; k++) {
+        const p = refRe[k] * refRe[k] + refIm[k] * refIm[k];
+        if (p > maxRefPwr) maxRefPwr = p;
+    }
+    const eps = 1e-4 * maxRefPwr;
+
+    // Filtro inverso H(f) = conj(REF) * REC / (|REF|² + ε)
+    const hRe = new Float64Array(h);
+    const hIm = new Float64Array(h);
+    for (let k = 0; k < h; k++) {
+        const refPwr = refRe[k] * refRe[k] + refIm[k] * refIm[k] + eps;
+        // conj(REF) = (refRe, -refIm)
+        const xRe = recRe[k] * refRe[k] + recIm[k] * refIm[k];   // Re(conj(REF)·REC)
+        const xIm = recRe[k] * (-refIm[k]) - recIm[k] * refRe[k]; // Im → wrong sign, fix:
+        // Re(conj(REF)·REC) = recRe·refRe + recIm·refIm
+        // Im(conj(REF)·REC) = recIm·refRe - recRe·refIm
+        hRe[k] = (recRe[k] * refRe[k] + recIm[k] * refIm[k]) / refPwr;
+        hIm[k] = (recIm[k] * refRe[k] - recRe[k] * refIm[k]) / refPwr;
+    }
+
+    // IFFT → IR no domínio do tempo
+    const ir = _irfft(hRe, hIm, nFft).slice(0, rec.length);
+
+    // Localiza pico (onset)
+    let peakIdx = 0, peakAmp = 0;
+    for (let i = 0; i < ir.length; i++) {
+        const a = Math.abs(ir[i]);
+        if (a > peakAmp) { peakAmp = a; peakIdx = i; }
+    }
+
+    // Noise floor: primeiros 50 ms antes do pico
+    const nNoise = Math.min(peakIdx, Math.floor(0.05 * sampleRate));
+    let noiseEnergy = 0;
+    for (let i = 0; i < nNoise; i++) noiseEnergy += rec[i] * rec[i];
+    const noiseFloor = noiseEnergy / Math.max(nNoise, 1);
+    const snrDb = 10 * Math.log10((peakAmp * peakAmp) / (noiseFloor + 1e-30));
+
+    // Trunca IR a partir do pico
+    const preSamples = Math.min(peakIdx, Math.floor(0.05 * sampleRate));
+    const irTrunc = ir.slice(peakIdx - preSamples);
+
+    // Schroeder backward integration
+    const irSq = irTrunc.map(x => x * x);
+    const schroeder = _backwardIntegrate(irSq);
+    const maxS = schroeder[0] || 1e-30;
+    const schroederDb = schroeder.map(v => 10 * Math.log10(v / maxS + 1e-30));
+
+    // IR em dB normalizada
+    const irMax = Math.max(...irTrunc.map(Math.abs)) || 1e-30;
+    const irDb  = Array.from(irTrunc).map(v => 20 * Math.log10(Math.abs(v) / irMax + 1e-30));
+
+    // Parâmetros de reverberação
+    const rev = _revParams(schroederDb, sampleRate);
+
+    // Downsample para UI (máx 2000 pontos)
+    const step = Math.max(1, Math.floor(schroederDb.length / 1000));
+    const schDownsampled = schroederDb.filter((_, i) => i % step === 0);
+    const irDownsampled  = irDb.filter((_, i) => i % Math.max(1, Math.floor(irDb.length / 2000)) === 0);
+
+    return {
+        ir_db:      irDownsampled,
+        schroeder:  schDownsampled,
+        edt:        rev.edt,
+        t20:        rev.t20,
+        t30:        rev.t30,
+        rt60_est:   rev.rt60_est,
+        snr_db:     parseFloat(snrDb.toFixed(1)),
+        warning:    rev.warning || (snrDb < 35 ? 'SNR baixo: resultado pode ser impreciso.' : null),
+        duration_s: irTrunc.length / sampleRate,
+    };
+}
+
+// ─── RT60 via Schroeder (pulso/ruído branco legado) ───────────────────────────
+
+function _schroederRT60(buffer, sampleRate) {
     const n = buffer.length;
     const energy = new Float32Array(n);
-    
-    // 1. Eleva ao quadrado (Energia)
+    for (let i = 0; i < n; i++) energy[i] = buffer[i] * buffer[i];
+
+    let peakEnergy = 0, peakIdx = 0;
     for (let i = 0; i < n; i++) {
-        energy[i] = buffer[i] * buffer[i];
+        if (energy[i] > peakEnergy) { peakEnergy = energy[i]; peakIdx = i; }
     }
 
-    // ✅ Correção Auditoria: 1.1 Encontrar o pico real do impulso (chegada do som)
-    let peakEnergy = 0;
-    let peakIdx = 0;
-    for (let i = 0; i < n; i++) {
-        if (energy[i] > peakEnergy) {
-            peakEnergy = energy[i];
-            peakIdx = i;
-        }
-    }
-
-    // ✅ Novo: Cálculo do Noise Floor (ruído de fundo antes do impulso)
-    // Pega os primeiros 100ms da gravação como referência de silêncio
-    const noiseSamples = Math.floor(sampleRate * 0.1);
+    const nNoise = Math.floor(sampleRate * 0.1);
     let noiseEnergy = 0;
-    for (let i = 0; i < noiseSamples && i < peakIdx; i++) {
-        noiseEnergy += energy[i];
-    }
-    const noiseFloorDb = 10 * Math.log10(Math.max(noiseEnergy / noiseSamples, 1e-12));
-    const peakDbActual = 10 * Math.log10(Math.max(peakEnergy, 1e-12));
-    const snr = peakDbActual - noiseFloorDb;
+    for (let i = 0; i < nNoise && i < peakIdx; i++) noiseEnergy += energy[i];
+    const noiseFloorDb = 10 * Math.log10(Math.max(noiseEnergy / nNoise, 1e-12));
+    const peakDb       = 10 * Math.log10(Math.max(peakEnergy, 1e-12));
+    const snr          = peakDb - noiseFloorDb;
 
-    // 2. Integração reversa (Schroeder) SÓ a partir do pico
-    const schroederLen = n - peakIdx;
-    const schroeder = new Float32Array(schroederLen);
+    // Schroeder desde o pico
+    const schLen = n - peakIdx;
+    const sch    = new Float64Array(schLen);
     let sum = 0;
     for (let i = n - 1; i >= peakIdx; i--) {
         sum += energy[i];
-        schroeder[i - peakIdx] = sum;
+        sch[i - peakIdx] = sum;
     }
 
-    // 3. Normalizar e converter para dB
-    const schroederDb = new Float32Array(schroederLen);
-    const maxVal = schroeder[0] || 1e-12;
-    for (let i = 0; i < schroederLen; i++) {
-        // Normalização: o início da curva de Schroeder deve ser 0dB
-        schroederDb[i] = 10 * Math.log10(Math.max(schroeder[i] / maxVal, 1e-12));
+    const schDb = new Float32Array(schLen);
+    const maxVal = sch[0] || 1e-12;
+    for (let i = 0; i < schLen; i++) {
+        schDb[i] = 10 * Math.log10(Math.max(sch[i] / maxVal, 1e-12));
     }
 
-    // 4. Extração de T20 (-5dB a -25dB) para maior estabilidade em ambientes ruidosos
-    let startIdx = -1;
-    let endIdx = -1;
-    for (let i = 0; i < schroederLen; i++) {
-        if (startIdx === -1 && schroederDb[i] <= -5) startIdx = i;
-        if (endIdx === -1 && schroederDb[i] <= -25) endIdx = i;
-    }
-
-    if (startIdx === -1 || endIdx === -1 || startIdx >= endIdx) {
-        return { error: 'Sinal muito curto ou ruidoso para medição precisa.' };
-    }
-
-    const durationSeconds = (endIdx - startIdx) / sampleRate;
-    // RT60 = T20 * 3 (extrapolando queda de 20dB para 60dB)
-    const rt60 = durationSeconds * 3;
+    const rev = _revParams(schDb, sampleRate);
 
     return {
-        rt60: rt60.toFixed(2),
-        t30: (durationSeconds * 2).toFixed(2),
-        snr: snr.toFixed(1),
+        rt60:    rev.rt60_est ? parseFloat(rev.rt60_est.toFixed(2)) : null,
+        t20:     rev.t20,
+        t30:     rev.t30,
+        edt:     rev.edt,
+        snr:     snr.toFixed(1),
         warning: snr < 35 ? 'SNR Baixo: medição pode estar mascarada pelo ruído ambiente.' : null,
-        curve: schroederDb.filter((_, i) => i % 100 === 0) // Downsample para gráfico
+        curve:   Array.from(schDb).filter((_, i) => i % 100 === 0),
     };
+}
+
+// ─── Helpers DSP ─────────────────────────────────────────────────────────────
+
+/** Parâmetros de reverberação a partir da curva de Schroeder em dB. */
+function _revParams(schDb, sampleRate) {
+    const n = schDb.length;
+
+    function findLevel(target) {
+        for (let i = 0; i < n; i++) if (schDb[i] <= target) return i;
+        return null;
+    }
+
+    function slopeToRT(dbStart, dbEnd) {
+        const i0 = findLevel(dbStart);
+        const i1 = findLevel(dbEnd);
+        if (i0 === null || i1 === null || i1 <= i0 + 3) return null;
+        const duration = (i1 - i0) / sampleRate;
+        const range    = Math.abs(dbEnd - dbStart);
+        return parseFloat((duration / range * 60).toFixed(2));
+    }
+
+    const edt    = slopeToRT(0,  -10);
+    const t20    = slopeToRT(-5, -25);
+    const t30    = slopeToRT(-5, -35);
+    const rt60_est = t30 ?? t20 ?? (edt != null ? parseFloat((edt * 6).toFixed(2)) : null);
+
+    return { edt, t20, t30, rt60_est };
+}
+
+/** Integração reversa de Schroeder. */
+function _backwardIntegrate(energyArray) {
+    const n = energyArray.length;
+    const result = new Float64Array(n);
+    let sum = 0;
+    for (let i = n - 1; i >= 0; i--) {
+        sum += energyArray[i];
+        result[i] = sum;
+    }
+    return result;
+}
+
+/** FFT Cooley-Tukey radix-2 DIT in-place. */
+function _fft(re, im) {
+    const n = re.length;
+    // Bit-reversal
+    for (let i = 0, j = 0; i < n; i++) {
+        if (i < j) {
+            let t = re[i]; re[i] = re[j]; re[j] = t;
+                t = im[i]; im[i] = im[j]; im[j] = t;
+        }
+        let m = n >>> 1;
+        while (m >= 1 && j >= m) { j -= m; m >>>= 1; }
+        j += m;
+    }
+    // Butterfly
+    for (let len = 2; len <= n; len <<= 1) {
+        const half = len >>> 1;
+        const ang  = -Math.PI / half;
+        const wbR  = Math.cos(ang), wbI = Math.sin(ang);
+        for (let i = 0; i < n; i += len) {
+            let wR = 1, wI = 0;
+            for (let j = 0; j < half; j++) {
+                const uR = re[i + j], uI = im[i + j];
+                const vR = re[i + j + half] * wR - im[i + j + half] * wI;
+                const vI = re[i + j + half] * wI + im[i + j + half] * wR;
+                re[i + j]        = uR + vR; im[i + j]        = uI + vI;
+                re[i + j + half] = uR - vR; im[i + j + half] = uI - vI;
+                const nwR = wR * wbR - wI * wbI;
+                wI = wR * wbI + wI * wbR; wR = nwR;
+            }
+        }
+    }
+}
+
+/** FFT de sinal real com zero-padding até nFft. */
+function _realFFT(signal, nFft) {
+    const re = new Float64Array(nFft);
+    const im = new Float64Array(nFft);
+    for (let i = 0; i < signal.length && i < nFft; i++) re[i] = signal[i];
+    _fft(re, im);
+    return [re, im];
+}
+
+/** IFFT de espectro half-complex → sinal real de comprimento nFft. */
+function _irfft(hRe, hIm, nFft) {
+    const h   = hRe.length;
+    const re  = new Float64Array(nFft);
+    const im  = new Float64Array(nFft);
+    // Preenche espectro completo Hermitiano
+    for (let k = 0; k < h; k++) {
+        re[k] = hRe[k]; im[k] = hIm[k];
+        if (k > 0 && k < nFft - h + 1) {
+            re[nFft - k] =  hRe[k];
+            im[nFft - k] = -hIm[k];
+        }
+    }
+    // IFFT: conjuga → FFT → conjuga → escala
+    for (let i = 0; i < nFft; i++) im[i] = -im[i];
+    _fft(re, im);
+    const inv = 1 / nFft;
+    for (let i = 0; i < nFft; i++) { re[i] *= inv; im[i] *= -inv; }
+    return re;
+}
+
+function _nextPow2(n) {
+    let p = 1;
+    while (p < n) p <<= 1;
+    return p;
 }
