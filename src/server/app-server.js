@@ -11,6 +11,7 @@ const db = require('./database');
 const { registerMappingsRoutes } = require('./mappings-routes');
 const { registerSocketHandlers } = require('./socket-handlers');
 const { getPool } = require('./worker-pool');
+const mixerGit = require('./mixer-git');
 
 function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     const expressApp = express();
@@ -46,7 +47,60 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
 
     // Inicializa banco centralizado IMEDIATAMENTE (presets + mappings no mesmo diretório)
     db.initDatabase(dbDir);
+    mixerGit.init(dbDir);
     registerMappingsRoutes(expressApp, db.mappings);
+
+    // ── Mixer Git REST API ───────────────────────────────────────────────────
+    expressApp.get('/api/git/commits', async (req, res) => {
+        try { res.json(await mixerGit.list(parseInt(req.query.limit) || 50)); }
+        catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    expressApp.get('/api/git/commits/:id', async (req, res) => {
+        try {
+            const c = await mixerGit.getById(req.params.id);
+            if (!c) return res.status(404).json({ error: 'Commit não encontrado' });
+            res.json(c);
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    expressApp.post('/api/git/commits', async (req, res) => {
+        try {
+            const { label, auto } = req.body || {};
+            const state = mixerSingleton.getStateTree();
+            const commit = await mixerGit.commit(label || 'Commit manual', !!auto, state);
+            res.json(commit);
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    expressApp.delete('/api/git/commits/:id', async (req, res) => {
+        try { res.json(await mixerGit.deleteById(req.params.id)); }
+        catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    expressApp.get('/api/git/diff/:idA/:idB', async (req, res) => {
+        try { res.json(await mixerGit.diffById(req.params.idA, req.params.idB)); }
+        catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    expressApp.get('/api/git/diff/:id', async (req, res) => {
+        try {
+            const current = mixerSingleton.getStateTree();
+            res.json(await mixerGit.diffWithCurrent(req.params.id, current));
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    expressApp.post('/api/git/rollback/:id', async (req, res) => {
+        try {
+            const { scope } = req.body || {};
+            const current   = mixerSingleton.getStateTree();
+            const commands  = await mixerGit.buildRollbackCommands(req.params.id, current, scope || []);
+            // Emite cada comando via Socket.IO para a mesa
+            const io = mixerSingleton.getIo();
+            if (io) commands.forEach(cmd => io.emit(cmd.event, cmd.data));
+            res.json({ commands: commands.length, applied: commands });
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    });
 
     expressApp.get('/api/config', (req, res) => {
         res.json({ localIp, port });
