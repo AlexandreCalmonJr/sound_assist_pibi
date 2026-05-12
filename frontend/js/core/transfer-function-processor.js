@@ -1,277 +1,522 @@
 /**
- * SoundMaster Pro - Transfer Function Processor (AudioWorklet)
- * Implementação de Dual-Channel Transfer Function para alinhamento de sistemas.
- * Calcula: Cross-FFT, Phase Response, Coherence e Delay Finder.
- * 
- * Engenharia DSP: Alexandre Calmon Jr.
+ * SoundMaster Pro — Transfer Function Processor (Dual-Channel AudioWorklet)
+ * DSP Engineer: Alexandre Calmon Jr.
+ *
+ * Algoritmos implementados:
+ *  1. Cross-Spectrum (Gxy) via FFT cruzada com janela Hann
+ *  2. Phase Response com unwrapping acumulativo e Phase Delay estimado
+ *  3. Coerência Magnitude-Squared (MSC) γ² de 0–100%
+ *  4. GCC-PHAT Delay Finder com interpolação parabólica sub-sample
+ *
+ * Protocolo de mensagens (port.onmessage):
+ *   { type: 'set-demo',    value: bool }   → ativa modo simulação
+ *   { type: 'set-avg',     value: 0–0.99 } → peso do leaky integrator
+ *   { type: 'set-fft',     value: potência de 2 } → redimensiona FFT
+ *   { type: 'reset' }                      → zera acumuladores
+ *
+ * Protocolo de saída (port.postMessage):
+ *   { type: 'transfer-function', magnitude[], phase[], coherence[],
+ *     wrappedPhase[], phaseDelay, delayMs, delaySamples, confidence }
  */
 
+'use strict';
+
 class TransferFunctionProcessor extends AudioWorkletProcessor {
+
+    // ─── Construtor ───────────────────────────────────────────────────────────
+
     constructor() {
         super();
-        this._fftSize = 16384;
-        this._hopSize = 4096; // Overlap de 75% para suavidade
-        
-        // Buffers de entrada
-        this._refBuffer = new Float32Array(this._fftSize);
-        this._measBuffer = new Float32Array(this._fftSize);
-        this._writeIdx = 0;
 
-        // Janelamento (Hann)
-        this._window = new Float32Array(this._fftSize);
-        for (let i = 0; i < this._fftSize; i++) {
-            this._window[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (this._fftSize - 1)));
-        }
+        this._fftSize    = 16384;   // potência de 2 → resolução ~2.7 Hz @ 44.1kHz
+        this._hopSize    = 4096;    // janela overlap 75% (WOLA)
+        this._sr         = sampleRate;
 
-        // FFT Arrays (Complex)
-        this._refFFT = { real: new Float32Array(this._fftSize), imag: new Float32Array(this._fftSize) };
-        this._measFFT = { real: new Float32Array(this._fftSize), imag: new Float32Array(this._fftSize) };
-        
-        // Acumuladores para médias espectrais (Cross-Power e Auto-Power)
-        // Necessários para o cálculo de Coerência e Transfer Function estável
-        this._avgGxy = { real: new Float32Array(this._fftSize / 2), imag: new Float32Array(this._fftSize / 2) };
-        this._avgGxx = new Float32Array(this._fftSize / 2);
-        this._avgGyy = new Float32Array(this._fftSize / 2);
-        this._avgWeight = 0.95; // Smoothing (Exponential Moving Average)
+        // Buffers circulares de entrada (ref = Canal 0, meas = Canal 1)
+        this._refBuf     = new Float32Array(this._fftSize);
+        this._measBuf    = new Float32Array(this._fftSize);
+        this._hopCount   = 0;       // samples acumulados desde o último compute
 
-        this._isProcessing = false;
-        
-        // Delay Finder state
-        this._delaySamples = 0;
-        this._autoDelayEnabled = true;
+        // Modo demo e filtro biquad para simulação realista
+        this._demo       = true;
+        this._demoDelay  = 480;     // samples ≈ 10.9 ms @ 44.1 kHz
+        this._demoWriteIdx = 0;
+        this._demoBuf    = new Float32Array(this._fftSize);
+        this._filterZ    = [0, 0];
+        // Passa-baixas Butterworth 2ª ordem @ ~4 kHz (simula coloração do sistema)
+        this._bq = { b0: 0.0196, b1: 0.0392, b2: 0.0196, a1: -1.5548, a2: 0.6330 };
 
-        this._isDemoMode = false;
-        this._demoDelaySamples = 480; // ~10ms de delay simulado para o demo
-        
-        // Estado do Filtro Simulado (Biquad LPF 2.5kHz)
-        this._filterZ = [0, 0]; // Delay line
-        this._filterCoefs = { 
-            b0: 0.015, b1: 0.03, b2: 0.015, 
-            a1: -1.65, a2: 0.71 
-        };
+        this._avgW = 0.9;           // leaky integrator (0 = sem memória, 0.99 = lento)
 
-        this.port.onmessage = (e) => {
-            if (e.data.type === 'set-avg') this._avgWeight = e.data.value;
-            if (e.data.type === 'set-demo-mode') this._isDemoMode = e.data.value;
-        };
+        this._buildHann();
+        this._allocSpectral();
+        this._allocDelayFinder();
+
+        this.port.onmessage = (e) => this._onMessage(e.data);
     }
 
-    /**
-     * Filtro Biquad Simples para a Simulação Digital
-     */
-    applyFilter(x) {
-        const { b0, b1, b2, a1, a2 } = this._filterCoefs;
-        const y = b0 * x + b1 * this._filterZ[0] + b2 * this._filterZ[1] - a1 * this._filterZ[0] - a2 * this._filterZ[1];
-        this._filterZ[1] = this._filterZ[0];
-        this._filterZ[0] = x;
-        return y;
-    }
+    // ─── Configuração ─────────────────────────────────────────────────────────
 
-    /**
-     * Algoritmo FFT Radix-2 (In-place)
-     */
-    fft(real, imag) {
-        const n = real.length;
-        if (n <= 1) return;
-
-        // Bit-reversal permutation
-        for (let i = 0, j = 0; i < n; i++) {
-            if (i < j) {
-                [real[i], real[j]] = [real[j], real[i]];
-                [imag[i], imag[j]] = [imag[j], imag[i]];
-            }
-            let m = n >> 1;
-            while (m >= 1 && j >= m) {
-                j -= m;
-                m >>= 1;
-            }
-            j += m;
-        }
-
-        // Danielson-Lanczos algorithm
-        for (let len = 2; len <= n; len <<= 1) {
-            const ang = (2 * Math.PI) / len;
-            const wlenReal = Math.cos(ang);
-            const wlenImag = -Math.sin(ang); // Direção negativa para Forward FFT
-            for (let i = 0; i < n; i += len) {
-                let wReal = 1;
-                let wImag = 0;
-                for (let j = 0; j < len / 2; j++) {
-                    const uReal = real[i + j];
-                    const uImag = imag[i + j];
-                    const vReal = real[i + j + len / 2] * wReal - imag[i + j + len / 2] * wImag;
-                    const vImag = real[i + j + len / 2] * wImag + imag[i + j + len / 2] * wReal;
-                    real[i + j] = uReal + vReal;
-                    imag[i + j] = uImag + vImag;
-                    real[i + j + len / 2] = uReal - vReal;
-                    imag[i + j + len / 2] = uImag - vImag;
-                    const nextWReal = wReal * wlenReal - wImag * wlenImag;
-                    wImag = wReal * wlenImag + wImag * wlenReal;
-                    wReal = nextWReal;
-                }
-            }
+    _onMessage(msg) {
+        switch (msg.type) {
+            case 'set-demo':  this._demo  = !!msg.value; break;
+            case 'set-avg':   this._avgW  = Math.max(0, Math.min(0.99, msg.value)); break;
+            case 'set-fft':   this._resize(msg.value); break;
+            case 'reset':     this._allocSpectral(); break;
         }
     }
 
-    /**
-     * Inverse FFT (IFFT)
-     */
-    ifft(real, imag) {
-        const n = real.length;
-        // Conjugate
-        for (let i = 0; i < n; i++) imag[i] = -imag[i];
-        
-        // Forward FFT
-        this.fft(real, imag);
-        
-        // Conjugate and Scale
+    _buildHann() {
+        const n = this._fftSize;
+        this._hann = new Float32Array(n);
+        // Normalização de potência: sum(w²) = N/2 → fator 1/N já aplicado no IFFT
         for (let i = 0; i < n; i++) {
-            real[i] /= n;
-            imag[i] = -imag[i] / n;
+            this._hann[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (n - 1)));
         }
     }
 
-    process(inputs, outputs, parameters) {
-        // inputs[0] = Referência (AES67/Loopback)
-        // inputs[1] = Medição (Microfone)
-        const refInput = inputs[0];
-        const measInput = inputs[1];
+    _allocSpectral() {
+        const h = this._fftSize >>> 1;
+        // Leaky accumulators para média espectral vetorial (Welch method)
+        this._Gxy_re = new Float32Array(h);   // Cross-spectrum real
+        this._Gxy_im = new Float32Array(h);   // Cross-spectrum imag
+        this._Gxx    = new Float32Array(h);   // Auto-spectrum referência
+        this._Gyy    = new Float32Array(h);   // Auto-spectrum medição
+        // Saídas suavizadas
+        this._smMag  = new Float32Array(h);
+        this._smPhs  = new Float32Array(h);
+        this._smCoh  = new Float32Array(h);
+        // Estado de unwrapping acumulativo
+        this._unwrapAcc = new Float32Array(h);
+    }
 
-        // Se não houver entrada física mas estivermos em modo Demo, geramos ruído interno
-        let refChannel = (refInput && refInput.length > 0) ? refInput[0] : null;
-        let measChannel = (measInput && measInput.length > 0) ? measInput[0] : null;
+    _allocDelayFinder() {
+        const n = this._fftSize;
+        this._phatRe = new Float32Array(n);
+        this._phatIm = new Float32Array(n);
+        // Histórico para smoothing do delay (mediana de 32 frames)
+        this._delayHist  = new Float32Array(32);
+        this._delayHistI = 0;
+        this._prevDelayMs = 0;
+        this._confidence  = 0;
+    }
 
-        if (!refChannel && this._isDemoMode) {
-            // Cria um bloco de ruído branco para manter a simulação viva
-            refChannel = new Float32Array(128);
-            for (let i = 0; i < 128; i++) refChannel[i] = (Math.random() * 2 - 1) * 0.5;
-        }
+    _resize(size) {
+        if (!Number.isInteger(size) || size < 512 || size > 65536) return;
+        if (size & (size - 1)) return; // deve ser pot. de 2
+        this._fftSize = size;
+        this._hopSize = size >>> 2;
+        this._refBuf  = new Float32Array(size);
+        this._measBuf = new Float32Array(size);
+        this._demoBuf = new Float32Array(size);
+        this._buildHann();
+        this._allocSpectral();
+        this._allocDelayFinder();
+        this._hopCount = 0;
+        this.port.postMessage({ type: 'fft-size-changed', size });
+    }
 
-        if (refChannel) {
-            for (let i = 0; i < refChannel.length; i++) {
-                this._refBuffer[this._writeIdx] = refChannel[i];
-                
-                if (this._isDemoMode) {
-                    /**
-                     * SIMULAÇÃO: 
-                     * Pegamos o sinal de referência e aplicamos um atraso fixo 
-                     * para que o Delay Finder tenha algo para encontrar.
-                     */
-                    const delayedIdx = (this._writeIdx - this._demoDelaySamples + this._fftSize) % this._fftSize;
-                    const noise = (Math.random() * 2 - 1) * 0.01; 
-                    
-                    // Aplica o filtro Low-Pass para simular um crossover/driver real
-                    const rawSignal = this._refBuffer[delayedIdx] + noise;
-                    this._measBuffer[this._writeIdx] = this.applyFilter(rawSignal);
-                } else {
-                    this._measBuffer[this._writeIdx] = measChannel[i];
-                }
+    // ─── AudioWorklet process() ───────────────────────────────────────────────
 
-                this._writeIdx++;
-                if (this._writeIdx >= this._fftSize) {
-                    this._writeIdx = 0;
-                    this.computeTransferFunction();
-                }
-            }
+    process(inputs, outputs) {
+        const refCh  = inputs[0]?.[0];
+        const measCh = inputs[1]?.[0];
+
+        if (!refCh && !this._demo) return true;
+
+        const blockSize = refCh ? refCh.length : 128;
+
+        if (this._demo) {
+            this._feedDemo(blockSize);
+        } else {
+            this._feedReal(refCh, measCh ?? new Float32Array(blockSize));
         }
 
         return true;
     }
 
-    computeTransferFunction() {
-        const n = this._fftSize;
-        const halfN = n / 2;
+    // ─── Alimentação de buffers ───────────────────────────────────────────────
 
-        // 1. Janelamento e Preparação
-        const refReal = new Float32Array(n);
-        const refImag = new Float32Array(n);
-        const measReal = new Float32Array(n);
-        const measImag = new Float32Array(n);
+    /**
+     * Modo Demo: gera ruído rosa banda-larga e aplica delay+filtro para simular canal medido.
+     */
+    _feedDemo(blockSize) {
+        const n   = this._fftSize;
+        const hop = this._hopSize;
 
-        for (let i = 0; i < n; i++) {
-            refReal[i] = this._refBuffer[i] * this._window[i];
-            measReal[i] = this._measBuffer[i] * this._window[i];
-        }
+        for (let i = 0; i < blockSize; i++) {
+            // Gerador de ruído rosa (Voss-McCartney simplificado, 5 filtros)
+            const w = Math.random() * 2 - 1;
+            if (!this._pink) this._pink = { b: new Float64Array(5) };
+            const b = this._pink.b;
+            b[0] = 0.99886 * b[0] + w * 0.0555179;
+            b[1] = 0.99332 * b[1] + w * 0.0750759;
+            b[2] = 0.96900 * b[2] + w * 0.1538520;
+            b[3] = 0.86650 * b[3] + w * 0.3104856;
+            b[4] = 0.55000 * b[4] + w * 0.5329522;
+            const pink = (b[0] + b[1] + b[2] + b[3] + b[4] + w * 0.5362) * 0.05;
 
-        // 2. FFT de ambos os canais
-        this.fft(refReal, refImag);
-        this.fft(measReal, measImag);
+            // Buffer circular para o delay
+            const wi = this._demoWriteIdx % n;
+            this._demoBuf[wi] = pink;
+            this._demoWriteIdx++;
 
-        // 3. Cálculos Espectrais (Cross-Power e Auto-Power)
-        const magnitude = new Float32Array(halfN);
-        const phase = new Float32Array(halfN);
-        const coherence = new Float32Array(halfN);
+            // Leitura com delay fixo + ruído de medição + filtro coloração
+            const di = ((this._demoWriteIdx - this._demoDelay - 1) % n + n) % n;
+            const delayed = this._demoBuf[di] + (Math.random() * 2 - 1) * 0.008;
+            const filtered = this._applyBiquad(delayed, this._filterZ, this._bq);
 
-        // Arrays para Cross-Correlation (Delay Finder)
-        const crossCorrReal = new Float32Array(n);
-        const crossCorrImag = new Float32Array(n);
+            // Escrita nos buffers de análise
+            const wi2 = this._hopCount % n;
+            this._refBuf[wi2]  = pink;
+            this._measBuf[wi2] = filtered;
+            this._hopCount++;
 
-        for (let k = 0; k < halfN; k++) {
-            // Conjugado de Ref * Meas (Gxy)
-            // (a + bi)* * (c + di) = (a - bi) * (c + di) = (ac + bd) + (ad - bc)i
-            const gxyReal = refReal[k] * measReal[k] + refImag[k] * measImag[k];
-            const gxyImag = refReal[k] * measImag[k] - refImag[k] * measReal[k];
-
-            // Auto-espectros (Gxx, Gyy)
-            const gxx = refReal[k] * refReal[k] + refImag[k] * refImag[k];
-            const gyy = measReal[k] * measReal[k] + measImag[k] * measImag[k];
-
-            // Médias Exponenciais para suavização e coerência estável
-            const alpha = this._avgWeight;
-            this._avgGxy.real[k] = alpha * this._avgGxy.real[k] + (1 - alpha) * gxyReal;
-            this._avgGxy.imag[k] = alpha * this._avgGxy.imag[k] + (1 - alpha) * gxyImag;
-            this._avgGxx[k] = alpha * this._avgGxx[k] + (1 - alpha) * gxx;
-            this._avgGyy[k] = alpha * this._avgGyy[k] + (1 - alpha) * gyy;
-
-            // H(f) = Gxy / Gxx
-            const hReal = this._avgGxy.real[k] / (this._avgGxx[k] + 1e-12);
-            const hImag = this._avgGxy.imag[k] / (this._avgGxx[k] + 1e-12);
-
-            magnitude[k] = 20 * Math.log10(Math.sqrt(hReal * hReal + hImag * hImag) + 1e-12);
-            phase[k] = Math.atan2(hImag, hReal); // Resposta de Fase em Radianos
-
-            // Coerência = |Gxy|^2 / (Gxx * Gyy)
-            const gxyMagSq = this._avgGxy.real[k] * this._avgGxy.real[k] + this._avgGxy.imag[k] * this._avgGxy.imag[k];
-            coherence[k] = (gxyMagSq / (this._avgGxx[k] * this._avgGyy[k] + 1e-12)) * 100;
-
-            // Para o Delay Finder (usamos o espectro sem médias para resposta instantânea)
-            crossCorrReal[k] = gxyReal;
-            crossCorrImag[k] = gxyImag;
-        }
-
-        // 4. Delay Finder (Correlação Cruzada via IFFT)
-        // Espelhamos para a segunda metade do buffer (hermitiano para sinal real)
-        for (let k = 1; k < halfN; k++) {
-            crossCorrReal[n - k] = crossCorrReal[k];
-            crossCorrImag[n - k] = -crossCorrImag[k];
-        }
-
-        this.ifft(crossCorrReal, crossCorrImag);
-
-        // Encontrar o pico da correlação
-        let maxCorr = -1;
-        let peakIdx = 0;
-        for (let i = 0; i < n; i++) {
-            const corrMag = crossCorrReal[i] * crossCorrReal[i] + crossCorrImag[i] * crossCorrImag[i];
-            if (corrMag > maxCorr) {
-                maxCorr = corrMag;
-                peakIdx = i;
+            if (this._hopCount >= hop) {
+                this._hopCount = 0;
+                this._computeTF();
             }
         }
+    }
 
-        // O pico pode estar na segunda metade (atraso negativo ou sinal cíclico)
-        const delaySamples = peakIdx > halfN ? peakIdx - n : peakIdx;
-        const delayMs = (delaySamples / sampleRate) * 1000;
+    /**
+     * Modo Real: alimenta com amostras reais dos dois canais.
+     */
+    _feedReal(refSamples, measSamples) {
+        const n   = this._fftSize;
+        const hop = this._hopSize;
+        const len = refSamples.length;
 
-        // Enviar dados para o Main Thread
+        for (let i = 0; i < len; i++) {
+            const wi = this._hopCount % n;
+            this._refBuf[wi]  = refSamples[i];
+            this._measBuf[wi] = measSamples[i];
+            this._hopCount++;
+
+            if (this._hopCount >= hop) {
+                this._hopCount = 0;
+                this._computeTF();
+            }
+        }
+    }
+
+    // ─── Núcleo DSP ───────────────────────────────────────────────────────────
+
+    /**
+     * Calcula a Função de Transferência H(f) = Gxy / Gxx
+     * Coherence γ²(f) = |Gxy|² / (Gxx × Gyy)
+     */
+    _computeTF() {
+        const n    = this._fftSize;
+        const h    = n >>> 1;
+        const alpha = this._avgW;
+
+        // Copia + aplica janela de Hann
+        const xRe = new Float32Array(n); const xIm = new Float32Array(n);
+        const yRe = new Float32Array(n); const yIm = new Float32Array(n);
+
+        for (let i = 0; i < n; i++) {
+            const w    = this._hann[i];
+            // Buffer circular → acesso sequencial correto
+            const idx  = (this._hopCount + i) % n; // WOLA: janela sobre dados antigos→novos
+            xRe[i] = this._refBuf[idx]  * w;
+            yRe[i] = this._measBuf[idx] * w;
+        }
+
+        this._fft(xRe, xIm);
+        this._fft(yRe, yIm);
+
+        // ── 1. Acumuladores espectrais (Welch / leaky averaging) ──────────────
+        // Cross-spectrum: Gxy(k) = X*(k) · Y(k)   [conjugado de X vezes Y]
+        // Auto-spectra:   Gxx(k) = |X(k)|²,  Gyy(k) = |Y(k)|²
+        for (let k = 0; k < h; k++) {
+            const xr = xRe[k], xi = xIm[k];
+            const yr = yRe[k], yi = yIm[k];
+
+            // X*(k) = (xr, -xi)
+            const gxyR = xr * yr + xi * yi;   // Re(X* · Y)
+            const gxyI = xr * yi - xi * yr;   // Im(X* · Y)
+            const gxx  = xr * xr + xi * xi;
+            const gyy  = yr * yr + yi * yi;
+
+            this._Gxy_re[k] = alpha * this._Gxy_re[k] + (1 - alpha) * gxyR;
+            this._Gxy_im[k] = alpha * this._Gxy_im[k] + (1 - alpha) * gxyI;
+            this._Gxx[k]    = alpha * this._Gxx[k]    + (1 - alpha) * gxx;
+            this._Gyy[k]    = alpha * this._Gyy[k]    + (1 - alpha) * gyy;
+        }
+
+        // ── 2. Magnitude, Phase, Coherence ────────────────────────────────────
+        const magnitude    = new Float32Array(h);
+        const wrappedPhase = new Float32Array(h);
+        const coherence    = new Float32Array(h);
+
+        for (let k = 0; k < h; k++) {
+            const gxyR = this._Gxy_re[k];
+            const gxyI = this._Gxy_im[k];
+            const gxx  = this._Gxx[k];
+            const gyy  = this._Gyy[k];
+
+            // H(f) = Gxy / Gxx   (estimador H1, mínimo viés com ruído na entrada)
+            const hR = gxyR / (gxx + 1e-30);
+            const hI = gxyI / (gxx + 1e-30);
+
+            // Magnitude em dB
+            const hMag  = Math.sqrt(hR * hR + hI * hI);
+            magnitude[k] = 20 * Math.log10(hMag + 1e-12);
+
+            // Fase com wrapping [-π, π]
+            wrappedPhase[k] = Math.atan2(hI, hR);
+
+            // MSC: γ²(f) = |Gxy|² / (Gxx · Gyy)
+            const gxyMagSq = gxyR * gxyR + gxyI * gxyI;
+            const msc = gxyMagSq / (gxx * gyy + 1e-30);
+            coherence[k] = Math.max(0, Math.min(1, msc)) * 100; // 0–100%
+        }
+
+        // ── 3. Phase Unwrapping acumulativo ───────────────────────────────────
+        const phase = this._unwrapPhase(wrappedPhase);
+
+        // ── 4. Suavização temporal dos outputs ────────────────────────────────
+        const smA = 0.35;
+        for (let k = 0; k < h; k++) {
+            this._smMag[k] = smA * magnitude[k] + (1 - smA) * this._smMag[k];
+            this._smPhs[k] = smA * phase[k]     + (1 - smA) * this._smPhs[k];
+            this._smCoh[k] = smA * coherence[k] + (1 - smA) * this._smCoh[k];
+        }
+
+        // ── 5. GCC-PHAT Delay Finder ──────────────────────────────────────────
+        const delayResult = this._gccPhat();
+
+        // ── 6. Phase Delay médio ponderado (200 Hz – 8 kHz) ───────────────────
+        const phaseDelay = this._calcPhaseDelay();
+
+        // ── 7. Envia resultado para o thread principal ─────────────────────────
+        // Transfere buffers via zero-copy (Transferable)
+        const outMag = this._smMag.slice();
+        const outPhs = this._smPhs.slice();
+        const outCoh = this._smCoh.slice();
+
         this.port.postMessage({
-            type: 'transfer-function',
-            magnitude,
-            phase,
-            coherence,
-            delayMs,
-            delaySamples
-        });
+            type:          'transfer-function',
+            magnitude:     outMag,
+            phase:         outPhs,
+            coherence:     outCoh,
+            wrappedPhase,
+            phaseDelay,
+            delayMs:       delayResult.delayMs,
+            delaySamples:  delayResult.delaySamples,
+            confidence:    delayResult.confidence
+        }, [outMag.buffer, outPhs.buffer, outCoh.buffer, wrappedPhase.buffer]);
+    }
+
+    // ─── GCC-PHAT ─────────────────────────────────────────────────────────────
+
+    /**
+     * Generalized Cross-Correlation with Phase Transform (GCC-PHAT).
+     * Robusta a reverberação; usa IFFT da cross-correlation normalizada pela magnitude.
+     * Busca limitada a ±delayRange samples para evitar falsos picos.
+     */
+    _gccPhat() {
+        const n        = this._fftSize;
+        const h        = n >>> 1;
+        const sr       = this._sr;
+        // Limite de busca: 50 ms (suficiente para alinhamento de sub-arrays)
+        const maxDelay = Math.min(h, Math.floor(0.05 * sr));
+
+        const pRe = this._phatRe;
+        const pIm = this._phatIm;
+
+        // Monta cross-spectrum completo (espelho Hermitiano) e aplica PHAT whitening
+        for (let k = 0; k < h; k++) {
+            const gxyR = this._Gxy_re[k];
+            const gxyI = this._Gxy_im[k];
+            const mag  = Math.sqrt(gxyR * gxyR + gxyI * gxyI) + 1e-30;
+
+            pRe[k]     =  gxyR / mag;
+            pIm[k]     =  gxyI / mag;
+            // Espelho para garantir sinal real no IFFT
+            if (k > 0 && k < h) {
+                pRe[n - k] =  pRe[k];
+                pIm[n - k] = -pIm[k];
+            }
+        }
+        pRe[0] = pIm[0] = 0;     // Remove componente DC
+        pRe[h] = pIm[h] = 0;     // Nyquist
+
+        this._ifft(pRe, pIm);
+
+        // Busca o pico dentro da janela ±maxDelay
+        let maxVal  = -Infinity;
+        let peakIdx = 0;
+
+        // [0 … maxDelay] = lags positivos
+        for (let i = 0; i <= maxDelay; i++) {
+            if (pRe[i] > maxVal) { maxVal = pRe[i]; peakIdx = i; }
+        }
+        // [n-maxDelay … n-1] = lags negativos
+        for (let i = n - maxDelay; i < n; i++) {
+            if (pRe[i] > maxVal) { maxVal = pRe[i]; peakIdx = i; }
+        }
+
+        // Sub-sample refinement: interpolação parabólica
+        const refined = this._parabolic(pRe, peakIdx, n);
+
+        // Converte para delay com sinal: lags > n/2 são lags negativos
+        let delaySamples = refined > h ? refined - n : refined;
+
+        // Clamp seguro
+        delaySamples = Math.max(-maxDelay, Math.min(maxDelay, delaySamples));
+        const delayMs = (delaySamples / sr) * 1000;
+
+        // Smoothing por mediana circular (estável a outliers)
+        this._delayHist[this._delayHistI % this._delayHist.length] = delayMs;
+        this._delayHistI++;
+        const sorted  = this._delayHist.slice().sort((a, b) => a - b);
+        const median  = sorted[Math.floor(sorted.length / 2)];
+
+        // Confiança: estabilidade temporal do delay
+        const drift = Math.abs(delayMs - this._prevDelayMs);
+        this._confidence = drift < 1.0
+            ? Math.min(1, this._confidence + 0.04)
+            : Math.max(0, this._confidence - 0.08);
+        this._prevDelayMs = delayMs;
+
+        return {
+            delayMs:      median,
+            delaySamples: Math.round(median * sr / 1000),
+            confidence:   this._confidence
+        };
+    }
+
+    /** Interpolação parabólica sub-sample ao redor do pico */
+    _parabolic(buf, idx, n) {
+        const prev = buf[(idx - 1 + n) % n];
+        const curr = buf[idx];
+        const next = buf[(idx + 1) % n];
+        const denom = 2 * (2 * curr - prev - next);
+        if (Math.abs(denom) < 1e-12) return idx;
+        return idx + (prev - next) / denom;
+    }
+
+    // ─── Phase Unwrapping ─────────────────────────────────────────────────────
+
+    /**
+     * Unwrapping acumulativo de fase.
+     * A cada frame, calcula a fase desembrulhada relativa ao frame anterior
+     * usando o estado salvo `_unwrapAcc`.
+     */
+    _unwrapPhase(wrapped) {
+        const h = this._fftSize >>> 1;
+        const out = new Float32Array(h);
+        out[0] = wrapped[0];
+
+        for (let k = 1; k < h; k++) {
+            let delta = wrapped[k] - wrapped[k - 1];
+            // Reduz ao intervalo [-π, π]
+            while (delta >  Math.PI) delta -= 2 * Math.PI;
+            while (delta < -Math.PI) delta += 2 * Math.PI;
+            this._unwrapAcc[k] = this._unwrapAcc[k - 1] + delta;
+            out[k] = this._unwrapAcc[k];
+        }
+        return out;
+    }
+
+    // ─── Phase Delay Médio ────────────────────────────────────────────────────
+
+    /**
+     * Estima o atraso de fase médio τ = -φ(f) / (2πf) na banda 200–8000 Hz,
+     * ponderado pela coerência (bins com baixa coerência têm menos peso).
+     * Retorna em milissegundos.
+     */
+    _calcPhaseDelay() {
+        const h      = this._fftSize >>> 1;
+        const hzBin  = this._sr / this._fftSize;
+        const kLow   = Math.ceil(200  / hzBin);
+        const kHigh  = Math.floor(8000 / hzBin);
+
+        let wSum = 0, wTotal = 0;
+
+        for (let k = kLow; k <= kHigh && k < h; k++) {
+            const freq = k * hzBin;
+            const pd   = -this._smPhs[k] / (2 * Math.PI * freq) * 1000; // ms
+            if (!isFinite(pd) || Math.abs(pd) > 200) continue;
+
+            const w = Math.max(0.01, this._smCoh[k] / 100);
+            wSum   += pd * w;
+            wTotal += w;
+        }
+
+        return wTotal > 0 ? wSum / wTotal : 0;
+    }
+
+    // ─── Biquad IIR ───────────────────────────────────────────────────────────
+
+    /** Filtro biquad DF-II (in-place no estado z[]) */
+    _applyBiquad(x, z, c) {
+        const y = c.b0 * x + c.b1 * z[0] + c.b2 * z[1]
+                - c.a1 * z[0] - c.a2 * z[1];
+        z[1] = z[0];
+        z[0] = x;
+        return y;
+    }
+
+    // ─── FFT Cooley-Tukey In-Place (Radix-2 DIT) ─────────────────────────────
+
+    /**
+     * FFT in-place. real[] e imag[] devem ter comprimento = potência de 2.
+     * Converte para espectro complexo de comprimento N.
+     */
+    _fft(re, im) {
+        const n = re.length;
+
+        // Bit-reversal permutation
+        for (let i = 0, j = 0; i < n; i++) {
+            if (i < j) {
+                let t = re[i]; re[i] = re[j]; re[j] = t;
+                    t = im[i]; im[i] = im[j]; im[j] = t;
+            }
+            let m = n >>> 1;
+            while (m >= 1 && j >= m) { j -= m; m >>>= 1; }
+            j += m;
+        }
+
+        // Butterfly stages
+        for (let len = 2; len <= n; len <<= 1) {
+            const halfLen = len >>> 1;
+            const ang = -Math.PI / halfLen; // sinal negativo = FFT direta
+            const wBaseR = Math.cos(ang);
+            const wBaseI = Math.sin(ang);
+
+            for (let i = 0; i < n; i += len) {
+                let wR = 1, wI = 0;
+                for (let j = 0; j < halfLen; j++) {
+                    const uR = re[i + j];
+                    const uI = im[i + j];
+                    const vR = re[i + j + halfLen] * wR - im[i + j + halfLen] * wI;
+                    const vI = re[i + j + halfLen] * wI + im[i + j + halfLen] * wR;
+                    re[i + j]          = uR + vR;
+                    im[i + j]          = uI + vI;
+                    re[i + j + halfLen] = uR - vR;
+                    im[i + j + halfLen] = uI - vI;
+                    const nwR = wR * wBaseR - wI * wBaseI;
+                    wI = wR * wBaseI + wI * wBaseR;
+                    wR = nwR;
+                }
+            }
+        }
+    }
+
+    /** IFFT: conjuga → FFT → conjuga → escala por 1/N */
+    _ifft(re, im) {
+        const n = re.length;
+        // Conjuga para inverter sinal de fase
+        for (let i = 0; i < n; i++) im[i] = -im[i];
+        this._fft(re, im);
+        const invN = 1 / n;
+        for (let i = 0; i < n; i++) {
+            re[i] *=  invN;
+            im[i] *= -invN; // conjuga de volta + escala
+        }
     }
 }
 

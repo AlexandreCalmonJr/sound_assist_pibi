@@ -52,6 +52,12 @@ let refSource = null; // ✅ Novo: Fonte de Referência (Loopback)
 let latestTFData = null; // ✅ Novo: Cache para snapshot
 let isDemoMode = false; // ✅ Novo: Estado de simulação digital
 let refAudioQueue = []; // ✅ Fila global de áudio de referência (singleton)
+let sweepNode = null; // ✅ Novo: Nó Log-Sine Sweep
+let sweepProcessorInstance = null; // ✅ Instância do worklet de sweep
+let isSweepActive = false;
+let sweepRecordingBuffer = null;
+let sweepRecordingIdx = 0;
+let sweepCaptureActive = false;
 
 // --- Novas Variáveis de Melhoria ---
 let peakHold = { hz: 0, db: -100, timer: 0 };
@@ -1289,90 +1295,229 @@ function startLogarithmicSweep() {
 }
 
 /**
- * RT60: Dispara um pulso (Burst de Ruído) e captura o decaimento
+ * RT60: Dispara Log-Sine Sweep e processa via backend Python
  */
 async function triggerImpulseMeasure() {
-    console.log('[RT60] Iniciando medição de impulso...');
+    console.log('[RT60] Iniciando medição via Log-Sine Sweep...');
     ensureAudioCtx();
-    
+
     if (!isAnalyzing) {
         console.log('[RT60] Microfone desligado. Ativando automaticamente...');
         await startAnalyzer();
         await new Promise(r => setTimeout(r, 1000));
     }
 
-    if (!audioWorkletNode) {
-        console.warn('[Analyzer] AudioWorklet offline. Usando fallback de buffer limitado.');
-        // Fallback: Tenta capturar do analyser padrão se o worklet falhou
-        const buffer = new Float32Array(analyser.fftSize);
-        analyser.getFloatTimeDomainData(buffer);
-        if (acousticWorker) {
-            acousticWorker.postMessage({ type: 'calculate-rt60', data: { buffer, sampleRate: audioCtx.sampleRate } });
-            AppStore.addLog('Medição RT60 iniciada (Modo Fallback/Standard).');
-        }
+    await startSweepMeasurement();
+}
+
+async function startSweepMeasurement() {
+    if (isSweepActive) return;
+    ensureAudioCtx();
+
+    const sweepDuration = 12;
+    const captureDuration = sweepDuration + 6;
+    const sampleRate = audioCtx.sampleRate;
+
+    sweepRecordingBuffer = new Float32Array(sampleRate * captureDuration);
+    sweepRecordingIdx = 0;
+    sweepCaptureActive = true;
+    isSweepActive = true;
+
+    const summaryEl = document.getElementById('pink-measure-summary');
+    if (summaryEl) summaryEl.innerText = 'Iniciando Log-Sine Sweep...';
+
+    try {
+        await audioCtx.audioWorklet.addModule('js/core/log-sweep-processor.js');
+    } catch (e) {
+        console.warn('[Sweep] Worklet offline, usando fallback ScriptProcessor.', e);
+        await startSweepMeasurementFallback();
         return;
     }
 
-    const duration = 0.1; // 100ms white noise burst
-    const captureDuration = 5.0; // ✅ Correção Auditoria: Aumentado para 5s (suporte a grandes igrejas)
-    
-    // 1. Criar Burst de Ruído Branco com Envelope (Mais preciso que senoide)
-    const bufferSizeBurst = Math.ceil(audioCtx.sampleRate * 0.15); // 150ms total
-    const impulseBuffer = audioCtx.createBuffer(1, bufferSizeBurst, audioCtx.sampleRate);
-    const impulseData = impulseBuffer.getChannelData(0);
-    
-    for (let i = 0; i < bufferSizeBurst; i++) {
-        const white = Math.random() * 2 - 1;
-        const t = i / bufferSizeBurst;
-        // Envelope: Fade-in rápido (5ms) e Fade-out exponencial suave
-        const env = t < 0.05 ? t / 0.05 : Math.exp(-12 * (t - 0.05));
-        impulseData[i] = white * env * 0.8; 
-    }
+    sweepNode = new AudioWorkletNode(audioCtx, 'log-sweep-processor', {
+        numberOfInputs: 1,
+        numberOfOutputs: 1
+    });
 
-    const impulseSource = audioCtx.createBufferSource();
-    impulseSource.buffer = impulseBuffer;
-    impulseSource.connect(audioCtx.destination);
+    sweepNode.port.onmessage = (e) => {
+        const { type, data } = e.data;
+        if (type === 'sweep-started') {
+            console.log(`[Sweep] Disparado! Duração: ${data.duration}s, ${data.startFreq}Hz - ${data.endFreq}Hz`);
+            if (summaryEl) summaryEl.innerText = `Log-Sine Sweep em progresso (${data.duration}s)...`;
+        }
+    };
 
-    // 2. Preparar gravação do decaimento
-    const sampleRate = audioCtx.sampleRate;
-    const bufferSize = sampleRate * captureDuration;
-    const decayBuffer = new Float32Array(bufferSize);
-    let offset = 0;
+    const micDestination = audioCtx.createMediaStreamDestination();
+    source.connect(micDestination);
+    micDestination.stream.getAudioTracks().forEach(track => {
+        track.onended = () => {
+            if (isSweepActive) finishSweepMeasurement();
+        };
+    });
 
-    // Usamos o Worklet para capturar o áudio puro
-    const captureHandler = (e) => {
-        if (e.data.type === 'raw-data') {
-            const chunk = e.data.buffer;
-            if (offset + chunk.length < bufferSize) {
-                decayBuffer.set(chunk, offset);
-                offset += chunk.length;
+    sweepNode.connect(audioCtx.destination);
+
+    const captureScript = audioCtx.createScriptProcessor(4096, 1, 1);
+    captureScript.onaudioprocess = (ev) => {
+        if (!sweepCaptureActive) return;
+        const inputData = ev.inputBuffer.getChannelData(0);
+        for (let i = 0; i < inputData.length; i++) {
+            if (sweepRecordingIdx < sweepRecordingBuffer.length) {
+                sweepRecordingBuffer[sweepRecordingIdx++] = inputData[i];
             }
         }
     };
 
-    if (audioWorkletNode) {
-        audioWorkletNode.port.onmessage = captureHandler;
-    }
+    micDestination.connect(captureScript);
 
-    impulseSource.start();
-    console.log('[RT60] Burst de ruído branco disparado...');
+    sweepNode.port.postMessage({
+        type: 'start-sweep',
+        data: {
+            startFreq: 20,
+            endFreq: 20000,
+            duration: sweepDuration,
+            amplitude: 0.8,
+            fadeOutMs: 500
+        }
+    });
 
     setTimeout(() => {
-        impulseSource.stop();
-        console.log('[RT60] Processando decaimento via Worker...');
-        
-        // Desconecta o handler de captura
-        if (audioWorkletNode) {
-            audioWorkletNode.port.onmessage = null; 
+        finishSweepMeasurement();
+    }, (sweepDuration + 5) * 1000);
+
+    setTimeout(() => {
+        if (sweepNode) {
+            sweepNode.port.postMessage({ type: 'stop-sweep' });
         }
+        if (captureScript) captureScript.disconnect();
+        if (sweepNode) {
+            sweepNode.disconnect();
+            sweepNode = null;
+        }
+    }, sweepDuration * 1000);
+}
 
-        // Envia para o Worker
-        acousticWorker.postMessage({
-            type: 'calculate-rt60',
-            data: { buffer: decayBuffer, sampleRate: sampleRate }
-        });
+async function startSweepMeasurementFallback() {
+    const sampleRate = audioCtx.sampleRate;
+    const sweepDuration = 8;
+    const captureDuration = sweepDuration + 6;
 
-    }, captureDuration * 1000);
+    sweepRecordingBuffer = new Float32Array(sampleRate * captureDuration);
+    sweepRecordingIdx = 0;
+    sweepCaptureActive = true;
+    isSweepActive = true;
+
+    const bufferSize = Math.ceil(sampleRate * sweepDuration);
+    const sweepBuffer = audioCtx.createBuffer(1, bufferSize, sampleRate);
+    const data = sweepBuffer.getChannelData(0);
+
+    const f0 = 20, f1 = 20000;
+    const lnF0 = Math.log(f0), lnF1 = Math.log(f1);
+    let phase = 0;
+
+    for (let i = 0; i < bufferSize; i++) {
+        const t = i / sampleRate;
+        const instFreq = f0 * Math.exp(((lnF1 - lnF0) / sweepDuration) * t);
+        phase += 2 * Math.PI * instFreq / sampleRate;
+        data[i] = Math.sin(phase) * 0.8;
+    }
+
+    const captureScript = audioCtx.createScriptProcessor(4096, 1, 1);
+    captureScript.onaudioprocess = (ev) => {
+        if (!sweepCaptureActive) return;
+        const inputData = ev.inputBuffer.getChannelData(0);
+        for (let i = 0; i < inputData.length; i++) {
+            if (sweepRecordingIdx < sweepRecordingBuffer.length) {
+                sweepRecordingBuffer[sweepRecordingIdx++] = inputData[i];
+            }
+        }
+    };
+
+    source.connect(captureScript);
+
+    const sweepSource = audioCtx.createBufferSource();
+    sweepSource.buffer = sweepBuffer;
+    sweepSource.connect(audioCtx.destination);
+
+    sweepSource.start();
+
+    setTimeout(() => finishSweepMeasurement(), (sweepDuration + 5) * 1000);
+    setTimeout(() => {
+        sweepSource.stop();
+        captureScript.disconnect();
+    }, sweepDuration * 1000);
+}
+
+async function finishSweepMeasurement() {
+    if (!isSweepActive) return;
+    sweepCaptureActive = false;
+    isSweepActive = false;
+
+    const recordedSamples = sweepRecordingBuffer.subarray(0, sweepRecordingIdx);
+    const summaryEl = document.getElementById('pink-measure-summary');
+    if (summaryEl) summaryEl.innerText = 'Processando IR via deconvolução...';
+
+    console.log(`[Sweep] Gravação completa: ${recordedSamples.length} samples. Enviando para análise...`);
+
+    SocketService.emit('analyze_sweep_ir', {
+        recording: Array.from(recordedSamples),
+        sweepParams: {
+            start_freq: 20,
+            end_freq: 20000,
+            duration: 12,
+            amplitude: 0.8,
+            fade_out_ms: 500
+        }
+    });
+}
+
+function _handleSweepAnalysisResult(result) {
+    console.log('[SweepAnalysis Result]', result);
+
+    if (result.error) {
+        const summaryEl = document.getElementById('pink-measure-summary');
+        if (summaryEl) summaryEl.innerHTML = `<span class="text-red-400">Erro: ${result.error}</span>`;
+        if (audioWorkletNode) {
+            triggerImpulseMeasure._fallback = true;
+        }
+        return;
+    }
+
+    lastRt60Result = result;
+    lastRt60 = result.t30 || result.t20 || 0;
+
+    const summaryEl = document.getElementById('pink-measure-summary');
+    if (summaryEl) {
+        summaryEl.innerHTML = `
+            <div class="space-y-2">
+                <div><span class="text-cyan-300 font-bold">EDT:</span> ${result.edt}s | <span class="text-cyan-300">T20:</span> ${result.t20}s | <span class="text-cyan-300">T30:</span> ${result.t30}s</div>
+                <div><span class="text-amber-300 font-bold">STI:</span> ${result.sti} (${result.sti_category}) | <span class="text-amber-300">C50:</span> ${result.c50}dB | <span class="text-amber-300">C80:</span> ${result.c80}dB</div>
+                <div><span class="text-slate-400 text-[10px]">SNR: ${result.snr_db}dB | Qual.: ${result.quality_flags ? result.quality_flags.join(', ') : 'OK'}</span></div>
+            </div>
+        `;
+    }
+
+    const rt60El = document.getElementById('rt60-result');
+    if (rt60El) {
+        rt60El.classList.remove('hidden');
+        rt60El.innerHTML = `
+            <div class="bg-cyan-900/40 border border-cyan-500/30 p-6 rounded-2xl shadow-xl">
+                <h4 class="text-xs font-black uppercase text-cyan-400 tracking-widest mb-4">Resultado RT60 (Log-Sweep IR)</h4>
+                <div class="grid grid-cols-3 gap-4 mb-4">
+                    <div><span class="text-[10px] text-slate-400">EDT</span><br><span class="text-2xl font-black text-white">${result.edt}s</span></div>
+                    <div><span class="text-[10px] text-slate-400">T20</span><br><span class="text-2xl font-black text-cyan-300">${result.t20}s</span></div>
+                    <div><span class="text-[10px] text-slate-400">T30</span><br><span class="text-2xl font-black text-cyan-300">${result.t30}s</span></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div><span class="text-[10px] text-slate-400">STI</span><br><span class="text-2xl font-black ${result.sti >= 0.6 ? 'text-green-400' : result.sti >= 0.45 ? 'text-amber-400' : 'text-red-400'}">${result.sti}</span></div>
+                    <div><span class="text-[10px] text-slate-400">D50</span><br><span class="text-2xl font-black text-white">${result.d50}</span></div>
+                </div>
+                <div class="flex items-baseline gap-2">
+                    <span class="text-[10px] text-cyan-100/60">SNR: ${result.snr_db} dB | ${result.sti_category} | ${result.quality_flags ? result.quality_flags.join(' | ') : 'OK'}</span>
+                </div>
+            </div>
+        `;
+    }
 }
 
 function _handleRT60Result(result) {
@@ -1439,14 +1584,14 @@ function ensureAudioCtx() {
     // Previne que múltiplas instâncias do analisador criem listeners redundantes
     SocketService.on('reference_audio_stream', (data) => {
         if (!data || !data.samples) return;
-        
-        // Empilha samples na fila global
         refAudioQueue.push(...data.samples);
-        
-        // Limita o buffer para evitar lag (máx 1 segundo de áudio acumulado)
         if (refAudioQueue.length > 48000) {
             refAudioQueue.splice(0, refAudioQueue.length - 48000);
         }
+    });
+
+    SocketService.on('sweep_analysis_result', (result) => {
+        _handleSweepAnalysisResult(result);
     });
 
     // Ouvir eventos do roteador para Detector de Feedback

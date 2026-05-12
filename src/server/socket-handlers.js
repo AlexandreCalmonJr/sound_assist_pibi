@@ -7,6 +7,9 @@ const aiPredictor = require('./ai-predictor');
 const Logger = require('./logger');
 const mixerSingleton = require('./mixer-singleton');
 const loopbackService = require('./loopback-service');
+const { spawn } = require('child_process');
+const path = require('path');
+const fs = require('fs');
 
 // --- Esquemas de Validação ---
 // ... (esquemas omitidos para brevidade, mantidos no arquivo)
@@ -635,6 +638,71 @@ function registerSocketHandlers(io, appDataDir = './logs') {
             }
         });
 
+
+        socket.on('analyze_sweep_ir', async (data) => {
+            const { recording, sweepParams } = data;
+
+            if (!recording || !Array.isArray(recording) || recording.length < 4800) {
+                socket.emit('sweep_analysis_result', { error: 'Recording too short or missing.' });
+                return;
+            }
+
+            try {
+                const tmpWav = path.join(require('os').tmpdir(), `sweep_${Date.now()}.wav`);
+                const { writeFileSync } = require('fs');
+
+                const int16Data = new Int16Array(recording.map(v => Math.max(-32768, Math.min(32767, Math.round(v * 32768)))));
+
+                const header = Buffer.alloc(44);
+                const dv = new DataView(header.buffer);
+                dv.setUint32(0, 0x52494646, false);
+                dv.setUint32(4, 36 + int16Data.byteLength, false);
+                dv.setUint32(8, 0x57415645, false);
+                dv.setUint32(12, 0x666D7420, false);
+                dv.setUint32(16, 16, false);
+                dv.setUint16(20, 1, false);
+                dv.setUint16(22, 1, false);
+                dv.setUint32(24, 48000, false);
+                dv.setUint32(28, 48000 * 2, false);
+                dv.setUint16(32, 2, false);
+                dv.setUint16(34, 16, false);
+                dv.setUint32(36, 0x64617461, false);
+                dv.setUint32(40, int16Data.byteLength, false);
+
+                writeFileSync(tmpWav, Buffer.concat([header, Buffer.from(int16Data.buffer)]));
+
+                const analyzerPy = path.join(__dirname, '..', '..', 'backend', 'ai', 'acoustics', 'sweep_analyzer.py');
+
+                const result = await new Promise((resolve, reject) => {
+                    const py = spawn('python', [analyzerPy, tmpWav], { cwd: path.dirname(analyzerPy) });
+
+                    let stdout = '';
+                    let stderr = '';
+
+                    py.stdout.on('data', (d) => { stdout += d.toString(); });
+                    py.stderr.on('data', (d) => { stderr += d.toString(); });
+
+                    py.on('close', (code) => {
+                        try { require('fs').unlinkSync(tmpWav); } catch (_) {}
+                        if (code !== 0) {
+                            reject(new Error(stderr || `Python exited with code ${code}`));
+                        } else {
+                            try {
+                                resolve(JSON.parse(stdout));
+                            } catch (e) {
+                                reject(new Error(`JSON parse error: ${stdout}`));
+                            }
+                        }
+                    });
+                });
+
+                socket.emit('sweep_analysis_result', result);
+
+            } catch (error) {
+                console.error('[SweepAnalyzer] Error:', error.message);
+                socket.emit('sweep_analysis_result', { error: error.message });
+            }
+        });
 
         // --- Gerenciamento de Presets ---
         socket.on('save_preset', (data) => {
