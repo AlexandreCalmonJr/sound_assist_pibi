@@ -961,6 +961,28 @@ function analyze() {
         SplLogger.push(freqData, timeData, analyser.fftSize);
     }
 
+    // ── Auto-EQ: Acumulação de espectro de longo prazo ──────────────────────
+    // Acumula freqData durante 5 segundos (≈300 frames @60fps) e calcula
+    // a correção de curva alvo. Publicado no AppStore para a UI consumir.
+    if (window.AutoEQ) {
+        if (!window._aeqAcc) {
+            window._aeqAcc = { sum: new Float32Array(freqData.length), count: 0 };
+        }
+        const acc = window._aeqAcc;
+        for (let i = 0; i < freqData.length; i++) acc.sum[i] += freqData[i];
+        acc.count++;
+
+        if (acc.count >= 300) {
+            const avg = new Float32Array(freqData.length);
+            for (let i = 0; i < avg.length; i++) avg[i] = acc.sum[i] / acc.count;
+            const result = AutoEQ.analyze(avg, audioCtx.sampleRate, analyser.fftSize);
+            AppStore.setState({ autoEqResult: result });
+            // Reinicia acumulador
+            acc.sum.fill(0);
+            acc.count = 0;
+        }
+    }
+
     // ✅ Novo: Detecção de Clipping (Saturação Digital)
     let isClipping = false;
     for (let i = 0; i < timeData.length; i++) {

@@ -49,6 +49,10 @@
         mtwSpectrum: null,    // { frequencies: Float32Array, magnitudes: Float32Array }
         mtwWindow: 'blackman', // janela activa
 
+        // Auto-EQ / Target Curve Matching
+        autoEqTarget: 'flat',  // curva alvo activa
+        autoEqResult: null,    // { peq, geq, curve, diff, stats }
+
         // Logs
         mixerLog: [],         // [{ time, text }]
     };
