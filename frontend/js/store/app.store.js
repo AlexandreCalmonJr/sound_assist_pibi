@@ -58,6 +58,11 @@
 
         // Logs
         mixerLog: [],         // [{ time, text }]
+
+        // Modo de Permissão (Tópico 15)
+        userMode: localStorage.getItem('sm-user-mode') || 'technician', // 'technician' | 'volunteer'
+        volunteerChannels: JSON.parse(localStorage.getItem('sm-volunteer-channels') || '[1,2,3,4]'), // canais visíveis no modo voluntário
+        faderCeiling: 0.85, // ~0dB: teto do fader no modo voluntário (0.0–1.0)
     };
 
     // -------------------------------------------------------------------------

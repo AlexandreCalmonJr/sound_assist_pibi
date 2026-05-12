@@ -144,3 +144,11 @@
         </div>
     </div>
 </section>
+
+<script>
+    document.getElementById('btn-trigger-pulse')?.addEventListener('click', () => {
+        if (window.SoundMasterAnalyzer) {
+            window.SoundMasterAnalyzer.triggerImpulse();
+        }
+    });
+</script>

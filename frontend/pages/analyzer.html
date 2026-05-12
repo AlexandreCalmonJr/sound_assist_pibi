@@ -346,12 +346,7 @@
 </section>
 
 <script>
-    // ✅ Força a inicialização dos elementos quando o roteador injeta o HTML
-    if (window.SoundMasterAnalyzer) {
-        window.SoundMasterAnalyzer.init();
-    }
-    if (window.SoundMasterVisualizer) {
-        window.SoundMasterVisualizer.init();
-    }
-    console.log('[Analyzer] Script de inicialização inline executado.');
+    // ✅ Inicialização via page-loaded event (analyzer.js).
+    // Inline script mantido apenas para logs de debug.
+    console.log('[Analyzer] Página carregada via router.');
 </script>

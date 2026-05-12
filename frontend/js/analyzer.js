@@ -323,9 +323,6 @@ document.addEventListener('page-loaded', (e) => {
     // Sempre inicializa os serviços globais se ainda não foram
     if (!acousticWorker) initGlobalAnalyzer();
 
-    if (e.detail.pageId === 'analyzer') {
-        initAnalyzer();
-    }
     if (e.detail.pageId === 'rt60') {
         // Inicializa controles de RT60 na página específica
         document.getElementById('btn-trigger-pulse')?.addEventListener('click', () => {
@@ -1635,14 +1632,6 @@ function ensureAudioCtx() {
 
     SocketService.on('sweep_analysis_result', (result) => {
         _handleSweepAnalysisResult(result);
-    });
-
-    // Ouvir eventos do roteador para Detector de Feedback
-    document.addEventListener('page-loaded', (e) => {
-        console.log(`[Analyzer] Page loaded event: ${e.detail.pageId}`);
-        if (e.detail.pageId === 'analyzer') {
-            initAnalyzer(); 
-        }
     });
 
     // ✅ Delegação de Eventos Global para Botões da Transfer Function (mais robusto para SPA)

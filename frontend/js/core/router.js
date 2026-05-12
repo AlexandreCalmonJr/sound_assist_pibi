@@ -115,6 +115,16 @@ class Router {
         } catch (error) {
             console.error('[Router] Erro na navegação:', error);
             container.classList.remove('page-exit');
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+                    <div class="text-6xl">⚠️</div>
+                    <h2 class="text-2xl font-black text-white">Página não encontrada</h2>
+                    <p class="text-slate-400 text-sm">Não foi possível carregar esta página.</p>
+                    <button onclick="history.back()" class="px-6 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold transition-all mt-4">
+                        Voltar
+                    </button>
+                </div>
+            `;
         }
     }
 
