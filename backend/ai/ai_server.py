@@ -11,6 +11,9 @@ from contextlib import asynccontextmanager
 # Importações Modulares
 from engine.ai_logic import AIEngine, SessionContext
 from acoustics.processor import AcousticProcessor
+from predictive_maintenance import PredictiveMaintenanceEngine
+
+_maintenance_engine = PredictiveMaintenanceEngine()
 
 load_dotenv()
 
@@ -114,6 +117,12 @@ class TrainRequest(BaseModel):
     gain: float
     isFeedback: bool
 
+class HardwareDiagnosisRequest(BaseModel):
+    channel: str = "Canal 1"
+    snapshots: list[dict] = []
+    months: int = 6
+    thresholds: dict = {}
+
 @app.get("/")
 async def root():
     return {"status": "online", "engine": "SoundMaster Pro AI", "active_sessions": len(sessions)}
@@ -185,6 +194,26 @@ async def diagnose_endpoint(session_id: str = "default"):
             "totalMeasurements": len(session.analyses_history),
             "session_id": session_id
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/hardware_diagnosis")
+async def hardware_diagnosis_endpoint(
+    request: HardwareDiagnosisRequest,
+    authenticated: bool = Depends(verify_api_key)
+):
+    """
+    Analisa o histórico de snapshots acústicos de um canal para detetar
+    degradação de hardware (cabos, conectores, cápsula).
+
+    Body: { channel, snapshots: [{timestamp, spectrum_db}], months, thresholds }
+    """
+    try:
+        engine = PredictiveMaintenanceEngine(request.thresholds or None)
+        result = engine.analyze(request.channel, request.snapshots, request.months)
+        # dataclass -> dict via asdict
+        from dataclasses import asdict
+        return asdict(result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

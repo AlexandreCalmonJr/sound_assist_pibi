@@ -3,3 +3,5 @@ uvicorn
 pydantic
 python-dotenv
 llama-cpp-python
+numpy
+scipy

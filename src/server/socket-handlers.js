@@ -809,6 +809,64 @@ function registerSocketHandlers(io, appDataDir = './logs') {
             socket.emit('pong_mixer');
         });
 
+        // ── Diagnóstico Preditivo de Hardware ─────────────────────────────────────
+        socket.on('get_hardware_diagnosis', async (data = {}) => {
+            const channel = data.channel || 'Canal 1';
+            const months  = Math.max(1, Math.min(24, Number(data.months) || 6));
+
+            try {
+                // Busca snapshots do canal no NeDB (últimos 24 meses como tecto)
+                const cutoffMs = Date.now() - months * 30 * 86400 * 1000;
+                const docs = await new Promise((resolve, reject) => {
+                    historyService.db.find(
+                        { name: { $regex: new RegExp(channel, 'i') } }
+                    )
+                    .sort({ timestamp: 1 })
+                    .exec((err, d) => err ? reject(err) : resolve(d || []));
+                });
+
+                if (docs.length === 0) {
+                    socket.emit('hardware_diagnosis_result', {
+                        channel,
+                        code: 'DADOS_INSUFICIENTES',
+                        severity: 'ok',
+                        confidence: 0,
+                        summary: `Sem snapshots para o canal "${channel}" na base de dados.`,
+                        recommendations: ['Salvar medições acústicas regularmente com o nome do canal.'],
+                        bands: [],
+                        stats: { n_snapshots: 0 },
+                    });
+                    return;
+                }
+
+                // Chama o motor Python
+                const aiRes = await fetch('http://127.0.0.1:3002/hardware_diagnosis', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-API-Key': process.env.AI_API_KEY || '' },
+                    body:    JSON.stringify({ channel, snapshots: docs, months }),
+                });
+
+                if (!aiRes.ok) throw new Error(`Python engine: ${aiRes.status}`);
+                const result = await aiRes.json();
+
+                logger.info(socket.id, 'HARDWARE_DIAGNOSIS', { channel, code: result.code, severity: result.severity });
+                socket.emit('hardware_diagnosis_result', result);
+
+            } catch (err) {
+                logger.error(socket.id, 'HARDWARE_DIAGNOSIS_ERROR', { channel, error: err.message });
+                socket.emit('hardware_diagnosis_result', {
+                    channel,
+                    code: 'ERRO',
+                    severity: 'ok',
+                    confidence: 0,
+                    summary: `Erro ao analisar: ${err.message}`,
+                    recommendations: ['Verificar se o servidor Python (porta 3002) está online.'],
+                    bands: [],
+                    stats: { n_snapshots: 0 },
+                });
+            }
+        });
+
         socket.on('disconnect', () => {
             activeConnections--;
             // Comentário intencional: a conexão com a Ui24R permanece singleton no backend e não cai quando um cliente mobile sai.

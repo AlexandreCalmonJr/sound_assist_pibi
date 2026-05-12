@@ -149,6 +149,26 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
         }
     });
 
+    // Diagnóstico Preditivo de Hardware (proxy → Python AI Engine)
+    expressApp.post('/api/hardware_diagnosis', async (req, res) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 60000);
+        try {
+            const aiRes = await fetch('http://127.0.0.1:3002/hardware_diagnosis', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', 'X-API-Key': process.env.AI_API_KEY || '' },
+                body:    JSON.stringify(req.body),
+                signal:  controller.signal
+            });
+            clearTimeout(timeout);
+            res.json(await aiRes.json());
+        } catch (error) {
+            clearTimeout(timeout);
+            res.status(error.name === 'AbortError' ? 504 : 500)
+               .json({ error: error.name === 'AbortError' ? 'Timeout no diagnóstico' : 'Motor Python offline' });
+        }
+    });
+
     // Mapeamento de nomes de canais e auxiliares
     expressApp.get('/api/mixer/names', async (req, res) => {
         try {
