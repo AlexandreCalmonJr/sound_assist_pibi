@@ -41,7 +41,7 @@
     "dgram": "^1.0.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.1",
-
+    "multicast-dns": "^7.2.5",
     "socket.io": "^4.8.3",
     "soundcraft-ui-connection": "^6.0.3",
     "zod": "^4.4.3"

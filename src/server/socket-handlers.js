@@ -10,6 +10,7 @@ const loopbackService = require('./loopback-service');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const netDiag = require('./network');
 
 // --- Esquemas de Validação ---
 // ... (esquemas omitidos para brevidade, mantidos no arquivo)
@@ -102,6 +103,9 @@ function registerSocketHandlers(io, appDataDir = './logs') {
         io.emit('system_log', entry);
     };
 
+    // ── Diagnóstico de Rede e Descoberta mDNS ─────────────────────────────
+    netDiag.init(io);
+
     // ✅ Inicializa a extração de áudio Loopback (AES67 -> WebSocket)
     loopbackService.init(io);
     
@@ -165,6 +169,9 @@ function registerSocketHandlers(io, appDataDir = './logs') {
         }, 50);
 
         logger.info(socket.id, 'CLIENT_CONNECTED', { activeConnections });
+
+        // ── Handlers de diagnóstico de rede ───────────────────────────────────
+        netDiag.registerNetDiagHandlers(socket);
 
         socket.on('connect_mixer', async (ip) => {
             try {
