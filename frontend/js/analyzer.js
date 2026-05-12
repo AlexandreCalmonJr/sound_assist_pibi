@@ -1129,6 +1129,24 @@ function analyze() {
     }
     } // Fim do if (canvas && canvasCtx)
 
+    // ── Spatial Averaging: alimenta microfone primário e desenha overlay ────
+    // O SpatialAverager só renderiza quando há ≥2 fontes activas.
+    // Em modo de microfone único, o overhead é apenas 1 pushSource() + 1 check.
+    if (window.SpatialAverager) {
+        // Regista o microfone primário na primeira vez que o analyzer corre
+        if (isAnalyzing && !SpatialAverager._primaryRegistered) {
+            SpatialAverager.addSource('primary', 'Mic Principal', '#ffffff');
+            SpatialAverager._primaryRegistered = true;
+        }
+        if (isAnalyzing) {
+            SpatialAverager.pushSource('primary', freqData);
+        }
+        // Overlay no canvas (só visível se houver ≥2 fontes com dados)
+        if (canvas && canvasCtx && SpatialAverager.getResult()?.meta?.n >= 2) {
+            SpatialAverager.drawOverlay(canvasCtx, canvas, analyser, audioCtx.sampleRate);
+        }
+    }
+
     const peakHz = peakIndex * audioCtx.sampleRate / analyser.fftSize;
     const neighborLeft = freqData[Math.max(0, peakIndex - 1)] || analyser.minDecibels;
     const neighborRight = freqData[Math.min(bufferLength - 1, peakIndex + 1)] || analyser.minDecibels;

@@ -53,6 +53,9 @@
         autoEqTarget: 'flat',  // curva alvo activa
         autoEqResult: null,    // { peq, geq, curve, diff, stats }
 
+        // Spatial Averaging
+        spatialAvgResult: null, // { avg, variance, sources, meta }
+
         // Logs
         mixerLog: [],         // [{ time, text }]
     };
