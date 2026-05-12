@@ -8,27 +8,28 @@ const ROUTE_MAP = {
     'rt60':              { path: 'pages/rt60.html',              title: 'RT60 & Acústica',     category: 'Medir' },
     'benchmarking':      { path: 'pages/benchmarking.html',      title: 'Benchmarking',        category: 'Medir' },
     'spl-heatmap':       { path: 'pages/spl-heatmap.html',       title: 'Mapa SPL',            category: 'Medir' },
-    'analyzer':          { path: 'pages/analyzer.html',          title: 'FFT & Waterfall',     category: 'Análise' },
-    'feedback-detector': { path: 'pages/feedback-detector.html', title: 'Detector Feedback',   category: 'Análise' },
-    'eq-guide':          { path: 'pages/eq-guide.html',          title: 'Guia de EQ',          category: 'Análise' },
-    'eq':                { path: 'pages/eq.html',                title: 'Equalização',         category: 'Análise' },
-    'auto-eq':           { path: 'pages/auto-eq.html',           title: 'Auto-EQ / Target Curve', category: 'Análise' },
-    'mixer-git':         { path: 'pages/mixer-git.html',         title: 'Mixer Git',           category: 'Análise' },
+    'analyzer':          { path: 'pages/analyzer.html',          title: 'FFT & Waterfall',     category: 'Analisar' },
+    'feedback-detector': { path: 'pages/feedback-detector.html', title: 'Detector Feedback',   category: 'Analisar' },
+    'eq-guide':          { path: 'pages/eq-guide.html',          title: 'Guia de EQ',          category: 'Analisar' },
+    'eq':                { path: 'pages/eq.html',                title: 'Equalização',         category: 'EQ' },
+    'auto-eq':           { path: 'pages/auto-eq.html',           title: 'Auto-EQ / Target Curve', category: 'EQ' },
+    'semantic-eq':       { path: 'pages/semantic-eq.html',       title: 'EQ Semântico',        category: 'EQ' },
+    'mixer-git':         { path: 'pages/mixer-git.html',         title: 'Mixer Git',           category: 'Automação' },
     'mixer-input':       { path: 'pages/mixer-input.html',       title: 'Canais de Entrada',   category: 'Mixer' },
     'mixer-aux':         { path: 'pages/mixer-aux.html',         title: 'Monitores & Aux',     category: 'Mixer' },
-    'mixer-fx':          { path: 'pages/mixer-fx.html',          title: 'Efeitos',             category: 'Mixer' },
-    'voice-presets':     { path: 'pages/voice-presets.html',      title: 'Presets de Voz',      category: 'Mixer' },
-    'stage-plot':        { path: 'pages/stage-plot.html',         title: 'Palco Virtual',       category: 'Mixer' },
-    'systems':           { path: 'pages/systems.html',           title: 'Conexão Ui24R',       category: 'Rede' },
-    'aes67':             { path: 'pages/aes67.html',             title: 'Saúde de Cabos',      category: 'Rede' },
-    'debug':             { path: 'pages/debug.html',             title: 'Console de Depuração', category: 'Rede' },
+    'mixer-fx':          { path: 'pages/mixer-fx.html',          title: 'Envios de Efeito',   category: 'Mixer' },
+    'voice-presets':     { path: 'pages/voice-presets.html',     title: 'Presets de Voz',      category: 'Mixer' },
+    'stage-plot':        { path: 'pages/stage-plot.html',        title: 'Palco Virtual',       category: 'Mixer' },
+    'automixer':         { path: 'pages/automixer.html',         title: 'Auto-Mixer Dugan',   category: 'Automação' },
+    'scene-builder':     { path: 'pages/scene-builder.html',     title: 'Scene Builder',       category: 'Automação' },
+    'systems':           { path: 'pages/systems.html',           title: 'Conexão Ui24R',       category: 'Sistema' },
+    'aes67':             { path: 'pages/aes67.html',             title: 'Saúde de Cabos',      category: 'Sistema' },
+    'debug':             { path: 'pages/debug.html',             title: 'Console de Depuração', category: 'Sistema' },
+    'settings':          { path: 'pages/settings.html',          title: 'Preferências',        category: 'Sistema' },
     'ai-chat':           { path: 'pages/ai-chat.html',           title: 'Assistente IA',       category: null },
     'mobile':            { path: 'pages/mobile.html',            title: 'Modo Remoto',         category: null },
     'volunteer-mode':    { path: 'pages/volunteer-mode.html',  title: 'Modo Voluntário',     category: null },
-    'semantic-eq':       { path: 'pages/semantic-eq.html',       title: 'EQ Semântico',        category: 'Análise' },
-    'automixer':         { path: 'pages/automixer.html',         title: 'Auto-Mixer Dugan',   category: 'Mixer' },
-    'scene-builder':     { path: 'pages/scene-builder.html',     title: 'Scene Builder',      category: 'Mixer' },
-    'settings':          { path: 'pages/settings.html',          title: 'Configurações',       category: null },
+    'testbed':           { path: 'pages/testbed.html',          title: 'Testbed',             category: null },
 };
 
 class Router {
@@ -148,11 +149,11 @@ class Router {
         if (routeData && routeData.category) {
             const categoryMap = {
                 'Medir': 'measure',
-                'Análise': 'analysis',
+                'Analisar': 'analysis',
                 'Mixer': 'mixer',
-                'Rede': 'network',
-                'Treino': 'training',
-                'Configurações': 'settings'
+                'EQ': 'eq',
+                'Automação': 'automation',
+                'Sistema': 'system'
             };
             const catId = categoryMap[routeData.category];
             document.querySelectorAll('.rail-btn[data-category]').forEach(btn => {

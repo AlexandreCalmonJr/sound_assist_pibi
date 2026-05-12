@@ -16,12 +16,11 @@
             ]
         },
         analysis: {
-            title: 'Análise do Som',
+            title: 'Analisar',
             items: [
                 { id: 'analyzer',          label: 'FFT & Waterfall' },
                 { id: 'feedback-detector', label: 'Detector Feedback' },
                 { id: 'eq-guide',          label: 'Guia de EQ' },
-                { id: 'semantic-eq',       label: 'EQ Semântico (NLP)' },
             ]
         },
         mixer: {
@@ -31,20 +30,30 @@
                 { id: 'mixer-aux',     label: 'Monitores & Aux' },
                 { id: 'mixer-fx',      label: 'Envios de Efeito' },
                 { id: 'voice-presets', label: 'Presets de Voz' },
-                { id: 'automixer',     label: 'Auto-Mixer Dugan' },
-                { id: 'scene-builder', label: 'Scene Builder' },
+                { id: 'stage-plot',    label: 'Palco Virtual' },
             ]
         },
-        network: {
-            title: 'Rede & Sistemas',
+        eq: {
+            title: 'EQ',
+            items: [
+                { id: 'eq',           label: 'Equalização' },
+                { id: 'auto-eq',      label: 'Auto-EQ / Target Curve' },
+                { id: 'semantic-eq',   label: 'EQ Semântico (NLP)' },
+            ]
+        },
+        automation: {
+            title: 'Automação',
+            items: [
+                { id: 'automixer',     label: 'Auto-Mixer Dugan' },
+                { id: 'scene-builder', label: 'Scene Builder' },
+                { id: 'mixer-git',     label: 'Mixer Git' },
+            ]
+        },
+        system: {
+            title: 'Sistema',
             items: [
                 { id: 'systems', label: 'Conexão Ui24R' },
                 { id: 'aes67',   label: 'Saúde de Cabos (AES67)' },
-            ]
-        },
-        settings: {
-            title: 'Configurações',
-            items: [
                 { id: 'settings', label: 'Preferências' },
                 { id: 'debug',    label: 'Console de Depuração' },
             ]
@@ -198,11 +207,11 @@
 
             const categoryMap = {
                 'Medir': 'measure',
-                'Análise': 'analysis',
+                'Analisar': 'analysis',
                 'Mixer': 'mixer',
-                'Rede': 'network',
-                'Treino': 'training',
-                'Configurações': 'settings'
+                'EQ': 'eq',
+                'Automação': 'automation',
+                'Sistema': 'system'
             };
             const catId = categoryMap[category];
             if (!catId || activeCategory === catId) return;

@@ -33,9 +33,9 @@ const EXPECTED_MENU_STRUCTURE = {
       { id: 'spl-heatmap', name: 'Mapa de Calor SPL', file: 'pages/spl-heatmap.html' }
     ]
   },
-  soundAnalysis: {
+  analysis: {
     type: 'category',
-    name: 'Análise do Som',
+    name: 'Analisar',
     icon: 'chart-area',
     submenus: [
       { id: 'analyzer', name: 'FFT & Waterfall', file: 'pages/analyzer.html' },
@@ -51,16 +51,39 @@ const EXPECTED_MENU_STRUCTURE = {
       { id: 'mixer-input', name: 'Canais de Entrada', file: 'pages/mixer-input.html' },
       { id: 'mixer-aux', name: 'Monitores & Aux', file: 'pages/mixer-aux.html' },
       { id: 'mixer-fx', name: 'Envios de Efeito', file: 'pages/mixer-fx.html' },
-      { id: 'voice-presets', name: 'Presets de Voz', file: 'pages/voice-presets.html' }
+      { id: 'voice-presets', name: 'Presets de Voz', file: 'pages/voice-presets.html' },
+      { id: 'stage-plot', name: 'Palco Virtual', file: 'pages/stage-plot.html' }
     ]
   },
-  network: {
+  eq: {
     type: 'category',
-    name: 'Rede & Sistemas',
-    icon: 'network-wired',
+    name: 'EQ',
+    icon: 'sliders-h',
+    submenus: [
+      { id: 'eq', name: 'Equalização', file: 'pages/eq.html' },
+      { id: 'auto-eq', name: 'Auto-EQ / Target Curve', file: 'pages/auto-eq.html' },
+      { id: 'semantic-eq', name: 'EQ Semântico (NLP)', file: 'pages/semantic-eq.html' }
+    ]
+  },
+  automation: {
+    type: 'category',
+    name: 'Automação',
+    icon: 'cog',
+    submenus: [
+      { id: 'automixer', name: 'Auto-Mixer Dugan', file: 'pages/automixer.html' },
+      { id: 'scene-builder', name: 'Scene Builder', file: 'pages/scene-builder.html' },
+      { id: 'mixer-git', name: 'Mixer Git', file: 'pages/mixer-git.html' }
+    ]
+  },
+  system: {
+    type: 'category',
+    name: 'Sistema',
+    icon: 'desktop',
     submenus: [
       { id: 'systems', name: 'Conexão Ui24R', file: 'pages/systems.html' },
-      { id: 'aes67', name: 'Saúde de Cabos (AES67)', file: 'pages/aes67.html' }
+      { id: 'aes67', name: 'Saúde de Cabos (AES67)', file: 'pages/aes67.html' },
+      { id: 'settings', name: 'Preferências', file: 'pages/settings.html' },
+      { id: 'debug', name: 'Console de Depuração', file: 'pages/debug.html' }
     ]
   },
   aiChat: {
@@ -68,39 +91,45 @@ const EXPECTED_MENU_STRUCTURE = {
     name: 'Assistente IA',
     icon: 'robot'
   },
-  mobile: {
+  volunteerMode: {
     type: 'direct',
-    name: 'Celular',
-    icon: 'mobile'
+    name: 'Modo Voluntário',
+    icon: 'user'
   },
-  settings: {
-    type: 'category',
-    name: 'Configurações',
-    icon: 'cog',
-    submenus: [
-      { id: 'settings', name: 'Preferências', file: 'pages/settings.html' }
-    ]
+  testbed: {
+    type: 'direct',
+    name: 'Testbed',
+    icon: 'wrench'
   }
 };
 
 const EXPECTED_PAGES = [
-  { id: 'home', file: 'pages/home.html', category: 'Dashboard' },
+  { id: 'home', file: 'pages/home.html', category: null },
   { id: 'rt60', file: 'pages/rt60.html', category: 'Medir' },
   { id: 'benchmarking', file: 'pages/benchmarking.html', category: 'Medir' },
   { id: 'spl-heatmap', file: 'pages/spl-heatmap.html', category: 'Medir' },
-  { id: 'analyzer', file: 'pages/analyzer.html', category: 'Análise' },
-  { id: 'feedback-detector', file: 'pages/feedback-detector.html', category: 'Análise' },
-  { id: 'eq-guide', file: 'pages/eq-guide.html', category: 'Análise' },
-  { id: 'eq', file: 'pages/eq.html', category: 'Análise' },
+  { id: 'analyzer', file: 'pages/analyzer.html', category: 'Analisar' },
+  { id: 'feedback-detector', file: 'pages/feedback-detector.html', category: 'Analisar' },
+  { id: 'eq-guide', file: 'pages/eq-guide.html', category: 'Analisar' },
+  { id: 'eq', file: 'pages/eq.html', category: 'EQ' },
+  { id: 'auto-eq', file: 'pages/auto-eq.html', category: 'EQ' },
+  { id: 'semantic-eq', file: 'pages/semantic-eq.html', category: 'EQ' },
   { id: 'mixer-input', file: 'pages/mixer-input.html', category: 'Mixer' },
   { id: 'mixer-aux', file: 'pages/mixer-aux.html', category: 'Mixer' },
   { id: 'mixer-fx', file: 'pages/mixer-fx.html', category: 'Mixer' },
   { id: 'voice-presets', file: 'pages/voice-presets.html', category: 'Mixer' },
-  { id: 'systems', file: 'pages/systems.html', category: 'Rede' },
-  { id: 'aes67', file: 'pages/aes67.html', category: 'Rede' },
-  { id: 'ai-chat', file: 'pages/ai-chat.html', category: 'IA' },
-  { id: 'mobile', file: 'pages/mobile.html', category: 'Mobile' },
-  { id: 'settings', file: 'pages/settings.html', category: 'Configurações' }
+  { id: 'stage-plot', file: 'pages/stage-plot.html', category: 'Mixer' },
+  { id: 'automixer', file: 'pages/automixer.html', category: 'Automação' },
+  { id: 'scene-builder', file: 'pages/scene-builder.html', category: 'Automação' },
+  { id: 'mixer-git', file: 'pages/mixer-git.html', category: 'Automação' },
+  { id: 'systems', file: 'pages/systems.html', category: 'Sistema' },
+  { id: 'aes67', file: 'pages/aes67.html', category: 'Sistema' },
+  { id: 'settings', file: 'pages/settings.html', category: 'Sistema' },
+  { id: 'debug', file: 'pages/debug.html', category: 'Sistema' },
+  { id: 'ai-chat', file: 'pages/ai-chat.html', category: null },
+  { id: 'mobile', file: 'pages/mobile.html', category: null },
+  { id: 'volunteer-mode', file: 'pages/volunteer-mode.html', category: null },
+  { id: 'testbed', file: 'pages/testbed.html', category: null }
 ];
 
 // =============================================================================
@@ -109,71 +138,55 @@ const EXPECTED_PAGES = [
 
 describe('📋 AUDITA - Estrutura de Menus', function() {
   
-  it('Deve ter 8 menus principais', function() {
+  it('Deve ter 10 menus principais', function() {
     const menuCount = Object.keys(EXPECTED_MENU_STRUCTURE).length;
-    assert.strictEqual(menuCount, 8, `Esperado 8 menus, encontrado ${menuCount}`);
+    assert.strictEqual(menuCount, 10, `Esperado 10 menus, encontrado ${menuCount}`);
   });
 
-  it('Deve ter 5 menus de categoria com submenus', function() {
+  it('Deve ter 6 menus de categoria com submenus', function() {
     const categories = Object.values(EXPECTED_MENU_STRUCTURE)
       .filter(m => m.type === 'category');
-    assert.strictEqual(categories.length, 5, `Esperado 5 categorias, encontrado ${categories.length}`);
+    assert.strictEqual(categories.length, 6, `Esperado 6 categorias, encontrado ${categories.length}`);
   });
 
-  it('Deve ter 3 menus diretos (links rápidos)', function() {
+  it('Deve ter 4 menus diretos (links rápidos)', function() {
     const directMenus = Object.values(EXPECTED_MENU_STRUCTURE)
       .filter(m => m.type === 'direct');
-    assert.strictEqual(directMenus.length, 3, `Esperado 3 menus diretos, encontrado ${directMenus.length}`);
+    assert.strictEqual(directMenus.length, 4, `Esperado 4 menus diretos, encontrado ${directMenus.length}`);
   });
 
-  it('Deve ter 13 submenus no total', function() {
+  it('Deve ter 21 submenus no total', function() {
     let submenuCount = 0;
     Object.values(EXPECTED_MENU_STRUCTURE).forEach(menu => {
       if (menu.submenus) {
         submenuCount += menu.submenus.length;
       }
     });
-    assert.strictEqual(submenuCount, 13, `Esperado 13 submenus, encontrado ${submenuCount}`);
+    assert.strictEqual(submenuCount, 21, `Esperado 21 submenus, encontrado ${submenuCount}`);
   });
 
   it('Deve ter 3 submenus em "Medir"', function() {
-    assert.strictEqual(
-      EXPECTED_MENU_STRUCTURE.measuring.submenus.length,
-      3,
-      'Categoria Medir deve ter 3 submenus'
-    );
+    assert.strictEqual(EXPECTED_MENU_STRUCTURE.measuring.submenus.length, 3, 'Medir deve ter 3 submenus');
   });
 
-  it('Deve ter 3 submenus em "Análise do Som"', function() {
-    assert.strictEqual(
-      EXPECTED_MENU_STRUCTURE.soundAnalysis.submenus.length,
-      3,
-      'Categoria Análise do Som deve ter 3 submenus'
-    );
+  it('Deve ter 3 submenus em "Analisar"', function() {
+    assert.strictEqual(EXPECTED_MENU_STRUCTURE.analysis.submenus.length, 3, 'Analisar deve ter 3 submenus');
   });
 
-  it('Deve ter 4 submenus em "Mixer"', function() {
-    assert.strictEqual(
-      EXPECTED_MENU_STRUCTURE.mixer.submenus.length,
-      4,
-      'Categoria Mixer deve ter 4 submenus'
-    );
+  it('Deve ter 5 submenus em "Mixer"', function() {
+    assert.strictEqual(EXPECTED_MENU_STRUCTURE.mixer.submenus.length, 5, 'Mixer deve ter 5 submenus');
   });
 
-  it('Deve ter 2 submenus em "Rede & Sistemas"', function() {
-    assert.strictEqual(
-      EXPECTED_MENU_STRUCTURE.network.submenus.length,
-      2,
-      'Categoria Rede & Sistemas deve ter 2 submenus'
-    );
+  it('Deve ter 3 submenus em "EQ"', function() {
+    assert.strictEqual(EXPECTED_MENU_STRUCTURE.eq.submenus.length, 3, 'EQ deve ter 3 submenus');
   });
 
-  it('Deve ter 1 submenu em "Configurações"', function() {
-    assert.strictEqual(
-      EXPECTED_MENU_STRUCTURE.settings.submenus.length,
-      1,
-      'Categoria Configurações deve ter 1 submenu'
-    );
+  it('Deve ter 3 submenus em "Automação"', function() {
+    assert.strictEqual(EXPECTED_MENU_STRUCTURE.automation.submenus.length, 3, 'Automação deve ter 3 submenus');
+  });
+
+  it('Deve ter 4 submenus em "Sistema"', function() {
+    assert.strictEqual(EXPECTED_MENU_STRUCTURE.system.submenus.length, 4, 'Sistema deve ter 4 submenus');
   });
 });
 
@@ -206,33 +219,23 @@ describe('🧩 AUDITA - Componentes Shell', function() {
 
 describe('📄 AUDITA - Páginas e Views', function() {
   
-  it('Deve haver 17 páginas no total', function() {
+  it('Deve haver 26 páginas no total', function() {
     assert.strictEqual(
       EXPECTED_PAGES.length,
-      17,
-      `Esperado 17 páginas, encontrado ${EXPECTED_PAGES.length}`
+      26,
+      `Esperado 26 páginas, encontrado ${EXPECTED_PAGES.length}`
     );
   });
 
   it('Todas as páginas devem ter IDs únicos', function() {
     const ids = EXPECTED_PAGES.map(p => p.id);
     const uniqueIds = new Set(ids);
-    assert.strictEqual(
-      ids.length,
-      uniqueIds.size,
-      'Existem IDs de página duplicados'
-    );
+    assert.strictEqual(ids.length, uniqueIds.size, 'Existem IDs de página duplicados');
   });
 
   it('Todas as páginas devem ter referência de arquivo', function() {
     EXPECTED_PAGES.forEach(page => {
       assert.ok(page.file, `Página ${page.id} sem arquivo definido`);
-    });
-  });
-
-  it('Todas as páginas devem ter categoria', function() {
-    EXPECTED_PAGES.forEach(page => {
-      assert.ok(page.category, `Página ${page.id} sem categoria definida`);
     });
   });
 
@@ -253,6 +256,12 @@ describe('📄 AUDITA - Páginas e Views', function() {
     assert.ok(mobile, 'Página mobile não encontrada');
     assert.strictEqual(mobile.file, 'pages/mobile.html');
   });
+
+  it('Deve haver página "volunteer-mode" (Modo Voluntário)', function() {
+    const vol = EXPECTED_PAGES.find(p => p.id === 'volunteer-mode');
+    assert.ok(vol, 'Página volunteer-mode não encontrada');
+    assert.strictEqual(vol.file, 'pages/volunteer-mode.html');
+  });
 });
 
 // =============================================================================
@@ -269,54 +278,51 @@ describe('🗺️ AUDITA - Mapeamento Menu → Página', function() {
     });
   });
 
-  it('Menu "Análise do Som" deve ter todos seus submenus mapeados para páginas válidas', function() {
-    const analysisSubmenus = EXPECTED_MENU_STRUCTURE.soundAnalysis.submenus;
-    analysisSubmenus.forEach(submenu => {
+  it('Menu "Analisar" deve ter todos seus submenus mapeados para páginas válidas', function() {
+    EXPECTED_MENU_STRUCTURE.analysis.submenus.forEach(submenu => {
       const page = EXPECTED_PAGES.find(p => p.id === submenu.id);
       assert.ok(page, `Submenu ${submenu.id} não encontrado em páginas`);
     });
   });
 
   it('Menu "Mixer" deve ter todos seus submenus mapeados para páginas válidas', function() {
-    const mixerSubmenus = EXPECTED_MENU_STRUCTURE.mixer.submenus;
-    mixerSubmenus.forEach(submenu => {
+    EXPECTED_MENU_STRUCTURE.mixer.submenus.forEach(submenu => {
       const page = EXPECTED_PAGES.find(p => p.id === submenu.id);
       assert.ok(page, `Submenu ${submenu.id} não encontrado em páginas`);
     });
   });
 
-  it('Menu "Rede & Sistemas" deve ter todos seus submenus mapeados para páginas válidas', function() {
-    const networkSubmenus = EXPECTED_MENU_STRUCTURE.network.submenus;
-    networkSubmenus.forEach(submenu => {
+  it('Menu "EQ" deve ter todos seus submenus mapeados para páginas válidas', function() {
+    EXPECTED_MENU_STRUCTURE.eq.submenus.forEach(submenu => {
       const page = EXPECTED_PAGES.find(p => p.id === submenu.id);
       assert.ok(page, `Submenu ${submenu.id} não encontrado em páginas`);
     });
   });
 
-  it('Menu "Configurações" deve ter seus submenus mapeados para páginas válidas', function() {
-    const settingsSubmenus = EXPECTED_MENU_STRUCTURE.settings.submenus;
-    settingsSubmenus.forEach(submenu => {
+  it('Menu "Automação" deve ter todos seus submenus mapeados para páginas válidas', function() {
+    EXPECTED_MENU_STRUCTURE.automation.submenus.forEach(submenu => {
+      const page = EXPECTED_PAGES.find(p => p.id === submenu.id);
+      assert.ok(page, `Submenu ${submenu.id} não encontrado em páginas`);
+    });
+  });
+
+  it('Menu "Sistema" deve ter todos seus submenus mapeados para páginas válidas', function() {
+    EXPECTED_MENU_STRUCTURE.system.submenus.forEach(submenu => {
       const page = EXPECTED_PAGES.find(p => p.id === submenu.id);
       assert.ok(page, `Submenu ${submenu.id} não encontrado em páginas`);
     });
   });
 
   it('Menus diretos devem ter páginas correspondentes', function() {
-    const directMenuIds = ['dashboard', 'aiChat', 'mobile'];
     const pageIds = EXPECTED_PAGES.map(p => p.id);
-    
-    // Mapear IDs de menu para IDs de página
     const menuToPageMap = {
       'dashboard': 'home',
       'aiChat': 'ai-chat',
-      'mobile': 'mobile'
+      'volunteerMode': 'volunteer-mode',
+      'testbed': 'testbed'
     };
-
     Object.entries(menuToPageMap).forEach(([menuId, pageId]) => {
-      assert.ok(
-        pageIds.includes(pageId),
-        `Menu direto ${menuId} deveria ter página ${pageId}`
-      );
+      assert.ok(pageIds.includes(pageId), `Menu direto ${menuId} deveria ter página ${pageId}`);
     });
   });
 });
@@ -332,19 +338,29 @@ describe('🏷️ AUDITA - Categorização de Páginas', function() {
     assert.strictEqual(count, 3, `Esperado 3 páginas em Medir, encontrado ${count}`);
   });
 
-  it('Deve haver 4 páginas na categoria "Análise"', function() {
-    const count = EXPECTED_PAGES.filter(p => p.category === 'Análise').length;
-    assert.strictEqual(count, 4, `Esperado 4 páginas em Análise, encontrado ${count}`);
+  it('Deve haver 3 páginas na categoria "Analisar"', function() {
+    const count = EXPECTED_PAGES.filter(p => p.category === 'Analisar').length;
+    assert.strictEqual(count, 3, `Esperado 3 páginas em Analisar, encontrado ${count}`);
   });
 
-  it('Deve haver 4 páginas na categoria "Mixer"', function() {
+  it('Deve haver 5 páginas na categoria "Mixer"', function() {
     const count = EXPECTED_PAGES.filter(p => p.category === 'Mixer').length;
-    assert.strictEqual(count, 4, `Esperado 4 páginas em Mixer, encontrado ${count}`);
+    assert.strictEqual(count, 5, `Esperado 5 páginas em Mixer, encontrado ${count}`);
   });
 
-  it('Deve haver 2 páginas na categoria "Rede"', function() {
-    const count = EXPECTED_PAGES.filter(p => p.category === 'Rede').length;
-    assert.strictEqual(count, 2, `Esperado 2 páginas em Rede, encontrado ${count}`);
+  it('Deve haver 3 páginas na categoria "EQ"', function() {
+    const count = EXPECTED_PAGES.filter(p => p.category === 'EQ').length;
+    assert.strictEqual(count, 3, `Esperado 3 páginas em EQ, encontrado ${count}`);
+  });
+
+  it('Deve haver 3 páginas na categoria "Automação"', function() {
+    const count = EXPECTED_PAGES.filter(p => p.category === 'Automação').length;
+    assert.strictEqual(count, 3, `Esperado 3 páginas em Automação, encontrado ${count}`);
+  });
+
+  it('Deve haver 4 páginas na categoria "Sistema"', function() {
+    const count = EXPECTED_PAGES.filter(p => p.category === 'Sistema').length;
+    assert.strictEqual(count, 4, `Esperado 4 páginas em Sistema, encontrado ${count}`);
   });
 });
 
