@@ -451,12 +451,26 @@ class TransferFunctionProcessor extends AudioWorkletProcessor {
 
     // ─── Biquad IIR ───────────────────────────────────────────────────────────
 
-    /** Filtro biquad DF-II (in-place no estado z[]) */
+    /**
+     * Filtro biquad — Transposed Direct Form II (TDF-II).
+     *
+     * Equação de estado:
+     *   y    = b0·x + z[0]
+     *   z[0] = b1·x − a1·y + z[1]
+     *   z[1] = b2·x − a2·y
+     *
+     * Vantagens sobre DF-I/DF-II clássica:
+     *  - Numericamente mais estável (mesmo método do Web Audio BiquadFilterNode)
+     *  - Apenas 2 registros de estado (mínimo possível para 2ª ordem)
+     *  - Sem armazenamento de amostras passadas de entrada (sem atraso de x)
+     *
+     * FIX P1: Versão anterior salvava `x` em z[0] (topologia híbrida incorreta)
+     * produzindo resposta de frequência errada no modo Demo.
+     */
     _applyBiquad(x, z, c) {
-        const y = c.b0 * x + c.b1 * z[0] + c.b2 * z[1]
-                - c.a1 * z[0] - c.a2 * z[1];
-        z[1] = z[0];
-        z[0] = x;
+        const y  = c.b0 * x + z[0];
+        z[0] = c.b1 * x - c.a1 * y + z[1];
+        z[1] = c.b2 * x - c.a2 * y;
         return y;
     }
 

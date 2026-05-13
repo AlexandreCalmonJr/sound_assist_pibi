@@ -64,6 +64,15 @@ let peakHold = { hz: 0, db: -100, timer: 0 };
 // Waterfall historico manual removido: usamos shift nativo do canvas para ultra-performance
 const WATERFALL_DEPTH = 100; // Quantos frames guardar na tela
 
+// --- Variáveis do Gerador de Sinais (declaradas aqui para evitar poluição de escopo global) ---
+let btnPink = null;
+let btnSine = null;
+let sineFreqInput = null;
+let isPinkNoisePlaying = false;
+let pinkNoiseNode = null;
+let isSineWavePlaying = false;
+let sineWaveNode = null;
+
 class FeedbackDetector {
     constructor(bufferSize = 10) {
         this.peakHistory = new Array(bufferSize).fill(null);
@@ -951,8 +960,9 @@ function analyze() {
     analyserFast.getFloatFrequencyData(fastFreqData);
 
     // Aplica correção de microfone e calibração SPL
+    // ✅ FIX P0: fftSize obrigatório para cálculo correto de hzPerBin na curva de calibração
     if (window.AcousticCalibration) {
-        window.AcousticCalibration.applyCalibration(freqData, audioCtx.sampleRate);
+        window.AcousticCalibration.applyCalibration(freqData, audioCtx.sampleRate, analyser.fftSize);
     }
     
     analyser.getFloatTimeDomainData(timeData);
@@ -1589,16 +1599,8 @@ function _handleRT60Result(result) {
         `;
     }
 }
-let pinkNoiseNode = null;
-let sineWaveNode = null;
-let isPinkNoisePlaying = false;
-let isSineWavePlaying = false;
-
-// btnPink, btnSine, sineFreqInput são capturados dentro de initAnalyzer()
-// para evitar null (DOM das pages não existe no load global)
-let btnPink = null;
-let btnSine = null;
-let sineFreqInput = null;
+// Variáveis do gerador de sinais e ruído rosa declaradas no topo do IIFE (~linha 66).
+// (Duplicatas removidas para evitar SyntaxError de 'let' redeclarado no mesmo escopo.)
 
 // Helper to ensure AudioContext
 function ensureAudioCtx() {

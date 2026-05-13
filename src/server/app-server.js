@@ -115,10 +115,10 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     });
 
     expressApp.post('/api/calibration', (req, res) => {
-        const { calibrationData, splOffset } = req.body;
+        const { calibrationData, splOffset, name } = req.body;
         db.settings.update(
             { type: 'calibration' },
-            { $set: { calibrationData, splOffset, timestamp: Date.now() } },
+            { $set: { calibrationData, splOffset, name: name || 'Customizado', timestamp: Date.now() } },
             { upsert: true },
             (err) => {
                 if (err) return res.status(500).json({ error: err.message });
