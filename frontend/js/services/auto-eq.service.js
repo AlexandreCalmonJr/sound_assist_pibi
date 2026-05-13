@@ -213,8 +213,8 @@
      */
     function _calcGEQ(diff, hzPerBin, binCount) {
         const rawGEQ = GEQ_BANDS_HZ.map(centerHz => {
-            const fLow  = centerHz / Math.pow(2, 1/6);  // 1/2 de 1/3 oitava abaixo
-            const fHigh = centerHz * Math.pow(2, 1/6);  // 1/2 de 1/3 oitava acima
+            const fLow  = centerHz / Math.pow(2, 1/3);
+            const fHigh = centerHz * Math.pow(2, 1/3);
 
             const kLow  = Math.max(1,         Math.round(fLow  / hzPerBin));
             const kHigh = Math.min(binCount - 1, Math.round(fHigh / hzPerBin));
@@ -327,7 +327,7 @@
      * @param {number} channel    - número do canal (se target === 'channel')
      */
     function applyToMixer(peqBands, target = 'master', channel = 1) {
-        if (!window.socket) {
+        if (!SocketService || !SocketService.isConnected()) {
             console.warn('[AutoEQ] Socket não disponível.');
             return;
         }
@@ -338,7 +338,7 @@
 
         const applied = [];
         for (const f of peqBands) {
-            socket.emit('apply_eq_cut', {
+            SocketService.emit('apply_eq_cut', {
                 target,
                 channel: target === 'channel' ? channel : undefined,
                 hz:   f.hz,

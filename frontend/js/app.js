@@ -13,9 +13,12 @@ document.addEventListener('DOMContentLoaded', async function () {
             const res = await fetch(path);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const container = document.getElementById(id);
-            if (container) container.innerHTML = await res.text();
+            if (!container) throw new Error(`Container #${id} não encontrado`);
+            container.innerHTML = await res.text();
         } catch (err) {
             console.error(`[SoundMaster] Erro ao carregar componente ${id}:`, err);
+            const container = document.getElementById(id);
+            if (container) container.innerHTML = '<div class="text-red-400 p-4">Erro ao carregar componente. Recarregue a página.</div>';
         }
     };
 
@@ -52,16 +55,23 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     });
 
+    // 6b. Simulation toggle button
+    document.getElementById('btn-toggle-sim')?.addEventListener('click', () => {
+        if (window.SimulationService) {
+            window.SimulationService.toggleSimulationMode();
+        }
+    });
+
     // 7. Navigate to Home or Mobile
     if (window.router) {
         const urlParams = new URLSearchParams(window.location.search);
         const isMobileMode = urlParams.get('mode') === 'mobile' || window.innerWidth < 768;
-        
-        if (isMobileMode) {
-            console.log('[SoundMaster] Modo mobile detectado. Navegando para interface remota.');
-            window.router.navigate('mobile');
-        } else {
-            window.router.navigate('home');
+        const target = isMobileMode ? 'mobile' : 'home';
+        try {
+            window.router.navigate(target);
+            console.log('[SoundMaster] Navegando para:', target);
+        } catch (navErr) {
+            console.error('[SoundMaster] Erro na navegação:', navErr);
         }
     }
 

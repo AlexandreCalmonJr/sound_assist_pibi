@@ -191,41 +191,66 @@
         const monitorSlider = document.getElementById('vol-monitor');
         const monitorVal = document.getElementById('vol-monitor-val');
 
-        function updateVocalUI() {
-            const v = Number(vocalSlider.value);
-            vocalVal.textContent = v + '%';
-            vocalVuFill.style.height = v + '%';
+        let vuUnsubscribe = null;
+
+        function vuToPercent(db) {
+            const max = 6, min = -60;
+            return Math.max(0, Math.min(100, ((db - min) / (max - min)) * 100));
         }
 
-        function updatePAUI() {
-            const v = Number(paSlider.value);
-            paVal.textContent = v + '%';
-            paVuFill.style.height = v + '%';
+        function updateVUMeters() {
+            const state = window.AppStore ? AppStore.getState() : {};
+            const vu = state.vuData || {};
+
+            const ch1 = vu.channels ? vu.channels[1] : null;
+            const master = vu.master !== undefined ? vu.master : null;
+
+            if (ch1 !== null && vocalVuFill) {
+                const pct = vuToPercent((ch1 < 0 ? Math.log(ch1 + 0.0001) / Math.log(10) * 20 : ch1 * 80) - 80);
+                vocalVuFill.style.height = Math.max(0, Math.min(100, pct)) + '%';
+            }
+            if (master !== null && paVuFill) {
+                const db = master < 0.001 ? -80 : 20 * Math.log10(master);
+                paVuFill.style.height = Math.max(0, Math.min(100, vuToPercent(db))) + '%';
+            }
         }
 
-        function updateMonitorUI() {
-            const v = Number(monitorSlider.value);
-            monitorVal.textContent = v + '%';
+        function startVUListener() {
+            if (window.AppStore && !vuUnsubscribe) {
+                vuUnsubscribe = AppStore.subscribe('vuData', function () {
+                    updateVUMeters();
+                });
+                updateVUMeters();
+            }
+        }
+
+        if (window.SimulationService && !SimulationService.isRunning()) {
+            SimulationService.enableSimulationMode();
+        }
+        startVUListener();
+
+        function updateSliderLabel(slider, labelEl) {
+            if (labelEl) labelEl.textContent = slider.value + '%';
         }
 
         vocalSlider.addEventListener('input', () => {
-            updateVocalUI();
-            MixerService.setChannelLevel(1, Number(vocalSlider.value) / 100);
+            updateSliderLabel(vocalSlider, vocalVal);
+            if (window.MixerService) MixerService.setChannelLevel(1, Number(vocalSlider.value) / 100);
         });
 
         paSlider.addEventListener('input', () => {
-            updatePAUI();
-            MixerService.setMasterLevel(Number(paSlider.value) / 100);
+            updateSliderLabel(paSlider, paVal);
+            if (window.MixerService) MixerService.setMasterLevel(Number(paSlider.value) / 100);
         });
 
         monitorSlider.addEventListener('input', () => {
-            updateMonitorUI();
-            MixerService.setAuxLevel(1, 1, Number(monitorSlider.value) / 100);
+            updateSliderLabel(monitorSlider, monitorVal);
+            if (window.MixerService) MixerService.setAuxLevel(1, 1, Number(monitorSlider.value) / 100);
         });
 
-        updateVocalUI();
-        updatePAUI();
-        updateMonitorUI();
+        updateSliderLabel(vocalSlider, vocalVal);
+        updateSliderLabel(paSlider, paVal);
+        updateSliderLabel(monitorSlider, monitorVal);
 
         window.volToggleMutePA = function (btn) {
             const isMuted = btn.dataset.muted === 'true';
@@ -234,13 +259,13 @@
                 btn.innerHTML = '🔇 Mutar PA';
                 btn.classList.remove('bg-red-600', 'hover:bg-red-500');
                 btn.classList.add('bg-slate-700', 'hover:bg-slate-600');
-                MixerService.setMasterMute(false);
+                if (window.MixerService) MixerService.setMasterMute(false);
             } else {
                 btn.dataset.muted = 'true';
                 btn.innerHTML = '🔊 Desmutar PA';
                 btn.classList.add('bg-red-600', 'hover:bg-red-500');
                 btn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
-                MixerService.setMasterMute(true);
+                if (window.MixerService) MixerService.setMasterMute(true);
             }
         };
 
@@ -251,23 +276,65 @@
                 btn.innerHTML = '🔇 Mutar Vocal';
                 btn.classList.remove('bg-red-600', 'hover:bg-red-500');
                 btn.classList.add('bg-slate-700', 'hover:bg-slate-600');
-                MixerService.setChannelMute(1, false);
+                if (window.MixerService) MixerService.setChannelMute(1, false);
             } else {
                 btn.dataset.muted = 'true';
                 btn.innerHTML = '🔊 Desmutar Vocal';
                 btn.classList.add('bg-red-600', 'hover:bg-red-500');
                 btn.classList.remove('bg-slate-700', 'hover:bg-slate-600');
-                MixerService.setChannelMute(1, true);
+                if (window.MixerService) MixerService.setChannelMute(1, true);
             }
         };
 
-        window.volPresetLouvor = function () {
+window.volPresetLouvor = function () {
+            vocalSlider.value = 85;
+            paSlider.value = 65;
+            updateSliderLabel(vocalSlider, vocalVal);
+            updateSliderLabel(paSlider, paVal);
+            if (window.MixerService) {
+                MixerService.setChannelLevel(1, 0.85);
+                MixerService.setMasterLevel(0.65);
+            }
+        };
+
+        window.volPresetPregacao = function () {
             vocalSlider.value = 75;
-            paSlider.value = 70;
-            updateVocalUI();
-            updatePAUI();
-            if (MixerService.setChannelLevel) MixerService.setChannelLevel(1, 0.75);
-            if (MixerService.setMasterLevel) MixerService.setMasterLevel(0.70);
+            paSlider.value = 60;
+            updateSliderLabel(vocalSlider, vocalVal);
+            updateSliderLabel(paSlider, paVal);
+            if (window.MixerService) {
+                MixerService.setChannelLevel(1, 0.75);
+                MixerService.setMasterLevel(0.60);
+            }
+        };
+
+        window.volPresetSilencio = function () {
+            vocalSlider.value = 0;
+            paSlider.value = 0;
+            updateSliderLabel(vocalSlider, vocalVal);
+            updateSliderLabel(paSlider, paVal);
+            if (window.MixerService) {
+                MixerService.setChannelMute(1, true);
+                MixerService.setMasterMute(true);
+            }
+        };
+
+        window.volApplyPreset = function (preset) {
+            const presets = {
+                claro:   { vocal: 80, pa: 70 },
+                suave:   { vocal: 65, pa: 60 },
+                potente: { vocal: 90, pa: 75 },
+                estavel: { vocal: 70, pa: 65 }
+            };
+            const p = presets[preset] || presets.estavel;
+            vocalSlider.value = p.vocal;
+            paSlider.value = p.pa;
+            updateSliderLabel(vocalSlider, vocalVal);
+            updateSliderLabel(paSlider, paVal);
+            if (window.MixerService) {
+                MixerService.setChannelLevel(1, p.vocal / 100);
+                MixerService.setMasterLevel(p.pa / 100);
+            }
         };
 
         window.volPresetPregacao = function () {

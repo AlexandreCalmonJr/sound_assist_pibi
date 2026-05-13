@@ -825,12 +825,23 @@ function registerSocketHandlers(io, appDataDir = './logs') {
             }
         });
 
+        socket.on('automix_cmd', (data) => {
+            const action_type = data?.action_type;
+            try {
+                if (!actions.ensureMixer(socket)) return;
+                const result = actions.executeMixerCommand({ action: 'automix_cmd', action_type, val: data?.val });
+                socket.emit('mixer_log', result);
+            } catch (err) {
+                socket.emit('mixer_status', { connected: true, msg: err.message });
+            }
+        });
+
         socket.on('automix_assign', (data) => {
             const channel = Number(data?.channel) || 1;
             const group = data?.group || 'none';
             const weight = Number(data?.weight) || 0.5;
             const msg = actions.automixAssignChannel(channel, group, weight);
-            socket.emit('mixer_log', { msg });
+            socket.emit('mixer_log', msg);
         });
 
         socket.on('ping_mixer', () => {

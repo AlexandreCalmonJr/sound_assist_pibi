@@ -108,10 +108,11 @@
      * Deve ser chamado quando o AudioContext é criado.
      */
     function init(sampleRate) {
-        if (_initialized && _sampleRate === sampleRate) return;
         _sampleRate = sampleRate;
         _buildFilters(sampleRate);
         _resetFilterState();
+        _acc1s = _acc1min = _acc10min = _accTotal = 0;
+        _acc1sCount = _acc1minCount = _acc10minCount = _accTotalCount = 0;
         _initialized = true;
         console.log(`[SplLogger] Init: fs=${sampleRate} weighting=${_weighting}`);
     }
@@ -126,6 +127,7 @@
      */
     function push(freqData, timeData, fftSize) {
         if (!_initialized) return;
+        if (!freqData || !timeData || !fftSize) return;
 
         const spl = _calcSPL(freqData, fftSize);
 
@@ -146,6 +148,8 @@
         if (!['A', 'C', 'Z'].includes(w)) return;
         _weighting = w;
         _filterState[w] = _makeFilterState(w);
+        _acc1s = _acc1min = _acc10min = _accTotal = 0;
+        _acc1sCount = _acc1minCount = _acc10minCount = _accTotalCount = 0;
         AppStore.setState({ splWeighting: w });
         console.log(`[SplLogger] Ponderação: ${w}`);
     }
@@ -163,10 +167,10 @@
     function getStats() {
         const leqTotal = _leanPowerToDb(_accTotal, _accTotalCount);
         const live     = getLive();
-        // Dose IEC 60268: % exposição para 8h a NIOSH_LIMIT_DB
-        // dose(%) = (T / T_permitido) × 100, onde T_permitido = 480 min a 85 dB(A)
         const doseMin  = _elapsedSec / 60;
-        const doseAllowed = 480 * Math.pow(2, (NIOSH_LIMIT_DB - leqTotal) / 3);
+        const doseAllowed = leqTotal > -Infinity && leqTotal < Infinity
+            ? 480 * Math.pow(2, (NIOSH_LIMIT_DB - leqTotal) / 3)
+            : Infinity;
         const dose8h   = Math.min(999, Math.round(doseMin / doseAllowed * 100));
 
         return {

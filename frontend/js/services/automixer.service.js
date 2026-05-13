@@ -17,7 +17,7 @@
             return;
         }
         const action = (enabled ? 'enable_' : 'disable_') + group;
-        MixerService.automixControl(action, null);
+        SocketService.emit('automix_cmd', { action_type: action });
         const state = loadState();
         state['group_' + group] = enabled;
         saveState(state);
@@ -28,7 +28,8 @@
             AppStore.addLog('⚠️ Conecte-se à mesa para atribuir canais.');
             return;
         }
-        SocketService.emit('automix_assign', {
+        SocketService.emit('automix_cmd', {
+            action_type: 'assign_channel',
             channel: channel,
             group: group,
             weight: weight !== undefined ? weight : 0.5

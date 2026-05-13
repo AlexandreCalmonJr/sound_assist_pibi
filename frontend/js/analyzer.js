@@ -866,10 +866,9 @@ function stopPinkNoise() {
  * ✅ Novo: Configura a fonte de referência via WebSocket PCM Stream
  */
 function _setupReferenceSource(ctx, targetNode) {
-    // Criamos um ScriptProcessor ou AudioWorklet para injetar samples vindos do socket
-    // Para simplificar a integração AES67 -> WebSocket -> WebAudio:
-    const bufferSize = 4096;
-    refSource = ctx.createScriptProcessor(bufferSize, 1, 1);
+        if (!ctx.createScriptProcessor) return;
+        const bufferSize = 4096;
+        refSource = ctx.createScriptProcessor(bufferSize, 1, 1);
     
     // ❌ Listener removido daqui (movido para escopo global abaixo)
     
@@ -1266,7 +1265,7 @@ async function sendAnalysisToAI() {
         peakHz: lastAnalysis.details.peakHz,
         peakDb: Number(lastAnalysis.details.peakDb),
         rms: Number(lastAnalysis.details.rmsDb),
-        spl: Number(lastAnalysis.details.rmsDb),
+        spl: Number(lastAnalysis.details.peakDb),
         rt60: Number(lastRt60) || 0,
         rt60_multiband: rt60Payload,
         spectrum_db: lastAnalysis.details.spectrum_v11 || {},

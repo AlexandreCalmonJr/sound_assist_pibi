@@ -8,7 +8,8 @@
     }
 
     function saveScenes(scenes) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(scenes));
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(scenes)); }
+        catch (e) { AppStore.addLog('⚠️ Falha ao salvar cenas: ' + e.message); }
     }
 
     function createScene(data) {
@@ -50,7 +51,14 @@
         }
         const instList = (instruments || []).join(', ');
         const fullPrompt = 'Gere uma cena de mixer completa para: ' + prompt + '. Instrumentos presentes: ' + instList + '. Retorne o nome da cena, genre, descrição e comandos de mixer.';
-        const result = await AIService.ask(fullPrompt, 1);
+        let result;
+        try {
+            result = await AIService.ask(fullPrompt, 1);
+        } catch (err) {
+            console.error('[SceneBuilder] Erro na geração IA:', err);
+            AppStore.addLog('⚠️ IA offline. Cena não gerada.');
+            return createScene({ name: 'IA: ' + prompt.substring(0, 25), genre: 'louvor', description: prompt });
+        }
         const scene = createScene({
             name: 'IA: ' + prompt.substring(0, 25),
             genre: 'louvor',
@@ -62,11 +70,15 @@
     }
 
     function applyScene(scene) {
-        if (!scene) return;
+        if (!scene) {
+            AppStore.addLog('⚠️ Cena inválida para aplicar.');
+            return false;
+        }
         if (window.MixerService && scene.mixerCommand) {
             MixerService.executeAICommand(scene.mixerCommand);
         }
         AppStore.addLog('[Scene Builder] Cena "' + scene.name + '" aplicada.');
+        return true;
     }
 
     function getSceneById(id) {

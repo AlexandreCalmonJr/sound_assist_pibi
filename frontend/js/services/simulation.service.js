@@ -232,9 +232,13 @@
     }
 
     function askAI(text, channel) {
+        const ch = (typeof channel === 'number' && channel >= 1 && channel <= 24) ? channel : 1;
         const responses = _aiResponses();
         for (const r of responses) {
             if (r.trigger.test(text)) {
+                if (r.command && r.command.desc) {
+                    r.command.desc = r.command.desc.replace(/Canal \d+/, `Canal ${ch}`);
+                }
                 return Promise.resolve({
                     text: r.text,
                     command: r.command
@@ -242,8 +246,10 @@
             }
         }
         const scene = _getActiveScene();
+        const chInfo = state.channels[ch - 1];
+        const chName = chInfo?.name || ('Canal ' + ch);
         return Promise.resolve({
-            text: `Entendi: "${text}". Não tenho uma análise específica para este cenário, mas o sistema está com RT60 = ${scene.rt60.toFixed(1)}s, ${state.channels.filter(c => !c.mute).length} canais ativos e Master em ${Math.round(state.master.level * 100)}%. Posso ajudar com ajustes de EQ, gate, compressor, ou configurações de monitor.`,
+            text: `Entendi: "${text}". Estou analisando ${chName} (canal ${ch}). A sala tem RT60 = ${scene.rt60.toFixed(1)}s, ${state.channels.filter(c => !c.mute).length} canais ativos e Master em ${Math.round(state.master.level * 100)}%. Posso ajudar com ajustes de EQ, gate, compressor ou configurações de monitor para ${chName}.`,
             command: null
         });
     }
@@ -330,6 +336,36 @@
         };
     }
 
+    function enableSimulationMode() {
+        if (!_isRunning) start();
+        document.body.classList.add('simulation-mode');
+        AppStore.setState({ simulationMode: true, aiStatus: 'simulation' });
+        const btn = document.getElementById('btn-toggle-sim');
+        if (btn) btn.style.display = '';
+        if (btn) {
+            btn.classList.add('active');
+            btn.style.color = 'var(--accent)';
+        }
+        AppStore.addLog('[SIM] Modo simulação ATIVADO — sem hardware necessário.');
+    }
+
+    function disableSimulationMode() {
+        stop();
+        document.body.classList.remove('simulation-mode');
+        AppStore.setState({ simulationMode: false });
+        const btn = document.getElementById('btn-toggle-sim');
+        if (btn) {
+            btn.classList.remove('active');
+            btn.style.color = '';
+        }
+        AppStore.addLog('[SIM] Modo simulação DESATIVADO.');
+    }
+
+    function toggleSimulationMode() {
+        if (_isRunning) disableSimulationMode();
+        else enableSimulationMode();
+    }
+
     window.SimulationService = {
         start, stop, reset, isRunning,
         setChannelLevel, setChannelMute,
@@ -338,6 +374,7 @@
         getChannelCount,
         askAI,
         getFakeAnalysis,
-        getFakeSweepIR
+        getFakeSweepIR,
+        enableSimulationMode, disableSimulationMode, toggleSimulationMode
     };
 })();

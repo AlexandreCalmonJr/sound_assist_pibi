@@ -78,7 +78,12 @@
                 throw new Error('HTTP ' + response.status);
             }
 
-            const data = await response.json();
+            let data;
+            try {
+                data = await response.json();
+            } catch (jsonErr) {
+                throw new Error('Resposta inválida do servidor IA (HTTP ' + response.status + ')');
+            }
             AppStore.setState({ aiStatus: 'online' });
 
             // Registrar sugestão no store se houver comando
@@ -95,28 +100,31 @@
 
         } catch (err) {
             clearTimeout(timeoutId);
-            AppStore.setState({ aiStatus: 'offline' });
 
             if (err.name === 'AbortError') {
-                AppStore.addLog('⚠️ IA: timeout após ' + (TIMEOUT_MS / 1000) + 's.');
-                return {
-                    text: 'A IA demorou demais para responder. Verifique se o servidor Python está ativo.',
-                    command: null
-                };
+                AppStore.addLog('⚠️ IA: timeout — usando IA simulada.');
+            } else {
+                AppStore.addLog('⚠️ IA offline — usando IA simulada: ' + err.message);
             }
 
-            AppStore.addLog('⚠️ IA offline: ' + err.message);
+            if (window.SimulationService && window.SimulationService.isRunning()) {
+                AppStore.setState({ aiStatus: 'simulation' });
+                try {
+                    const simResult = await SimulationService.askAI(text.trim(), channel);
+                    return simResult;
+                } catch (simErr) {
+                    AppStore.addLog('⚠️ Simulação falhou: ' + simErr.message);
+                }
+            }
+
+            AppStore.setState({ aiStatus: 'offline' });
             return {
-                text: 'Não foi possível conectar à IA local. Inicie o app pelo servidor local (npm start).',
+                text: 'IA local offline. Ative o modo simulação (ícone de chave) ou inicie o servidor Python (npm start).',
                 command: null
             };
         }
     }
 
-    /**
-     * Verifica se o servidor Python está respondendo.
-     * @returns {Promise<boolean>}
-     */
     async function ping() {
         const controller = new AbortController();
         const timeoutId = setTimeout(function () { controller.abort(); }, 2000);
@@ -133,6 +141,10 @@
             throw new Error('Offline');
         } catch (_) {
             clearTimeout(timeoutId);
+            if (window.SimulationService && SimulationService.isRunning()) {
+                AppStore.setState({ aiStatus: 'simulation' });
+                return true;
+            }
             AppStore.setState({ aiStatus: 'offline' });
             return false;
         }

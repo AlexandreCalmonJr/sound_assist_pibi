@@ -51,23 +51,27 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 async def verify_api_key(api_key: str = Depends(api_key_header)):
     """Verifica se API Key é válida"""
     valid_key = os.getenv("AI_API_KEY")
-    
+
     if not valid_key:
-        # No desenvolvimento, se não houver chave, permitimos (ou podemos forçar uma padrão)
-        # Para produção, deve ser obrigatória
         if os.getenv("NODE_ENV") == "production":
-             raise HTTPException(
+              raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Servidor não configurado (AI_API_KEY faltando)"
             )
         return True
-    
+
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API Key ausente"
+        )
+
     if api_key != valid_key:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="API Key inválida ou ausente"
+            detail="API Key inválida"
         )
-    
+
     return True
 
 # Inicialização de Estado (Dicionário de sessões por ID)
@@ -83,14 +87,17 @@ def get_session(session_id: str = "default") -> SessionContext:
 async def cleanup_sessions_task():
     """Tarefa em background para limpar sessões inativas (TTL de 1 hora)"""
     while True:
-        await asyncio.sleep(600)  # Roda a cada 10 minutos
-        cutoff = time.time() - 3600  # 1 hora
-        expired = [sid for sid, s in sessions.items() if s.last_activity < cutoff]
-        for sid in expired:
-            if sid != "default": # Mantemos a default
-                del sessions[sid]
-        if expired:
-            print(f"[AI Server] Sessões limpas: {len(expired)}")
+        try:
+            await asyncio.sleep(600)  # Roda a cada 10 minutos
+            cutoff = time.time() - 3600  # 1 hora
+            expired = [sid for sid, s in sessions.items() if s.last_activity < cutoff]
+            for sid in expired:
+                if sid != "default": # Mantemos a default
+                    del sessions[sid]
+            if expired:
+                print(f"[AI Server] Sessões limpas: {len(expired)}")
+        except Exception as e:
+            print(f"[AI Server] Erro no cleanup de sessões: {e}")
 
 # Modelos de Dados
 class ChatRequest(BaseModel):
@@ -146,6 +153,8 @@ async def acoustic_analysis_endpoint(
     authenticated: bool = Depends(verify_api_key)
 ):
     try:
+        if request.surface_area <= 0:
+            raise HTTPException(status_code=400, detail="surface_area deve ser maior que zero")
         rt60 = AcousticProcessor.eyring_rt60(request.volume, request.surface_area, request.alpha)
         classification = AcousticProcessor.classify_room(rt60)
         return {
@@ -153,6 +162,8 @@ async def acoustic_analysis_endpoint(
             "classification": classification,
             "formula": "Eyring"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

@@ -446,6 +446,7 @@ function createMixerActions(getMixer) {
             case 'mute_group_cmd': return muteGroupControl(cmd.id || 'all', cmd.enabled !== 0);
             case 'clear_mute_groups': return clearMuteGroups();
             case 'automix_cmd': return automixControl(cmd.action_type, cmd.val);
+            case 'assign_channel': return automixAssignChannel(cmd.channel || 1, cmd.group || 'none', cmd.weight || 0.5);
             case 'automix_assign': return automixAssignChannel(cmd.channel || 1, cmd.group || 'none', cmd.weight || 0.5);
             case 'get_device_info': return getDeviceInfo();
             case 'send_raw': return sendRawCommand(cmd.message || cmd.msg);

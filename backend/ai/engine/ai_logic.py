@@ -68,14 +68,20 @@ class LocalLLM:
     def query(self, prompt, context_data=None):
         if not self.enabled:
             return None
-            
+        if not self.llm:
+            return None
+
         system_prompt = "Você é o SoundMaster IA, um engenheiro de som especialista. Seja conciso, técnico e prestativo."
         if context_data:
             system_prompt += f" Contexto Atual: RT60={context_data.get('rt60')}s, Pico={context_data.get('peakHz')}Hz, RMS={context_data.get('rms')}dB."
 
         full_prompt = f"<|system|>\n{system_prompt}</s>\n<|user|>\n{prompt}</s>\n<|assistant|>\n"
-        output = self.llm(full_prompt, max_tokens=128, stop=["</s>"], echo=False)
-        return output['choices'][0]['text'].strip()
+        try:
+            output = self.llm(full_prompt, max_tokens=128, stop=["</s>"], echo=False)
+            return output['choices'][0]['text'].strip()
+        except Exception as e:
+            print(f"[AI Engine] Erro no query LLM: {e}")
+            return None
 
 class AIEngine:
     _llm_instance = None
@@ -126,7 +132,11 @@ class AIEngine:
         channel_match = re.search(r'(?:canal|ch)\s*(\d{1,2})', text)
         if not channel_match:
             return 1
-        return max(1, min(24, int(channel_match.group(1))))
+        channel_num = int(channel_match.group(1))
+        if channel_num < 1 or channel_num > 24:
+            print(f"[AI Engine] Canal {channel_num} fora do range 1-24, ajustando.")
+            channel_num = max(1, min(24, channel_num))
+        return channel_num
 
     def generate_technical_report(self, analysis=None):
         from acoustics.processor import AcousticProcessor
@@ -176,7 +186,7 @@ class AIEngine:
     def process(self, text, analysis=None, mixer_state=None):
         text = text.lower().strip()
         analysis = analysis or (self.session.analyses_history[-1] if self.session.analyses_history else {})
-        if analysis:
+        if analysis and isinstance(analysis, dict):
             self.session.add_analysis(analysis)
 
         # 0. Verificação de Estado de Hardware (Context Aware) - Problema 8
@@ -228,6 +238,7 @@ class AIEngine:
         has_specific_channel = bool(re.search(r'(canal|ch|ch\s*\d)', text))
         
         analysis = analysis or {}
+        rt60_response = None
 
         # 1. Dados Técnicos (FFT)
         fft_response = None
