@@ -64,6 +64,11 @@ let peakHold = { hz: 0, db: -100, timer: 0 };
 // Waterfall historico manual removido: usamos shift nativo do canvas para ultra-performance
 const WATERFALL_DEPTH = 100; // Quantos frames guardar na tela
 
+// --- Estado da Ponderação de Medição SPL ---
+let currentWeighting = 'A'; // 'A', 'C', ou 'Z' (Flat)
+let isLeqLogging = false; // ✅ Gravação de Leq ativada/desativada
+let leqLogData = []; // ✅ Array que armazena { time, spl }
+
 // --- Variáveis do Gerador de Sinais (declaradas aqui para evitar poluição de escopo global) ---
 let btnPink = null;
 let btnSine = null;
@@ -143,6 +148,67 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
                     summaryEl.classList.add('text-cyan-400');
                 }
                 console.log('[Analyzer] Diagnóstico Manual disparado usando última análise.');
+            });
+        }
+
+        // --- Range de Decibéis ---
+        const inputMinDb = document.getElementById('input-min-db');
+        const inputMaxDb = document.getElementById('input-max-db');
+        
+        if (inputMinDb && inputMaxDb) {
+            const updateRange = () => {
+                const min = parseInt(inputMinDb.value);
+                const max = parseInt(inputMaxDb.value);
+                if (analyser && analyserFast) {
+                    analyser.minDecibels = min;
+                    analyser.maxDecibels = max;
+                    analyserFast.minDecibels = min;
+                    analyserFast.maxDecibels = max;
+                    console.log(`[Analyzer] Range atualizado: ${min}dB a ${max}dB`);
+                }
+            };
+            inputMinDb.addEventListener('change', updateRange);
+            inputMaxDb.addEventListener('change', updateRange);
+        }
+
+        // --- Leq Logging ---
+        const btnToggleLeq = document.getElementById('btn-toggle-leq');
+        const btnExportLeq = document.getElementById('btn-export-leq');
+
+        if (btnToggleLeq) {
+            btnToggleLeq.addEventListener('click', () => {
+                isLeqLogging = !isLeqLogging;
+                if (isLeqLogging) {
+                    leqLogData = [];
+                    btnToggleLeq.innerText = '⏹ Parar Leq';
+                    btnToggleLeq.classList.replace('bg-slate-700', 'bg-red-600');
+                    btnToggleLeq.classList.replace('hover:bg-slate-600', 'hover:bg-red-500');
+                    if (btnExportLeq) btnExportLeq.classList.add('hidden');
+                    console.log('[Analyzer] Iniciou gravação de Leq SPL.');
+                } else {
+                    btnToggleLeq.innerText = '▶ Gravar Leq';
+                    btnToggleLeq.classList.replace('bg-red-600', 'bg-slate-700');
+                    btnToggleLeq.classList.replace('hover:bg-red-500', 'hover:bg-slate-600');
+                    if (btnExportLeq && leqLogData.length > 0) btnExportLeq.classList.remove('hidden');
+                    console.log('[Analyzer] Parou gravação de Leq SPL.');
+                }
+            });
+        }
+
+        if (btnExportLeq) {
+            btnExportLeq.addEventListener('click', () => {
+                if (leqLogData.length === 0) return;
+                let csv = 'Timestamp,SPL_dB,Weighting\\n';
+                leqLogData.forEach(row => {
+                    csv += `${row.time},${row.spl.toFixed(2)},${row.weighting}\\n`;
+                });
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `SoundMaster_Leq_SPL_Log_${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
             });
         }
     }
@@ -580,10 +646,24 @@ function getAWeighting(freq) {
 }
 
 /**
- * ✅ Novo: Calcula RMS Ponderado (A-Weighted) e Crest Factor
+ * Ponderação-C (C-Weighting) conforme IEC 61672:2003.
+ * Usada para medições de picos e baixas frequências (graves mais presentes).
+ */
+function getCWeighting(freq) {
+    if (freq < 1) return -100;
+    const f2 = freq * freq;
+    
+    const rC = (Math.pow(12194, 2) * f2) /
+        ((f2 + Math.pow(20.6, 2)) * (f2 + Math.pow(12194, 2)));
+    
+    return 20 * Math.log10(rC) + 0.06;
+}
+
+/**
+ * ✅ Novo: Calcula RMS Ponderado (A, C ou Z) e Crest Factor
  */
 function calculateAcousticMetrics(timeData, freqData, sampleRate) {
-    let sumSqA = 0;
+    let sumSqWeighted = 0;
     let peak = 0;
     const hzPerBin = sampleRate / (freqData.length * 2);
 
@@ -591,11 +671,18 @@ function calculateAcousticMetrics(timeData, freqData, sampleRate) {
     for (let i = 0; i < freqData.length; i++) {
         const freq = i * hzPerBin;
         const db = freqData[i];
-        const weight = getAWeighting(freq);
+        
+        let weight = 0; // Ponderação Z (Flat) por padrão
+        if (currentWeighting === 'A') {
+            weight = getAWeighting(freq);
+        } else if (currentWeighting === 'C') {
+            weight = getCWeighting(freq);
+        }
+        
         const weightedDb = db + weight;
         
         // Converte dB para potência linear (10^(dB/10))
-        sumSqA += Math.pow(10, weightedDb / 10);
+        sumSqWeighted += Math.pow(10, weightedDb / 10);
     }
     
     // 2. Pico Real (Domínio do Tempo) para Clipping e Crest Factor
@@ -604,12 +691,13 @@ function calculateAcousticMetrics(timeData, freqData, sampleRate) {
         if (val > peak) peak = val;
     }
 
-    const rmsA = 10 * Math.log10(sumSqA + 1e-12);
+    const rmsDb = 10 * Math.log10(sumSqWeighted + 1e-12);
     const peakDb = 20 * Math.log10(peak + 1e-12);
-    const crestFactor = peakDb - rmsA;
+    const crestFactor = peakDb - rmsDb;
 
     return {
-        rmsA: rmsA,
+        rmsDb: rmsDb,
+        weighting: currentWeighting,
         peakDb: peakDb,
         crestFactor: crestFactor,
         isClipping: peak > 0.98
@@ -691,12 +779,9 @@ function buildAcousticSummary(freqData, timeData) {
         }
     }
 
-    let sumSquares = 0;
-    for (let i = 0; i < timeData.length; i++) {
-        sumSquares += timeData[i] * timeData[i];
-    }
-    const rms = Math.sqrt(sumSquares / timeData.length);
-    const rmsDb = 20 * Math.log10(Math.max(rms, 1e-12));
+    const metrics = calculateAcousticMetrics(timeData, freqData, audioCtx.sampleRate);
+    const rmsDb = metrics.rmsDb;
+    const crestFactor = metrics.crestFactor;
 
     const peakHz = peak.index * audioCtx.sampleRate / analyser.fftSize;
     const lowAvg = getBandAverage(freqData, audioCtx.sampleRate, 20, 250, analyser.fftSize);
@@ -715,8 +800,8 @@ function buildAcousticSummary(freqData, timeData) {
 
     if (peak.db > -18 && peakHz > 20 && peakHz < 8000) notes.push(`pico estreito em ${Math.round(peakHz)} Hz`);
 
-    const summaryText = `RMS ${formatDb(rmsDb)} dB; pico ${Math.round(peakHz)} Hz (${formatDb(peak.db)} dB). G:${formatDb(lowAvg)} | LM:${formatDb(lowMidAvg)} | M:${formatDb(midAvg)} | HM:${formatDb(highMidAvg)} | A:${formatDb(highAvg)}.` +
-        (notes.length ? ' Obs: ' + notes.join('; ') + '.' : ' Resposta de frequência equilibrada.');
+    const summaryText = `SPL(${metrics.weighting}) ${formatDb(rmsDb)} dB | Pico Real ${formatDb(metrics.peakDb)} dB | Crista ${crestFactor.toFixed(1)} dB. G:${formatDb(lowAvg)} | LM:${formatDb(lowMidAvg)} | M:${formatDb(midAvg)} | HM:${formatDb(highMidAvg)} | A:${formatDb(highAvg)}.` +
+        (notes.length ? ' Obs: ' + notes.join('; ') + '.' : ' Resposta equilibrada.');
 
     return {
         text: summaryText,
@@ -724,6 +809,8 @@ function buildAcousticSummary(freqData, timeData) {
             peakHz: Math.round(peakHz),
             peakDb: formatDb(peak.db),
             rmsDb: formatDb(rmsDb),
+            crestFactor: crestFactor.toFixed(1),
+            weighting: metrics.weighting,
             spectrum_v11: {
                 "125": formatDb(getBandAverage(freqData, audioCtx.sampleRate, 110, 140, analyser.fftSize)),
                 "500": formatDb(getBandAverage(freqData, audioCtx.sampleRate, 450, 550, analyser.fftSize)),
@@ -1030,68 +1117,74 @@ function analyze() {
 
     // --- Atualização Visual (Apenas se estivermos na aba de análise) ---
     if (canvas && canvasCtx) {
-        // --- Renderização FFT Logarítmica (Padrão RTA Profissional) ---
-        const minFreq = 20;
-        const maxFreq = 20000;
-        const logMin = Math.log10(minFreq);
-        const logMax = Math.log10(maxFreq);
-        const logRange = logMax - logMin;
-
-        const barWidth = 2; // px
-        const spacing = 1; // px
-        const totalBars = Math.floor(canvas.width / (barWidth + spacing));
+        // --- Renderização RTA 1/3 de Oitava (Padrão IEC 61260) ---
+        const iecCenters = [
+            20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 
+            500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 
+            6300, 8000, 10000, 12500, 16000, 20000
+        ];
         
         canvasCtx.fillStyle = '#0f172a'; // Deep Slate Blue (Paleta SoundMaster)
         canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
         
-        let x = 0;
-    
-    for (let i = 0; i < totalBars; i++) {
-        // Mapeia a barra atual para a frequência logarítmica correspondente
-        const xPercent = i / totalBars;
-        const freqStart = Math.pow(10, logMin + xPercent * logRange);
-        const nextXPercent = (i + 1) / totalBars;
-        const freqEnd = Math.pow(10, logMin + nextXPercent * logRange);
-
-        // Converte frequência para bins do buffer FFT
-        const binStart = Math.max(0, Math.floor(freqStart * analyser.fftSize / audioCtx.sampleRate));
-        const binEnd = Math.min(bufferLength, Math.ceil(freqEnd * analyser.fftSize / audioCtx.sampleRate));
+        const numBands = iecCenters.length;
+        const spacing = 2; // px
+        const barWidth = (canvas.width - (spacing * (numBands - 1))) / numBands;
         
-        let maxDbInBin = -120;
-        // Se o bin for muito estreito (graves), garante que pegamos pelo menos 1 bin
-        if (binStart === binEnd) {
-            maxDbInBin = freqData[binStart] || -120;
-        } else {
-            for (let j = binStart; j < binEnd; j++) {
-                if (freqData[j] > maxDbInBin) maxDbInBin = freqData[j];
+        let x = 0;
+        
+        // Fator limitante para 1/3 de oitava: 2^(1/6) ~= 1.12246
+        const halfStep = Math.pow(2, 1/6);
+        
+        for (let i = 0; i < numBands; i++) {
+            const fc = iecCenters[i];
+            const freqStart = fc / halfStep;
+            const freqEnd = fc * halfStep;
+
+            // Converte frequência para bins do buffer FFT
+            const binStart = Math.max(0, Math.floor(freqStart * analyser.fftSize / audioCtx.sampleRate));
+            const binEnd = Math.min(bufferLength, Math.ceil(freqEnd * analyser.fftSize / audioCtx.sampleRate));
+            
+            let maxDbInBin = -120;
+            if (binStart >= binEnd) {
+                // Muito grave, FFT sem bin suficiente para a banda inteira, pega o bin mais próximo
+                const bin = Math.max(0, Math.round(fc * analyser.fftSize / audioCtx.sampleRate));
+                maxDbInBin = freqData[bin] || -120;
+            } else {
+                for (let j = binStart; j < binEnd; j++) {
+                    if (freqData[j] > maxDbInBin) maxDbInBin = freqData[j];
+                }
+            }
+            
+            let fillStyle = '#64748b'; // Slate 500 default
+            if (fc < 60) fillStyle = '#3b82f6';        // Sub (Blue)
+            else if (fc < 250) fillStyle = '#10b981';  // Low (Emerald)
+            else if (fc < 2000) fillStyle = '#f59e0b'; // Mid (Amber)
+            else if (fc < 6000) fillStyle = '#f97316'; // High-Mid (Orange)
+            else fillStyle = '#ef4444';                // High (Red)
+
+            const normalized = Math.max(0, Math.min(1, (maxDbInBin - analyser.minDecibels) / (analyser.maxDecibels - analyser.minDecibels)));
+            const barHeight = normalized * canvas.height;
+
+            canvasCtx.fillStyle = fillStyle;
+            canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+            x += barWidth + spacing;
+        }
+
+    // Desenhar Peak Hold Line Corrigido para as bandas IEC
+    if (peakHold.timer > 0) {
+        // Acha a banda mais próxima do pico
+        let closestBandIndex = 0;
+        let minDiff = Infinity;
+        for (let i = 0; i < numBands; i++) {
+            const diff = Math.abs(iecCenters[i] - peakHold.hz);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closestBandIndex = i;
             }
         }
         
-        const db = maxDbInBin;
-        const freq = freqStart; // Frequência de início da barra
-        
-        let fillStyle = '#64748b'; // Slate 500 default
-        if (freq < 60) fillStyle = '#3b82f6';        // Sub (Blue)
-        else if (freq < 250) fillStyle = '#10b981';  // Low (Emerald)
-        else if (freq < 2000) fillStyle = '#f59e0b'; // Mid (Amber)
-        else if (freq < 6000) fillStyle = '#f97316'; // High-Mid (Orange)
-        else fillStyle = '#ef4444';                  // High (Red)
-
-        const normalized = Math.max(0, Math.min(1, (db - analyser.minDecibels) / (analyser.maxDecibels - analyser.minDecibels)));
-        const barHeight = normalized * canvas.height;
-
-        canvasCtx.fillStyle = fillStyle;
-        canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-        x += barWidth + spacing;
-    }
-
-    // Desenhar Peak Hold Line Corrigido
-    if (peakHold.timer > 0) {
-        // Mapeamento logarítmico para a posição X do pico
-        const peakLog = Math.log10(Math.max(minFreq, peakHold.hz));
-        const peakXPercent = (peakLog - logMin) / logRange;
-        const peakX = peakXPercent * canvas.width;
-        
+        const peakX = closestBandIndex * (barWidth + spacing);
         const peakNormalized = Math.max(0, Math.min(1, (peakHold.db - analyser.minDecibels) / (analyser.maxDecibels - analyser.minDecibels)));
         const peakY = canvas.height - (peakNormalized * canvas.height);
         
@@ -1099,7 +1192,7 @@ function analyze() {
         canvasCtx.lineWidth = 2;
         canvasCtx.beginPath();
         canvasCtx.moveTo(peakX, peakY);
-        canvasCtx.lineTo(peakX + barWidth + spacing, peakY);
+        canvasCtx.lineTo(peakX + barWidth, peakY);
         canvasCtx.stroke();
     }
 
@@ -1139,6 +1232,23 @@ function analyze() {
             waterfallCtx.fillStyle = color;
             waterfallCtx.fillRect(i, 0, 1, rowHeight);
         }
+        
+        // --- Eixo de Tempo (P2) ---
+        // Desenha a marcação de tempo (ex: 14:05:02) a cada virada de segundo na linha zero.
+        // O drawImage() de scroll nativo (linha 1207) cuidará de rolar isso suavemente para baixo.
+        if (!window._lastWfSec) window._lastWfSec = 0;
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (nowSec !== window._lastWfSec) {
+            window._lastWfSec = nowSec;
+            waterfallCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            waterfallCtx.font = '8px monospace';
+            const timeStr = new Date().toLocaleTimeString('pt-BR', { hour12: false });
+            waterfallCtx.fillText(timeStr, 5, 8);
+            
+            // Marca de linha de pulso a cada segundo
+            waterfallCtx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+            waterfallCtx.fillRect(0, 0, w, 1);
+        }
     }
     } // Fim do if (canvas && canvasCtx)
 
@@ -1165,16 +1275,23 @@ function analyze() {
     const neighborRight = freqData[Math.min(bufferLength - 1, peakIndex + 1)] || analyser.minDecibels;
     const neighborAvg = (neighborLeft + neighborRight) / 2;
     
-    let sumSquares = 0;
-    for (let i = 0; i < timeData.length; i++) {
-        sumSquares += timeData[i] * timeData[i];
-    }
-    const rms = Math.sqrt(sumSquares / timeData.length);
-    window.currentGlobalRMS = rms; // Expõe para a rotina de calibração
-    const rmsDb = 20 * Math.log10(Math.max(rms, 1e-12));
+    // ✅ Utiliza o cálculo padronizado Ponderado (A/C/Z)
+    const metrics = calculateAcousticMetrics(timeData, freqData, audioCtx.sampleRate);
+    const rmsDb = metrics.rmsDb;
+    const crestFactor = metrics.crestFactor;
     
-    // ✅ Novo: Fator de Crista (Peak-to-RMS) - Dinâmica do som
-    const crestFactor = peakDb - rmsDb;
+    // Converte de volta para potência linear só para a variável global currentGlobalRMS usada pelo calibrador legadado
+    window.currentGlobalRMS = Math.pow(10, rmsDb / 20); 
+
+    // ✅ Novo: Gravação contínua de Leq
+    if (isLeqLogging) {
+        // Grava a cada 1 segundo (~60 frames @ 60fps). Usaremos um contador no timestamp para não encher a memória muito rápido
+        const nowMs = Date.now();
+        if (!window._lastLeqTime || nowMs - window._lastLeqTime > 1000) {
+            leqLogData.push({ time: new Date(nowMs).toISOString(), spl: rmsDb, weighting: metrics.weighting });
+            window._lastLeqTime = nowMs;
+        }
+    }
 
     const rmsPercent = Math.min(100, Math.max(0, ((rmsDb - analyser.minDecibels) / (analyser.maxDecibels - analyser.minDecibels)) * 100));
     if (rmsBar) {
@@ -1558,22 +1675,35 @@ function _handleSweepAnalysisResult(result) {
         rt60El.classList.remove('hidden');
         rt60El.innerHTML = `
             <div class="bg-cyan-900/40 border border-cyan-500/30 p-6 rounded-2xl shadow-xl">
-                <h4 class="text-xs font-black uppercase text-cyan-400 tracking-widest mb-4">Resultado RT60 (Log-Sweep IR)</h4>
+                <h4 class="text-xs font-black uppercase text-cyan-400 tracking-widest mb-4">Métricas Acústicas (IR Real)</h4>
                 <div class="grid grid-cols-3 gap-4 mb-4">
                     <div><span class="text-[10px] text-slate-400">EDT</span><br><span class="text-2xl font-black text-white">${result.edt}s</span></div>
                     <div><span class="text-[10px] text-slate-400">T20</span><br><span class="text-2xl font-black text-cyan-300">${result.t20}s</span></div>
                     <div><span class="text-[10px] text-slate-400">T30</span><br><span class="text-2xl font-black text-cyan-300">${result.t30}s</span></div>
                 </div>
-                <div class="grid grid-cols-2 gap-4 mb-4">
-                    <div><span class="text-[10px] text-slate-400">STI</span><br><span class="text-2xl font-black ${result.sti >= 0.6 ? 'text-green-400' : result.sti >= 0.45 ? 'text-amber-400' : 'text-red-400'}">${result.sti}</span></div>
-                    <div><span class="text-[10px] text-slate-400">D50</span><br><span class="text-2xl font-black text-white">${result.d50}</span></div>
+                <div class="grid grid-cols-3 gap-4 mb-4">
+                    <div><span class="text-[10px] text-slate-400">STI (Fala)</span><br><span class="text-2xl font-black ${result.sti >= 0.6 ? 'text-green-400' : result.sti >= 0.45 ? 'text-amber-400' : 'text-red-400'}">${result.sti}</span></div>
+                    <div><span class="text-[10px] text-slate-400">C50 (Voz)</span><br><span class="text-2xl font-black ${result.c50 >= 0 ? 'text-green-400' : 'text-amber-400'}">${result.c50}</span><span class="text-xs text-slate-400">dB</span></div>
+                    <div><span class="text-[10px] text-slate-400">C80 (Música)</span><br><span class="text-2xl font-black ${result.c80 >= 0 ? 'text-green-400' : 'text-amber-400'}">${result.c80}</span><span class="text-xs text-slate-400">dB</span></div>
                 </div>
                 <div class="flex items-baseline gap-2">
-                    <span class="text-[10px] text-cyan-100/60">SNR: ${result.snr_db} dB | ${result.sti_category} | ${result.quality_flags ? result.quality_flags.join(' | ') : 'OK'}</span>
+                    <span class="text-[10px] text-cyan-100/60">SNR: ${result.snr_db} dB | Cat: ${result.sti_category} | ${result.quality_flags ? result.quality_flags.join(' | ') : 'OK'}</span>
                 </div>
             </div>
         `;
     }
+
+    // Dispara o evento para renderizar a Curva de Schroeder no canvas
+    document.dispatchEvent(new CustomEvent('rt60-result', {
+        detail: {
+            curve: result.schroeder_curve || [],
+            rt60:  result.t30 || result.t20,
+            t20:   result.t20,
+            t30:   result.t30,
+            edt:   result.edt,
+            snr:   result.snr_db,
+        }
+    }));
 }
 
 function _handleRT60Result(result) {
@@ -1637,7 +1767,13 @@ function ensureAudioCtx() {
         getLastAnalysis: () => lastAnalysis,
         getLastRt60: () => lastRt60Result,
         setMeasurementPosition: (position) => { lastMeasurementPosition = position; },
-        getMeasurementPosition: () => lastMeasurementPosition
+        getMeasurementPosition: () => lastMeasurementPosition,
+        setWeighting: (type) => {
+            if (['A', 'C', 'Z'].includes(type)) {
+                currentWeighting = type;
+                console.log(`[Analyzer] SPL Weighting changed to dB(${type})`);
+            }
+        }
     };
 
     // ✅ Listener Único para Áudio de Referência (Loopback)

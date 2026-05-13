@@ -230,7 +230,33 @@
             </div>
         </div>
 
-        <div class="mt-6">
+        <div class="mt-6 bg-slate-800/40 border border-white/10 rounded-2xl p-4 shadow-xl">
+            <div class="flex flex-wrap justify-between items-end gap-4 mb-3">
+                <div class="flex flex-col gap-1">
+                    <h4 class="text-[9px] font-black uppercase text-slate-500 tracking-widest">Nível de Pressão Sonora (SPL)</h4>
+                    <div class="flex items-center gap-2">
+                        <select id="spl-weighting-select" class="bg-black border border-white/10 rounded px-2 py-1 text-[9px] font-bold text-cyan-400 outline-none" onchange="if(window.SoundMasterAnalyzer) window.SoundMasterAnalyzer.setWeighting(this.value)">
+                            <option value="A">dB(A) - Audição Humana</option>
+                            <option value="C">dB(C) - Resposta Plana / Graves</option>
+                            <option value="Z">dB(Z) - Sem Ponderação (Flat)</option>
+                        </select>
+                        <button id="btn-toggle-leq" class="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1 rounded text-[9px] font-bold transition-colors">▶ Gravar Leq</button>
+                        <button id="btn-export-leq" class="bg-indigo-900/50 hover:bg-indigo-800 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded text-[9px] font-bold transition-colors hidden">⬇ Exportar CSV</button>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-2 bg-black/40 border border-white/10 rounded-lg p-1.5">
+                    <div class="flex items-center gap-1">
+                        <span class="text-[8px] uppercase font-bold text-slate-500">Min DB</span>
+                        <input type="number" id="input-min-db" value="-120" class="w-12 bg-transparent text-[10px] text-white font-mono text-center outline-none">
+                    </div>
+                    <div class="w-px h-3 bg-white/10"></div>
+                    <div class="flex items-center gap-1">
+                        <span class="text-[8px] uppercase font-bold text-slate-500">Max DB</span>
+                        <input type="number" id="input-max-db" value="0" class="w-12 bg-transparent text-[10px] text-white font-mono text-center outline-none">
+                    </div>
+                </div>
+            </div>
             <div class="h-3 bg-slate-900 rounded-full border border-white/5 overflow-hidden shadow-inner">
                 <div id="rms-bar" class="h-full bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 w-0 transition-all duration-75 shadow-[0_0_15px_rgba(16,185,129,0.5)]"></div>
             </div>

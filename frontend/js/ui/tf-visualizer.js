@@ -9,6 +9,11 @@
     const minFreq = 20;
     const maxFreq = 20000;
     let capturedTraces = []; // ✅ Armazena snapshots de medição
+    let crosshairX = -1;
+    let crosshairYMag = -1;
+    let crosshairYPhase = -1;
+    let zoomMag = 40; // Range em dB (ex: 40 = +/- 20dB)
+    let zoomPhase = 360; // Range em graus
 
     function init() {
         console.log('[TF-Visualizer] Inicializando canvases...');
@@ -24,6 +29,32 @@
         window.removeEventListener('resize', resize);
         window.addEventListener('resize', resize);
         resize();
+
+        // --- Crosshair e Zoom Listeners ---
+        const bindInteractivity = (canvas, type) => {
+            if (!canvas) return;
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                crosshairX = (e.clientX - rect.left) * (canvas.width / rect.width);
+                if (type === 'mag') crosshairYMag = (e.clientY - rect.top) * (canvas.height / rect.height);
+                if (type === 'phase') crosshairYPhase = (e.clientY - rect.top) * (canvas.height / rect.height);
+            });
+            canvas.addEventListener('mouseleave', () => {
+                crosshairX = -1; crosshairYMag = -1; crosshairYPhase = -1;
+            });
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const delta = Math.sign(e.deltaY);
+                if (type === 'mag') {
+                    zoomMag = Math.max(10, Math.min(120, zoomMag + delta * 5));
+                } else {
+                    zoomPhase = Math.max(90, Math.min(720, zoomPhase + delta * 30));
+                }
+            }, { passive: false });
+        };
+
+        bindInteractivity(magCanvas, 'mag');
+        bindInteractivity(phaseCanvas, 'phase');
     }
 
     /**
@@ -83,21 +114,22 @@
             else ctx.fillText(f, x + 2, height - 5);
         });
 
-        // Grid Horizontal (dB ou Graus)
+        // Grid Horizontal dinâmico com base no Zoom
         ctx.beginPath();
         if (type === 'magnitude') {
-            for (let db = -18; db <= 18; db += 6) {
-                const y = height / 2 - (db * (height / 40));
+            const step = zoomMag > 60 ? 12 : 6;
+            for (let db = -Math.floor(zoomMag/2); db <= Math.floor(zoomMag/2); db += step) {
+                const y = height / 2 - (db * (height / zoomMag));
                 ctx.moveTo(0, y);
                 ctx.lineTo(width, y);
             }
         } else {
-            const steps = [-180, -90, 0, 90, 180];
-            steps.forEach(deg => {
-                const y = height / 2 - (deg * (height / 360));
+            const step = zoomPhase > 360 ? 90 : 45;
+            for (let deg = -Math.floor(zoomPhase/2); deg <= Math.floor(zoomPhase/2); deg += step) {
+                const y = height / 2 - (deg * (height / zoomPhase));
                 ctx.moveTo(0, y);
                 ctx.lineTo(width, y);
-            });
+            }
         }
         ctx.stroke();
     }
@@ -116,10 +148,10 @@
             const x = freqToX(freq, width);
             let y;
             if (type === 'magnitude') {
-                y = height / 2 - (data[i] * (height / 40));
+                y = height / 2 - (data[i] * (height / zoomMag));
             } else {
                 const deg = data[i] * (180 / Math.PI);
-                y = height / 2 - (deg * (height / 360));
+                y = height / 2 - (deg * (height / zoomPhase));
             }
 
             if (i === 0) ctx.moveTo(x, y);
@@ -162,6 +194,44 @@
         // --- Desenhar Trace em Tempo Real ---
         drawTraceLine(magCtx, magnitude, w, h, 'magnitude', hzPerBin, '#22d3ee', true);
         drawTraceLine(phaseCtx, phase, w, h, 'phase', hzPerBin, '#a855f7', true);
+
+        // --- Crosshair UI ---
+        if (crosshairX > 0) {
+            const drawCrosshair = (ctx, yPos, type, color, scaleRange) => {
+                ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([2, 2]);
+
+                // Linha vertical
+                ctx.beginPath(); ctx.moveTo(crosshairX, 0); ctx.lineTo(crosshairX, h); ctx.stroke();
+
+                // Mouse Tooltip
+                const logMin = Math.log10(minFreq);
+                const logMax = Math.log10(maxFreq);
+                const xPercent = crosshairX / w;
+                const freqAtCursor = Math.pow(10, logMin + xPercent * (logMax - logMin));
+
+                let valStr = '';
+                if (yPos > 0) {
+                    // Linha horizontal se o mouse estiver DENTRO desse canvas
+                    ctx.beginPath(); ctx.moveTo(0, yPos); ctx.lineTo(w, yPos); ctx.stroke();
+                    
+                    const val = ((h / 2 - yPos) / h) * scaleRange;
+                    valStr = type === 'mag' ? ` | ${val.toFixed(1)} dB` : ` | ${val.toFixed(1)}°`;
+                }
+
+                // Desenha a caixa de texto no topo
+                ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                ctx.fillRect(crosshairX + 5, 5, 80, 16);
+                ctx.fillStyle = color;
+                ctx.font = '10px monospace';
+                ctx.fillText(`${Math.round(freqAtCursor)}Hz${valStr}`, crosshairX + 8, 16);
+                ctx.setLineDash([]);
+            };
+
+            drawCrosshair(magCtx, crosshairYMag, 'mag', '#22d3ee', zoomMag);
+            drawCrosshair(phaseCtx, crosshairYPhase, 'phase', '#a855f7', zoomPhase);
+        }
     }
 
     window.SoundMasterVisualizer = {
