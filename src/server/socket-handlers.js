@@ -674,26 +674,38 @@ function registerSocketHandlers(io, appDataDir = './logs') {
                 return;
             }
 
-            try {
-                const tmpWav = path.join(require('os').tmpdir(), `sweep_${Date.now()}.wav`);
-                const { writeFileSync } = require('fs');
+            // ✅ FIX 1: Usa diretório dentro do projeto em vez de os.tmpdir()
+            // os.tmpdir() em Windows pode retornar paths com espaços
+            // (ex: C:\Users\Nome Sobrenome\AppData\Local\Temp), quebrando o spawn silenciosamente.
+            const { mkdirSync, writeFileSync } = require('fs');
+            const tmpDir = path.join(__dirname, '..', '..', 'data', 'tmp');
+            try { mkdirSync(tmpDir, { recursive: true }); } catch (_) {}
+            const tmpWav = path.join(tmpDir, `sweep_${Date.now()}.wav`);
 
+            // ✅ FIX 2: sampleRate vem do frontend (44100) — não hardcode 48000
+            // Um header WAV com sampleRate errado faz o Python calcular T60 com base de tempo incorreta
+            const sampleRate = (sweepParams?.sampleRate && Number.isFinite(sweepParams.sampleRate))
+                ? sweepParams.sampleRate
+                : 44100;
+
+            try {
                 const int16Data = new Int16Array(recording.map(v => Math.max(-32768, Math.min(32767, Math.round(v * 32768)))));
 
+                // Monta header WAV (RIFF PCM 16-bit mono)
                 const header = Buffer.alloc(44);
                 const dv = new DataView(header.buffer);
-                dv.setUint32(0, 0x52494646, false);
-                dv.setUint32(4, 36 + int16Data.byteLength, false);
-                dv.setUint32(8, 0x57415645, false);
-                dv.setUint32(12, 0x666D7420, false);
-                dv.setUint32(16, 16, false);
-                dv.setUint16(20, 1, false);
-                dv.setUint16(22, 1, false);
-                dv.setUint32(24, 48000, false);
-                dv.setUint32(28, 48000 * 2, false);
-                dv.setUint16(32, 2, false);
-                dv.setUint16(34, 16, false);
-                dv.setUint32(36, 0x64617461, false);
+                dv.setUint32(0,  0x52494646, false); // "RIFF"
+                dv.setUint32(4,  36 + int16Data.byteLength, false);
+                dv.setUint32(8,  0x57415645, false); // "WAVE"
+                dv.setUint32(12, 0x666D7420, false); // "fmt "
+                dv.setUint32(16, 16,         false); // PCM chunk size
+                dv.setUint16(20, 1,          false); // PCM format
+                dv.setUint16(22, 1,          false); // mono
+                dv.setUint32(24, sampleRate,           false); // ✅ sampleRate correto
+                dv.setUint32(28, sampleRate * 2,       false); // byteRate
+                dv.setUint16(32, 2,          false); // blockAlign
+                dv.setUint16(34, 16,         false); // bitsPerSample
+                dv.setUint32(36, 0x64617461, false); // "data"
                 dv.setUint32(40, int16Data.byteLength, false);
 
                 writeFileSync(tmpWav, Buffer.concat([header, Buffer.from(int16Data.buffer)]));
@@ -701,7 +713,11 @@ function registerSocketHandlers(io, appDataDir = './logs') {
                 const analyzerPy = path.join(__dirname, '..', '..', 'backend', 'ai', 'acoustics', 'sweep_analyzer.py');
 
                 const result = await new Promise((resolve, reject) => {
-                    const py = spawn('python', [analyzerPy, tmpWav], { cwd: path.dirname(analyzerPy) });
+                    // ✅ FIX 3: shell:true garante que paths com caracteres especiais são tratados
+                    const py = spawn('python', [analyzerPy, tmpWav], {
+                        cwd:   path.dirname(analyzerPy),
+                        shell: true,
+                    });
 
                     let stdout = '';
                     let stderr = '';

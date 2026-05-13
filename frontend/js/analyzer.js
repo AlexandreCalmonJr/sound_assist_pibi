@@ -1598,6 +1598,18 @@ function _handleRT60Result(result) {
             </div>
         `;
     }
+
+    // ✅ Dispara evento para renderizar gráfico de Schroeder na página RT60
+    document.dispatchEvent(new CustomEvent('rt60-result', {
+        detail: {
+            curve: result.curve || [],
+            rt60:  result.rt60,
+            t20:   result.t20,
+            t30:   result.t30,
+            edt:   result.edt,
+            snr:   result.snr,
+        }
+    }));
 }
 // Variáveis do gerador de sinais e ruído rosa declaradas no topo do IIFE (~linha 66).
 // (Duplicatas removidas para evitar SyntaxError de 'let' redeclarado no mesmo escopo.)
