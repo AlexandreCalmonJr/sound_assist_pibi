@@ -772,7 +772,8 @@ function buildPinkNoiseReport(avgSpectrum, sampleRate) {
 
 function buildAcousticSummary(freqData, timeData) {
     const peak = { db: -Infinity, index: 0 };
-    for (let i = 0; i < freqData.length; i++) {
+    const minBin = Math.floor(20 * analyser.fftSize / audioCtx.sampleRate); // Ignora ruído subsônico/DC (0Hz)
+    for (let i = minBin; i < freqData.length; i++) {
         if (freqData[i] > peak.db) {
             peak.db = freqData[i];
             peak.index = i;
@@ -1242,8 +1243,10 @@ function analyze() {
             window._lastWfSec = nowSec;
             waterfallCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
             waterfallCtx.font = '8px monospace';
+            waterfallCtx.textAlign = 'right';
             const timeStr = new Date().toLocaleTimeString('pt-BR', { hour12: false });
-            waterfallCtx.fillText(timeStr, 5, 8);
+            waterfallCtx.fillText(timeStr, w - 5, 8);
+            waterfallCtx.textAlign = 'left'; // Reseta
             
             // Marca de linha de pulso a cada segundo
             waterfallCtx.fillStyle = 'rgba(255, 255, 255, 0.15)';

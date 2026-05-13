@@ -150,7 +150,9 @@
             if (type === 'magnitude') {
                 y = height / 2 - (data[i] * (height / zoomMag));
             } else {
-                const deg = data[i] * (180 / Math.PI);
+                let deg = data[i] * (180 / Math.PI);
+                // Phase Wrapping: mantém a fase restrita a -180° a +180° para não sumir do gráfico
+                deg = ((deg + 180) % 360 + 360) % 360 - 180;
                 y = height / 2 - (deg * (height / zoomPhase));
             }
 
