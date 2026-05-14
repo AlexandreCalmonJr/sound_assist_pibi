@@ -37,7 +37,7 @@
     "@tensorflow/tfjs": "^4.22.0",
     "adm-zip": "^0.5.17",
     "axios": "^1.16.0",
-    "cors": "^2.8.7",
+    "cors": "^2.8.6",
     "dgram": "^1.0.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.1",
