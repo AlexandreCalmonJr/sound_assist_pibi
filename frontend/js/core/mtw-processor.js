@@ -48,6 +48,13 @@
  *   - FFT Cooley-Tukey radix-2 DIT in-place
  *   - Overlap-Add WOLA (Weighted Overlap-Add) com 75% de sobreposição
  *   - Bandas processadas de forma assíncrona por hop (não bloqueiam entre si)
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * NOTA: Este processor mantém implementações inline de FFT e Windowing para
+ * autonomia (AudioWorklets não suportam imports ES modules).
+ * Versões modulares disponíveis em: dsp/fft-worklet.js, dsp/windowing-worklet.js
+ * Bundle combinado em: dsp/worklet-bundle.js
+ * ═══════════════════════════════════════════════════════════════════════════════
  */
 
 'use strict';

@@ -275,38 +275,51 @@
         const profileName = prompt('Nome do perfil de calibração:', `Perfil ${Object.keys(profiles).length + 1}`);
         if (!profileName) return;
         
-        const corrections = [];
+        // Tenta usar Auto-EQ para correções baseadas em medição real
+        const autoCorrections = _generateAutoEQCorrections(profile);
         
-        // Gera sugestões de correção baseadas nas métricas médias
-        if (profile.rt60 > 1.6) {
-            corrections.push({ type: 'highpass', freq: 80, gain: -3, reason: 'RT60 longo - reduz graves' });
-            corrections.push({ type: 'peaking', freq: 250, gain: -2, q: 1, reason: 'RT60 longo - reduz graves medios' });
-        } else if (profile.rt60 < 1.2) {
-            corrections.push({ type: 'peaking', freq: 200, gain: 2, q: 0.7, reason: 'RT60 curto - reforça graves' });
-        }
+        let corrections;
+        let source;
         
-        if (profile.d50 < 40) {
-            corrections.push({ type: 'peaking', freq: 2000, gain: -2, q: 2, reason: 'D50 baixo - reduz Medios agudos' });
-            corrections.push({ type: 'peaking', freq: 4000, gain: -1, q: 1.5, reason: 'D50 baixo - reduz agudos' });
-        } else if (profile.d50 > 60) {
-            corrections.push({ type: 'peaking', freq: 3000, gain: 1, q: 1, reason: 'D50 alto - reforça presença' });
-        }
-        
-        if (profile.c50 < -2) {
-            corrections.push({ type: 'peaking', freq: 1000, gain: -1.5, q: 1, reason: 'C50 baixo - clarity melhorada' });
-        } else if (profile.c50 > 2) {
-            corrections.push({ type: 'peaking', freq: 3000, gain: 1.5, q: 1, reason: 'C50 alto - Clareza excelente' });
+        if (autoCorrections.length > 0) {
+            corrections = autoCorrections;
+            source = 'Auto-EQ';
+        } else {
+            // Fallback: correções heurísticas com reason
+            corrections = [];
+            
+            if (profile.rt60 > 1.6) {
+                corrections.push({ type: 'highpass', freq: 80, gain: -3, reason: 'RT60 longo - reduz graves', source: 'heuristic' });
+                corrections.push({ type: 'peaking', freq: 250, gain: -2, q: 1, reason: 'RT60 longo - reduz graves medios', source: 'heuristic' });
+            } else if (profile.rt60 < 1.2) {
+                corrections.push({ type: 'peaking', freq: 200, gain: 2, q: 0.7, reason: 'RT60 curto - reforça graves', source: 'heuristic' });
+            }
+            
+            if (profile.d50 < 40) {
+                corrections.push({ type: 'peaking', freq: 2000, gain: -2, q: 2, reason: 'D50 baixo - reduz Medios agudos', source: 'heuristic' });
+                corrections.push({ type: 'peaking', freq: 4000, gain: -1, q: 1.5, reason: 'D50 baixo - reduz agudos', source: 'heuristic' });
+            } else if (profile.d50 > 60) {
+                corrections.push({ type: 'peaking', freq: 3000, gain: 1, q: 1, reason: 'D50 alto - reforça presença', source: 'heuristic' });
+            }
+            
+            if (profile.c50 < -2) {
+                corrections.push({ type: 'peaking', freq: 1000, gain: -1.5, q: 1, reason: 'C50 baixo - clarity melhorada', source: 'heuristic' });
+            } else if (profile.c50 > 2) {
+                corrections.push({ type: 'peaking', freq: 3000, gain: 1.5, q: 1, reason: 'C50 alto - Clareza excelente', source: 'heuristic' });
+            }
+            source = 'Heurístico';
         }
         
         profiles[profileName] = {
             ...profile,
             corrections,
             createdAt: new Date().toISOString(),
-            points: mappingPoints.length
+            points: mappingPoints.length,
+            source
         };
         
-        showToast(`Perfil "${profileName}" criado com ${corrections.length} correções sugeridas`, 'success');
-        console.log('[RT60-Mapping] Perfil criado:', profileName, corrections);
+        showToast(`Perfil "${profileName}" criado com ${corrections.length} correções (${source})`, 'success');
+        console.log('[RT60-Mapping] Perfil criado:', profileName, source, corrections);
         
         // Salva perfis no storage
         saveProfilesToStorage();
@@ -464,18 +477,27 @@
         const profile = getAverageProfile();
         if (!profile) return null;
         
+        // Tenta usar Auto-EQ para correções baseadas em medição real
+        const autoCorrections = _generateAutoEQCorrections(profile);
+        
+        if (autoCorrections.length > 0) {
+            console.log('[RT60-Mapping] Usando correções Auto-EQ:', autoCorrections);
+            return _saveProfile(name, profile, autoCorrections);
+        }
+        
+        // Fallback: correções heurísticas
         const corrections = [];
         
         if (profile.rt60 > 1.6) {
-            corrections.push({ type: 'highpass', freq: 80, gain: -3 });
-            corrections.push({ type: 'peaking', freq: 250, gain: -2, q: 1 });
+            corrections.push({ type: 'highpass', freq: 80, gain: -3, source: 'heuristic' });
+            corrections.push({ type: 'peaking', freq: 250, gain: -2, q: 1, source: 'heuristic' });
         } else if (profile.rt60 < 1.2) {
-            corrections.push({ type: 'peaking', freq: 200, gain: 2, q: 0.7 });
+            corrections.push({ type: 'peaking', freq: 200, gain: 2, q: 0.7, source: 'heuristic' });
         }
         
         if (profile.d50 < 40) {
-            corrections.push({ type: 'peaking', freq: 2000, gain: -2, q: 2 });
-            corrections.push({ type: 'peaking', freq: 4000, gain: -1, q: 1.5 });
+            corrections.push({ type: 'peaking', freq: 2000, gain: -2, q: 2, source: 'heuristic' });
+            corrections.push({ type: 'peaking', freq: 4000, gain: -1, q: 1.5, source: 'heuristic' });
         }
         
         if (profile.c50 < -2) {
@@ -491,6 +513,73 @@
         };
         
         console.log('[RT60-Mapping] Perfil criado:', name, corrections);
+        return profiles[name];
+    }
+
+    /**
+     * Gera correções usando o Auto-EQ service.
+     * Integração recomendada pelo relatório de auditoria técnica.
+     * Usa curvas alvo baseadas no perfil RT60 da sala.
+     */
+    function _generateAutoEQCorrections(profile) {
+        if (!window.AutoEQ) {
+            console.warn('[RT60-Mapping] Auto-EQ não disponível');
+            return [];
+        }
+
+        // Determina a curva alvo baseada no tipo de sala/perfil
+        let targetCurve = 'smaart';
+        if (profile.rt60 > 2.0) {
+            targetCurve = 'tilt'; // Sala reverberante: curva mais atenuada em agudos
+        } else if (profile.rt60 < 1.0) {
+            targetCurve = 'presence'; // Sala seca: curva com presença
+        }
+
+        try {
+            window.AutoEQ.setTarget(targetCurve);
+            
+            // Tenta obter o espectro atual do analyzer
+            const analyzer = window.SoundMasterAnalyzer;
+            const freqData = analyzer?.getLastSpectrum?.();
+            
+            if (freqData && freqData.length > 0) {
+                const sr = analyzer?.sampleRate || 48000;
+                const fftSize = analyzer?.fftSize || 2048;
+                
+                const result = window.AutoEQ.analyze(freqData, sr, fftSize);
+                
+                if (result && result.peq && result.peq.length > 0) {
+                    // Converte resultado do Auto-EQ para formato de correções
+                    return result.peq.map(band => ({
+                        type: 'peaking',
+                        freq: band.freq,
+                        gain: -band.gain, // Inverte para correção
+                        q: band.q || 1,
+                        source: 'auto-eq',
+                        targetCurve
+                    }));
+                }
+            }
+        } catch (e) {
+            console.warn('[RT60-Mapping] Auto-EQ analysis failed:', e);
+        }
+
+        return [];
+    }
+
+    /**
+     * Salva o perfil de calibração com correções.
+     */
+    function _saveProfile(name, profile, corrections) {
+        profiles[name] = {
+            ...profile,
+            corrections,
+            createdAt: new Date().toISOString()
+        };
+        
+        saveProfilesToStorage();
+        console.log('[RT60-Mapping] Perfil salvo:', name, corrections);
+        
         return profiles[name];
     }
 

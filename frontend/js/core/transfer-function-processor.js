@@ -17,6 +17,14 @@
  * Protocolo de saída (port.postMessage):
  *   { type: 'transfer-function', magnitude[], phase[], coherence[],
  *     wrappedPhase[], phaseDelay, delayMs, delaySamples, confidence }
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * NOTA: Este processor mantém implementações inline de FFT, Windowing e
+ * Spectrum Calculator para autonomia (AudioWorklets não suportam imports ES modules).
+ * Versões modulares disponíveis em: dsp/fft-worklet.js, dsp/windowing-worklet.js,
+ * dsp/spectrum-worklet.js, dsp/delay-finder.js
+ * Bundle combinado em: dsp/worklet-bundle.js
+ * ═══════════════════════════════════════════════════════════════════════════════
  */
 
 'use strict';
