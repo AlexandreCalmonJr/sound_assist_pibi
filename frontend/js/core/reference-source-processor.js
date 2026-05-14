@@ -1,45 +1,49 @@
 // reference-source-processor.js
-// AudioWorkletProcessor para alimentar a fonte de referência (loopback via WebSocket PCM)
+// AudioWorkletProcessor para alimentar a fonte de referencia (loopback via WebSocket PCM).
 
 class ReferenceSourceProcessor extends AudioWorkletProcessor {
     constructor() {
         super();
-        this.buffer = new Float32Array(0);
-        
-        // Recebe PCM chunks enviados da thread principal (analyzer.js)
+        this._buffer = new Float32Array(48000);
+        this._readPtr = 0;
+        this._writePtr = 0;
+        this._available = 0;
+
         this.port.onmessage = (event) => {
             if (event.data && event.data.type === 'pcm') {
-                this._appendData(event.data.samples);
+                this._appendSamples(event.data.samples);
             }
         };
     }
 
-    _appendData(newData) {
-        const newBuffer = new Float32Array(this.buffer.length + newData.length);
-        newBuffer.set(this.buffer, 0);
-        newBuffer.set(newData, this.buffer.length);
-        this.buffer = newBuffer;
+    _appendSamples(samples) {
+        if (!samples || samples.length === 0) return;
+
+        for (let i = 0; i < samples.length; i++) {
+            this._buffer[this._writePtr] = samples[i];
+            this._writePtr = (this._writePtr + 1) % this._buffer.length;
+
+            if (this._available < this._buffer.length) {
+                this._available++;
+            } else {
+                this._readPtr = (this._readPtr + 1) % this._buffer.length;
+            }
+        }
     }
 
-    process(inputs, outputs, parameters) {
-        const output = outputs[0];
-        const channel = output[0];
+    process(inputs, outputs) {
+        const channel = outputs[0]?.[0];
+        if (!channel) return true;
 
-        // Se não tivermos dados suficientes, silêncio
-        if (this.buffer.length < channel.length) {
-            for (let i = 0; i < channel.length; i++) {
+        for (let i = 0; i < channel.length; i++) {
+            if (this._available > 0) {
+                channel[i] = this._buffer[this._readPtr];
+                this._readPtr = (this._readPtr + 1) % this._buffer.length;
+                this._available--;
+            } else {
                 channel[i] = 0;
             }
-            return true;
         }
-
-        // Toca o áudio disponível
-        for (let i = 0; i < channel.length; i++) {
-            channel[i] = this.buffer[i];
-        }
-
-        // Remove amostras já tocadas
-        this.buffer = this.buffer.slice(channel.length);
 
         return true;
     }

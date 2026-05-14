@@ -10,7 +10,7 @@
  *
  * Protocolo de mensagens (port.onmessage):
  *   { type: 'set-demo',    value: bool }   → ativa modo simulação
- *   { type: 'set-avg',     value: 0–0.99 } → peso do leaky integrator
+ *   { type: 'set-avg',     seconds: 1|2|5 } → janela de média móvel
  *   { type: 'set-fft',     value: potência de 2 } → redimensiona FFT
  *   { type: 'reset' }                      → zera acumuladores
  *
@@ -46,10 +46,11 @@ class TransferFunctionProcessor extends AudioWorkletProcessor {
         // Passa-baixas Butterworth 2ª ordem @ ~4 kHz (simula coloração do sistema)
         this._bq = { b0: 0.0196, b1: 0.0392, b2: 0.0196, a1: -1.5548, a2: 0.6330 };
 
-        this._avgW = 0.9;           // leaky integrator (0 = sem memória, 0.99 = lento)
+        this._avgSeconds = 2;
 
         this._buildHann();
         this._allocSpectral();
+        this._allocAveraging();
         this._allocDelayFinder();
 
         this.port.onmessage = (e) => this._onMessage(e.data);
@@ -59,10 +60,20 @@ class TransferFunctionProcessor extends AudioWorkletProcessor {
 
     _onMessage(msg) {
         switch (msg.type) {
-            case 'set-demo':  this._demo  = !!msg.value; break;
-            case 'set-avg':   this._avgW  = Math.max(0, Math.min(0.99, msg.value)); break;
-            case 'set-fft':   this._resize(msg.value); break;
-            case 'reset':     this._allocSpectral(); break;
+            case 'set-demo':
+            case 'set-demo-mode':
+                this._demo = !!msg.value;
+                break;
+            case 'set-avg':
+                this._setAverageSeconds(msg.seconds ?? msg.value);
+                break;
+            case 'set-fft':
+                this._resize(msg.value);
+                break;
+            case 'reset':
+                this._allocSpectral();
+                this._allocAveraging();
+                break;
         }
     }
 
@@ -77,17 +88,22 @@ class TransferFunctionProcessor extends AudioWorkletProcessor {
 
     _allocSpectral() {
         const h = this._fftSize >>> 1;
-        // Leaky accumulators para média espectral vetorial (Welch method)
+        // Acumuladores espectrais do frame atual.
         this._Gxy_re = new Float32Array(h);   // Cross-spectrum real
         this._Gxy_im = new Float32Array(h);   // Cross-spectrum imag
         this._Gxx    = new Float32Array(h);   // Auto-spectrum referência
         this._Gyy    = new Float32Array(h);   // Auto-spectrum medição
-        // Saídas suavizadas
-        this._smMag  = new Float32Array(h);
-        this._smPhs  = new Float32Array(h);
-        this._smCoh  = new Float32Array(h);
-        // Estado de unwrapping acumulativo
-        this._unwrapAcc = new Float32Array(h);
+    }
+
+    _allocAveraging() {
+        const h = this._fftSize >>> 1;
+        const frameSec = this._hopSize / this._sr;
+        this._avgFrameTarget = Math.max(1, Math.round(this._avgSeconds / frameSec));
+        this._avgFrames = [];
+        this._avgPtr = 0;
+        this._avgMagSum = new Float64Array(h);
+        this._avgPhsSum = new Float64Array(h);
+        this._avgCohSum = new Float64Array(h);
     }
 
     _allocDelayFinder() {
@@ -111,9 +127,22 @@ class TransferFunctionProcessor extends AudioWorkletProcessor {
         this._demoBuf = new Float32Array(size);
         this._buildHann();
         this._allocSpectral();
+        this._allocAveraging();
         this._allocDelayFinder();
         this._hopCount = 0;
         this.port.postMessage({ type: 'fft-size-changed', size });
+    }
+
+    _setAverageSeconds(seconds) {
+        const value = Number(seconds);
+        if (!Number.isFinite(value)) return;
+        this._avgSeconds = Math.max(0.1, Math.min(10, value));
+        this._allocAveraging();
+        this.port.postMessage({
+            type: 'avg-changed',
+            seconds: this._avgSeconds,
+            frames: this._avgFrameTarget
+        });
     }
 
     // ─── AudioWorklet process() ───────────────────────────────────────────────
@@ -207,9 +236,8 @@ class TransferFunctionProcessor extends AudioWorkletProcessor {
      * Coherence γ²(f) = |Gxy|² / (Gxx × Gyy)
      */
     _computeTF() {
-        const n    = this._fftSize;
-        const h    = n >>> 1;
-        const alpha = this._avgW;
+        const n = this._fftSize;
+        const h = n >>> 1;
 
         // Copia + aplica janela de Hann
         const xRe = new Float32Array(n); const xIm = new Float32Array(n);
@@ -226,7 +254,7 @@ class TransferFunctionProcessor extends AudioWorkletProcessor {
         this._fft(xRe, xIm);
         this._fft(yRe, yIm);
 
-        // ── 1. Acumuladores espectrais (Welch / leaky averaging) ──────────────
+        // ── 1. Espectros do frame atual ───────────────────────────────────────
         // Cross-spectrum: Gxy(k) = X*(k) · Y(k)   [conjugado de X vezes Y]
         // Auto-spectra:   Gxx(k) = |X(k)|²,  Gyy(k) = |Y(k)|²
         for (let k = 0; k < h; k++) {
@@ -239,10 +267,10 @@ class TransferFunctionProcessor extends AudioWorkletProcessor {
             const gxx  = xr * xr + xi * xi;
             const gyy  = yr * yr + yi * yi;
 
-            this._Gxy_re[k] = alpha * this._Gxy_re[k] + (1 - alpha) * gxyR;
-            this._Gxy_im[k] = alpha * this._Gxy_im[k] + (1 - alpha) * gxyI;
-            this._Gxx[k]    = alpha * this._Gxx[k]    + (1 - alpha) * gxx;
-            this._Gyy[k]    = alpha * this._Gyy[k]    + (1 - alpha) * gyy;
+            this._Gxy_re[k] = gxyR;
+            this._Gxy_im[k] = gxyI;
+            this._Gxx[k]    = gxx;
+            this._Gyy[k]    = gyy;
         }
 
         // ── 2. Magnitude, Phase, Coherence ────────────────────────────────────
@@ -273,28 +301,23 @@ class TransferFunctionProcessor extends AudioWorkletProcessor {
             coherence[k] = Math.max(0, Math.min(1, msc)) * 100; // 0–100%
         }
 
-        // ── 3. Phase Unwrapping acumulativo ───────────────────────────────────
+        // ── 3. Phase Unwrapping ───────────────────────────────────────────────
         const phase = this._unwrapPhase(wrappedPhase);
 
-        // ── 4. Suavização temporal dos outputs ────────────────────────────────
-        const smA = 0.35;
-        for (let k = 0; k < h; k++) {
-            this._smMag[k] = smA * magnitude[k] + (1 - smA) * this._smMag[k];
-            this._smPhs[k] = smA * phase[k]     + (1 - smA) * this._smPhs[k];
-            this._smCoh[k] = smA * coherence[k] + (1 - smA) * this._smCoh[k];
-        }
+        // ── 4. Média móvel temporal controlável antes da plotagem ─────────────
+        const averaged = this._pushMovingAverage(magnitude, phase, coherence);
 
         // ── 5. GCC-PHAT Delay Finder ──────────────────────────────────────────
         const delayResult = this._gccPhat();
 
         // ── 6. Phase Delay médio ponderado (200 Hz – 8 kHz) ───────────────────
-        const phaseDelay = this._calcPhaseDelay();
+        const phaseDelay = this._calcPhaseDelay(averaged.phase, averaged.coherence);
 
         // ── 7. Envia resultado para o thread principal ─────────────────────────
         // Transfere buffers via zero-copy (Transferable)
-        const outMag = this._smMag.slice();
-        const outPhs = this._smPhs.slice();
-        const outCoh = this._smCoh.slice();
+        const outMag = averaged.magnitude;
+        const outPhs = averaged.phase;
+        const outCoh = averaged.coherence;
 
         this.port.postMessage({
             type:          'transfer-function',
@@ -305,7 +328,10 @@ class TransferFunctionProcessor extends AudioWorkletProcessor {
             phaseDelay,
             delayMs:       delayResult.delayMs,
             delaySamples:  delayResult.delaySamples,
-            confidence:    delayResult.confidence
+            confidence:    delayResult.confidence,
+            sampleRate:    this._sr,
+            avgSeconds:    this._avgSeconds,
+            avgFrames:     this._avgFrames.length
         }, [outMag.buffer, outPhs.buffer, outCoh.buffer, wrappedPhase.buffer]);
     }
 
@@ -408,17 +434,62 @@ class TransferFunctionProcessor extends AudioWorkletProcessor {
     _unwrapPhase(wrapped) {
         const h = this._fftSize >>> 1;
         const out = new Float32Array(h);
+        if (h === 0) return out;
+
+        let correction = 0;
         out[0] = wrapped[0];
 
         for (let k = 1; k < h; k++) {
             let delta = wrapped[k] - wrapped[k - 1];
-            // Reduz ao intervalo [-π, π]
-            while (delta >  Math.PI) delta -= 2 * Math.PI;
-            while (delta < -Math.PI) delta += 2 * Math.PI;
-            this._unwrapAcc[k] = this._unwrapAcc[k - 1] + delta;
-            out[k] = this._unwrapAcc[k];
+            if (delta > Math.PI) {
+                correction -= 2 * Math.PI;
+            } else if (delta < -Math.PI) {
+                correction += 2 * Math.PI;
+            }
+            out[k] = wrapped[k] + correction;
         }
         return out;
+    }
+
+    _pushMovingAverage(magnitude, phase, coherence) {
+        const h = this._fftSize >>> 1;
+        const frame = {
+            magnitude: new Float32Array(magnitude),
+            phase: new Float32Array(phase),
+            coherence: new Float32Array(coherence),
+        };
+
+        if (this._avgFrames.length < this._avgFrameTarget) {
+            this._avgFrames.push(frame);
+        } else {
+            const old = this._avgFrames[this._avgPtr];
+            for (let k = 0; k < h; k++) {
+                this._avgMagSum[k] -= old.magnitude[k];
+                this._avgPhsSum[k] -= old.phase[k];
+                this._avgCohSum[k] -= old.coherence[k];
+            }
+            this._avgFrames[this._avgPtr] = frame;
+        }
+
+        for (let k = 0; k < h; k++) {
+            this._avgMagSum[k] += frame.magnitude[k];
+            this._avgPhsSum[k] += frame.phase[k];
+            this._avgCohSum[k] += frame.coherence[k];
+        }
+
+        this._avgPtr = (this._avgPtr + 1) % this._avgFrameTarget;
+
+        const count = Math.max(1, this._avgFrames.length);
+        const outMag = new Float32Array(h);
+        const outPhs = new Float32Array(h);
+        const outCoh = new Float32Array(h);
+        for (let k = 0; k < h; k++) {
+            outMag[k] = this._avgMagSum[k] / count;
+            outPhs[k] = this._avgPhsSum[k] / count;
+            outCoh[k] = this._avgCohSum[k] / count;
+        }
+
+        return { magnitude: outMag, phase: outPhs, coherence: outCoh };
     }
 
     // ─── Phase Delay Médio ────────────────────────────────────────────────────
@@ -428,7 +499,7 @@ class TransferFunctionProcessor extends AudioWorkletProcessor {
      * ponderado pela coerência (bins com baixa coerência têm menos peso).
      * Retorna em milissegundos.
      */
-    _calcPhaseDelay() {
+    _calcPhaseDelay(phase, coherence) {
         const h      = this._fftSize >>> 1;
         const hzBin  = this._sr / this._fftSize;
         const kLow   = Math.ceil(200  / hzBin);
@@ -438,10 +509,10 @@ class TransferFunctionProcessor extends AudioWorkletProcessor {
 
         for (let k = kLow; k <= kHigh && k < h; k++) {
             const freq = k * hzBin;
-            const pd   = -this._smPhs[k] / (2 * Math.PI * freq) * 1000; // ms
+            const pd   = -phase[k] / (2 * Math.PI * freq) * 1000; // ms
             if (!isFinite(pd) || Math.abs(pd) > 200) continue;
 
-            const w = Math.max(0.01, this._smCoh[k] / 100);
+            const w = Math.max(0.01, coherence[k] / 100);
             wSum   += pd * w;
             wTotal += w;
         }

@@ -2,13 +2,8 @@
  * SoundMaster — Analisador de Áudio em Tempo Real (Web Audio API)
  * Encapsulado em IIFE para evitar poluição do escopo global.
  *
- * NOTA TÉCNICA: createScriptProcessor é deprecated (Web Audio API).
- * O substituto recomendado é AudioWorklet, porém requer:
- *   1. Arquivo separado para o processador (AudioWorkletProcessor)
- *   2. Contexto seguro (HTTPS) em alguns navegadores
- *   3. Suporte menor em Safari < 14.1
- * Mantido createScriptProcessor como fallback funcional até que
- * o app migre para uma build com bundler (Vite/Webpack).
+ * NOTA TÉCNICA: processamento customizado usa AudioWorklet.
+ * ScriptProcessorNode foi removido dos caminhos ativos por ser deprecated.
  */
 (function () {
 'use strict';
@@ -480,6 +475,11 @@ async function startAnalyzer() {
             transferFunctionNode = new AudioWorkletNode(audioCtx, 'transfer-function-processor', {
                 numberOfInputs: 2,
                 numberOfOutputs: 1
+            });
+            const avgSelect = document.getElementById('tf-avg-select');
+            transferFunctionNode.port.postMessage({
+                type: 'set-avg',
+                seconds: avgSelect ? Number(avgSelect.value) : 2
             });
 
             transferFunctionNode.port.onmessage = (e) => {
@@ -966,7 +966,7 @@ function finishPinkNoiseMeasurement() {
 async function startPinkNoise(autoStop = false) {
     ensureAudioCtx();
 
-    // Cria o nó apenas uma vez (AudioWorklet com fallback ScriptProcessor)
+    // Cria o nó apenas uma vez via AudioWorklet.
     if (!pinkNoiseNode && window.AcousticCalibration) {
         pinkNoiseNode = await AcousticCalibration.createPinkNoiseNode(audioCtx, 0.25);
     }
@@ -997,8 +997,7 @@ function stopPinkNoise() {
 
 /**
  * Configura a fonte de referência via WebSocket PCM Stream.
- * ✅ P0 FIX: Migrado de createScriptProcessor (deprecated) → AudioWorkletNode.
- * Fallback para ScriptProcessor apenas se AudioWorklet não estiver disponível.
+ * P0: usa AudioWorkletNode; ScriptProcessorNode foi removido por ser deprecated.
  */
 async function _setupReferenceSource(ctx, targetNode) {
     try {
@@ -1009,9 +1008,6 @@ async function _setupReferenceSource(ctx, targetNode) {
             numberOfOutputs: 1,
             outputChannelCount: [1]
         });
-
-        // Expõe a fila de áudio de referência ao worklet via MessagePort
-        refSource.port.onmessage = null; // worklet puxa da fila via polling interno
 
         // Injeta amostras da fila global no worklet quando disponíveis
         const _feedWorklet = setInterval(() => {
@@ -1026,16 +1022,9 @@ async function _setupReferenceSource(ctx, targetNode) {
 
         console.log('[ReferenceSource] AudioWorklet inicializado.');
     } catch (err) {
-        console.warn('[ReferenceSource] AudioWorklet falhou, usando ScriptProcessor como fallback:', err.message);
-        // ⚠️ Fallback legado — funcional mas deprecated
-        const bufferSize = 4096;
-        refSource = ctx.createScriptProcessor(bufferSize, 1, 1);
-        refSource.onaudioprocess = (e) => {
-            const output = e.outputBuffer.getChannelData(0);
-            for (let i = 0; i < bufferSize; i++) {
-                output[i] = refAudioQueue.shift() || 0;
-            }
-        };
+        console.error('[ReferenceSource] Falha ao carregar AudioWorklet:', err.message);
+        refSource = null;
+        return;
     }
 
     if (!refSource) return;
@@ -1055,7 +1044,7 @@ async function _setupReferenceSource(ctx, targetNode) {
  */
 function _handleTransferFunctionData(data) {
     latestTFData = data; // Armazena para snapshot
-    const { magnitude, phase, coherence, delayMs } = data;
+    const { magnitude, phase, coherence, delayMs, sampleRate } = data;
     
     // 1. Atualiza o valor do Delay Finder na UI
     const delayEl = document.getElementById('delay-finder-value');
@@ -1078,7 +1067,11 @@ function _handleTransferFunctionData(data) {
 
     // 3. Dispara o renderizador de gráficos (Magnitude/Fase/Coerência)
     if (window.SoundMasterVisualizer) {
-        window.SoundMasterVisualizer.drawTransferFunction(magnitude, phase, coherence);
+        window.SoundMasterVisualizer.drawTransferFunction(magnitude, phase, coherence, {
+            sampleRate: sampleRate || audioCtx?.sampleRate || 48000,
+            avgSeconds: data.avgSeconds,
+            avgFrames: data.avgFrames
+        });
     }
 }
 
@@ -1090,6 +1083,43 @@ function stopPinkNoiseMeasurement() {
         pinkMeasureSummary.innerText = 'Medição cancelada.';
     }
     btnMeasurePink && (btnMeasurePink.innerText = '🎚️ Medir Ruído Rosa');
+}
+
+function _drawWaterfallTimeAxis(ctx, x, y, width, height) {
+    const right = x + width;
+    const midY = y + height / 2;
+    const bottomY = y + height - 5;
+
+    ctx.save();
+    ctx.clearRect(x, y, width, height);
+    ctx.fillStyle = 'rgba(2, 6, 23, 0.82)';
+    ctx.fillRect(x, y, width, height);
+
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + 0.5, y);
+    ctx.lineTo(x + 0.5, y + height);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.85)';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText('0s', right - 4, y + 2);
+    ctx.textBaseline = 'middle';
+    ctx.fillText('-5s', right - 4, midY);
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('-10s', right - 4, bottomY);
+
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+    [y + 1, midY, y + height - 1].forEach((tickY) => {
+        ctx.beginPath();
+        ctx.moveTo(x, tickY);
+        ctx.lineTo(x + 5, tickY);
+        ctx.stroke();
+    });
+    ctx.restore();
 }
 
 function analyze() {
@@ -1304,13 +1334,16 @@ function analyze() {
         const w = waterfallCanvasEl.width;
         const h = waterfallCanvasEl.height;
         const rowHeight = Math.max(1, h / WATERFALL_DEPTH);
+        const axisWidth = 34;
+        const plotW = Math.max(1, w - axisWidth);
         
         // GPU Native Scroll: Desloca a imagem para baixo sem re-renderizar arrays pesados
-        waterfallCtx.drawImage(waterfallCanvasEl, 0, rowHeight);
+        waterfallCtx.drawImage(waterfallCanvasEl, 0, 0, plotW, h - rowHeight, 0, rowHeight, plotW, h - rowHeight);
+        waterfallCtx.clearRect(0, 0, plotW, rowHeight);
         
         // Otimização: desenha apenas 'w' retângulos na primeira linha (1px por bin agrupado)
-        const wfTotalBars = Math.floor(w);
-        const wfBinsPerBar = Math.floor(bufferLength / wfTotalBars);
+        const wfTotalBars = Math.floor(plotW);
+        const wfBinsPerBar = Math.max(1, Math.floor(bufferLength / wfTotalBars));
         
         for (let i = 0; i < wfTotalBars; i++) {
             const binStart = i * wfBinsPerBar;
@@ -1338,20 +1371,14 @@ function analyze() {
         // --- Eixo de Tempo (P2) ---
         // Desenha a marcação de tempo (ex: 14:05:02) a cada virada de segundo na linha zero.
         // O drawImage() de scroll nativo (linha 1207) cuidará de rolar isso suavemente para baixo.
+        _drawWaterfallTimeAxis(waterfallCtx, plotW, 0, axisWidth, h);
+
         if (!window._lastWfSec) window._lastWfSec = 0;
         const nowSec = Math.floor(Date.now() / 1000);
         if (nowSec !== window._lastWfSec) {
             window._lastWfSec = nowSec;
-            waterfallCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-            waterfallCtx.font = '8px monospace';
-            waterfallCtx.textAlign = 'right';
-            const timeStr = new Date().toLocaleTimeString('pt-BR', { hour12: false });
-            waterfallCtx.fillText(timeStr, w - 5, 8);
-            waterfallCtx.textAlign = 'left'; // Reseta
-            
-            // Marca de linha de pulso a cada segundo
             waterfallCtx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-            waterfallCtx.fillRect(0, 0, w, 1);
+            waterfallCtx.fillRect(0, 0, plotW, 1);
         }
     }
     } // Fim do if (canvas && canvasCtx)
@@ -1716,10 +1743,15 @@ async function startSweepMeasurementFallback() {
         data[i] = Math.sin(phase) * 0.8;
     }
 
-    const captureScript = audioCtx.createScriptProcessor(4096, 1, 1);
-    captureScript.onaudioprocess = (ev) => {
-        if (!sweepCaptureActive) return;
-        const inputData = ev.inputBuffer.getChannelData(0);
+    await audioCtx.audioWorklet.addModule('js/core/capture-processor.js');
+    const captureNode = new AudioWorkletNode(audioCtx, 'capture-processor', {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1],
+    });
+    captureNode.port.onmessage = (ev) => {
+        if (!sweepCaptureActive || !ev.data || ev.data.type !== 'pcm') return;
+        const inputData = ev.data.samples;
         for (let i = 0; i < inputData.length; i++) {
             if (sweepRecordingIdx < sweepRecordingBuffer.length) {
                 sweepRecordingBuffer[sweepRecordingIdx++] = inputData[i];
@@ -1727,7 +1759,11 @@ async function startSweepMeasurementFallback() {
         }
     };
 
-    source.connect(captureScript);
+    source.connect(captureNode);
+    const captureSilent = audioCtx.createGain();
+    captureSilent.gain.value = 0;
+    captureNode.connect(captureSilent);
+    captureSilent.connect(audioCtx.destination);
 
     const sweepSource = audioCtx.createBufferSource();
     sweepSource.buffer = sweepBuffer;
@@ -1738,7 +1774,9 @@ async function startSweepMeasurementFallback() {
     setTimeout(() => finishSweepMeasurement(), (sweepDuration + 5) * 1000);
     setTimeout(() => {
         sweepSource.stop();
-        captureScript.disconnect();
+        captureNode.port.postMessage({ type: 'set-active', value: false });
+        captureNode.disconnect();
+        captureSilent.disconnect();
     }, sweepDuration * 1000);
 }
 
@@ -1899,6 +1937,15 @@ function ensureAudioCtx() {
 }
 
     // --- Exportação da API Pública ---
+function getFreqDataSnapshot() {
+    if (!freqData || !analyser || !audioCtx) return null;
+    return {
+        data: new Float32Array(freqData),
+        sampleRate: audioCtx.sampleRate,
+        fftSize: analyser.fftSize,
+    };
+}
+
     window.SoundMasterAnalyzer = {
         init: initAnalyzer, // ✅ Agora exposto globalmente
         start: startAnalyzer,
@@ -1909,6 +1956,7 @@ function ensureAudioCtx() {
         getFeedbackDetector: () => feedbackDetector,
         isAnalyzing: () => isAnalyzing,
         getLastAnalysis: () => lastAnalysis,
+        getFreqData: getFreqDataSnapshot,
         getLastRt60: () => lastRt60Result,
         setMeasurementPosition: (position) => { lastMeasurementPosition = position; },
         getMeasurementPosition: () => lastMeasurementPosition,
@@ -1945,7 +1993,8 @@ function ensureAudioCtx() {
                 window.SoundMasterVisualizer.captureCurrentTrace(
                     latestTFData.magnitude, 
                     latestTFData.phase, 
-                    latestTFData.coherence
+                    latestTFData.coherence,
+                    { sampleRate: latestTFData.sampleRate || audioCtx?.sampleRate || 48000 }
                 );
             }
         } else if (btn.id === 'btn-clear-tf-traces') {
@@ -1959,6 +2008,15 @@ function ensureAudioCtx() {
             if (transferFunctionNode) {
                 transferFunctionNode.port.postMessage({ type: 'set-demo-mode', value: isDemoMode });
             }
+        }
+    });
+
+    document.addEventListener('change', (e) => {
+        if (e.target?.id !== 'tf-avg-select') return;
+        const seconds = Number(e.target.value);
+        if (transferFunctionNode && Number.isFinite(seconds)) {
+            transferFunctionNode.port.postMessage({ type: 'set-avg', seconds });
+            console.log(`[Analyzer] TF averaging: ${seconds}s`);
         }
     });
 

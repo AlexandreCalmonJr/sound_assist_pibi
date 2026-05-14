@@ -418,7 +418,7 @@
 
     /**
      * Inicia o ruído rosa usando o novo AudioWorkletNode (thread de áudio dedicada).
-     * Fallback para ScriptProcessorNode se o AudioWorklet não estiver disponível.
+     * Requer AudioWorklet; ScriptProcessorNode não é usado por ser depreciado.
      *
      * @param {AudioContext} ctx
      * @param {number}       amplitude  - 0.0 a 1.0
@@ -443,7 +443,7 @@
             console.log('[PinkNoise] AudioWorklet iniciado.');
             return node;
         } catch (err) {
-            console.error('[PinkNoise] Erro ao carregar AudioWorklet. A API createScriptProcessor foi depreciada e removida.', err.message);
+            console.error('[PinkNoise] Erro ao carregar AudioWorklet. A API ScriptProcessorNode foi depreciada e removida.', err.message);
             throw new Error('Web Audio API moderna (AudioWorklet) é necessária para esta função.');
         }
     }

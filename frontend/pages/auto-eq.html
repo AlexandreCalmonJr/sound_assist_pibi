@@ -290,8 +290,9 @@
     // Tenta obter dados do analisador
     let freqData = null, sampleRate = 48000, fftSize = 8192;
 
-    if (window.analyzer && typeof analyzer.getFreqData === 'function') {
-      const snap = analyzer.getFreqData();
+    const liveAnalyzer = window.SoundMasterAnalyzer;
+    if (liveAnalyzer && typeof liveAnalyzer.getFreqData === 'function') {
+      const snap = liveAnalyzer.getFreqData();
       if (snap) { freqData = snap.data; sampleRate = snap.sampleRate || 48000; fftSize = snap.fftSize || 8192; }
     }
 
