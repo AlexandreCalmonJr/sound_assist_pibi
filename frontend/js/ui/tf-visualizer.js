@@ -58,13 +58,37 @@
     }
 
     /**
+     * Algoritmo de Phase Unwrapping Automático
+     * Analisa o array de fase e corrige descontinuidades maiores que PI.
+     */
+    function unwrapPhase(phaseArray) {
+        const unwrapped = new Float32Array(phaseArray.length);
+        let shift = 0;
+        unwrapped[0] = phaseArray[0];
+
+        for (let i = 1; i < phaseArray.length; i++) {
+            let diff = phaseArray[i] - phaseArray[i - 1];
+
+            // Corrige saltos abruptos maiores que +/- PI
+            if (diff > Math.PI) {
+                shift -= 2 * Math.PI;
+            } else if (diff < -Math.PI) {
+                shift += 2 * Math.PI;
+            }
+
+            unwrapped[i] = phaseArray[i] + shift;
+        }
+        return unwrapped;
+    }
+
+    /**
      * Captura a medição atual e armazena como um trace estático
      */
     function captureCurrentTrace(magnitude, phase, coherence) {
         if (capturedTraces.length >= 5) capturedTraces.shift(); // Limite de 5 traces
         capturedTraces.push({
             magnitude: new Float32Array(magnitude),
-            phase: new Float32Array(phase),
+            phase: unwrapPhase(new Float32Array(phase)), // Aplica unwrapping no snapshot
             coherence: new Float32Array(coherence),
             timestamp: new Date().toLocaleTimeString(),
             color: `hsl(${Math.random() * 360}, 70%, 60%)` // Cor aleatória para distinguir
@@ -151,18 +175,12 @@
                 y = height / 2 - (data[i] * (height / zoomMag));
             } else {
                 let deg = data[i] * (180 / Math.PI);
-                // Phase Wrapping: mantém a fase restrita a -180° a +180° para não sumir do gráfico
-                deg = ((deg + 180) % 360 + 360) % 360 - 180;
+                // Phase Unwrapping: A fase agora é contínua e não sofre wrap artificial
                 y = height / 2 - (deg * (height / zoomPhase));
             }
 
             if (i === 0) ctx.moveTo(x, y);
             else {
-                if (type === 'phase') {
-                    const prevDeg = data[i-1] * (180 / Math.PI);
-                    const deg = data[i] * (180 / Math.PI);
-                    if (Math.abs(deg - prevDeg) > 180) { ctx.moveTo(x, y); continue; }
-                }
                 ctx.lineTo(x, y);
             }
         }
@@ -193,9 +211,12 @@
         magCtx.globalAlpha = 1.0;
         phaseCtx.globalAlpha = 1.0;
 
+        // Aplica o Unwrapping no traço ao vivo
+        const livePhaseUnwrapped = unwrapPhase(phase);
+
         // --- Desenhar Trace em Tempo Real ---
         drawTraceLine(magCtx, magnitude, w, h, 'magnitude', hzPerBin, '#22d3ee', true);
-        drawTraceLine(phaseCtx, phase, w, h, 'phase', hzPerBin, '#a855f7', true);
+        drawTraceLine(phaseCtx, livePhaseUnwrapped, w, h, 'phase', hzPerBin, '#a855f7', true);
 
         // --- Crosshair UI ---
         if (crosshairX > 0) {

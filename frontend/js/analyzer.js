@@ -198,11 +198,12 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
         if (btnExportLeq) {
             btnExportLeq.addEventListener('click', () => {
                 if (leqLogData.length === 0) return;
-                let csv = 'Timestamp,SPL_dB,Weighting\\n';
-                leqLogData.forEach(row => {
-                    csv += `${row.time},${row.spl.toFixed(2)},${row.weighting}\\n`;
-                });
-                const blob = new Blob([csv], { type: 'text/csv' });
+                // ✅ FIX P0: usar \r\n (CRLF) para compatibilidade máxima com Excel/LibreOffice
+                const rows = leqLogData.map(row =>
+                    `${row.time},${row.spl.toFixed(2)},${row.weighting}`
+                );
+                const csv = ['Timestamp,SPL_dB,Weighting', ...rows].join('\r\n');
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -570,6 +571,12 @@ async function stopAnalyzer() {
     analyserFast = null;
     source = null;
     audioWorkletNode = null;
+
+    // ✅ Limpa timer do worklet de referência
+    if (window._refSourceFeedTimer) {
+        clearInterval(window._refSourceFeedTimer);
+        window._refSourceFeedTimer = null;
+    }
 
     // ── SPL Logger: para o ticker ─────────────────────────────────────────
     if (window.SplLogger) SplLogger.stop();
@@ -960,26 +967,54 @@ function stopPinkNoise() {
 
 
 /**
- * ✅ Novo: Configura a fonte de referência via WebSocket PCM Stream
+ * Configura a fonte de referência via WebSocket PCM Stream.
+ * ✅ P0 FIX: Migrado de createScriptProcessor (deprecated) → AudioWorkletNode.
+ * Fallback para ScriptProcessor apenas se AudioWorklet não estiver disponível.
  */
-function _setupReferenceSource(ctx, targetNode) {
-        if (!ctx.createScriptProcessor) return;
+async function _setupReferenceSource(ctx, targetNode) {
+    try {
+        // Tenta carregar o worklet de fonte de referência
+        await ctx.audioWorklet.addModule('js/core/reference-source-processor.js');
+        refSource = new AudioWorkletNode(ctx, 'reference-source-processor', {
+            numberOfInputs: 0,
+            numberOfOutputs: 1,
+            outputChannelCount: [1]
+        });
+
+        // Expõe a fila de áudio de referência ao worklet via MessagePort
+        refSource.port.onmessage = null; // worklet puxa da fila via polling interno
+
+        // Injeta amostras da fila global no worklet quando disponíveis
+        const _feedWorklet = setInterval(() => {
+            if (!refSource || refAudioQueue.length === 0) return;
+            // Transfere até 4096 amostras por vez ao worklet
+            const chunk = refAudioQueue.splice(0, 4096);
+            refSource.port.postMessage({ type: 'pcm', samples: new Float32Array(chunk) });
+        }, 50);
+
+        // Guarda o timer para cleanup no stopAnalyzer
+        window._refSourceFeedTimer = _feedWorklet;
+
+        console.log('[ReferenceSource] AudioWorklet inicializado.');
+    } catch (err) {
+        console.warn('[ReferenceSource] AudioWorklet falhou, usando ScriptProcessor como fallback:', err.message);
+        // ⚠️ Fallback legado — funcional mas deprecated
         const bufferSize = 4096;
         refSource = ctx.createScriptProcessor(bufferSize, 1, 1);
-    
-    // ❌ Listener removido daqui (movido para escopo global abaixo)
-    
-    refSource.onaudioprocess = (e) => {
-        const output = e.outputBuffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-            output[i] = refAudioQueue.shift() || 0;
-        }
-    };
+        refSource.onaudioprocess = (e) => {
+            const output = e.outputBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                output[i] = refAudioQueue.shift() || 0;
+            }
+        };
+    }
 
-    // Conecta a referência ao Canal 0 do Transfer Function
+    if (!refSource) return;
+
+    // Conecta a referência ao Canal 0 do nó de Transfer Function
     refSource.connect(targetNode, 0, 0);
-    
-    // Conecta a uma saída silenciosa para manter o clock do ScriptProcessor
+
+    // Saída silenciosa para manter o clock ativo
     const silent = ctx.createGain();
     silent.gain.value = 0;
     refSource.connect(silent);
