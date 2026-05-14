@@ -129,6 +129,7 @@ function _deconvolveSweep(recording, reference, sampleRate) {
         rt60_est:   rev.rt60_est,
         c50:        clarity.c50,
         c80:        clarity.c80,
+        d50:        clarity.d50,
         sti:        stiMetrics.sti,
         sti_category: stiMetrics.category,
         snr_db:     parseFloat(snrDb.toFixed(1)),
@@ -185,6 +186,7 @@ function _schroederRT60(buffer, sampleRate) {
         edt:     rev.edt,
         c50:     clarity.c50,
         c80:     clarity.c80,
+        d50:     clarity.d50,
         sti:     stiMetrics.sti,
         sti_category: stiMetrics.category,
         snr:     snr.toFixed(1),
@@ -221,10 +223,10 @@ function _revParams(schDb, sampleRate) {
     return { edt, t20, t30, rt60_est };
 }
 
-/** Integração de energia para Clarity (C50 e C80) */
+/** Integração de energia para Clarity (C50 e C80) e Definição (D50) */
 function _clarity(irSq, sampleRate) {
     const totalEnergy = irSq.reduce((a, b) => a + b, 0);
-    if (totalEnergy === 0) return { c50: 0, c80: 0 };
+    if (totalEnergy === 0) return { c50: 0, c80: 0, d50: 0 };
 
     const idx50 = Math.min(Math.floor(0.050 * sampleRate), irSq.length);
     const idx80 = Math.min(Math.floor(0.080 * sampleRate), irSq.length);
@@ -239,9 +241,12 @@ function _clarity(irSq, sampleRate) {
     const c50 = late50 > 0 ? 10 * Math.log10(Math.max(e50 / late50, 1e-10)) : 20;
     const c80 = late80 > 0 ? 10 * Math.log10(Math.max(e80 / late80, 1e-10)) : 20;
 
+    const d50 = totalEnergy > 0 ? (e50 / totalEnergy) * 100 : 0;
+
     return { 
         c50: parseFloat(c50.toFixed(1)), 
-        c80: parseFloat(c80.toFixed(1)) 
+        c80: parseFloat(c80.toFixed(1)),
+        d50: parseFloat(d50.toFixed(1))
     };
 }
 

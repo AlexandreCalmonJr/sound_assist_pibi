@@ -103,6 +103,24 @@
                         <div class="text-sm font-black text-white" id="schroeder-rt60">--</div>
                     </div>
                 </div>
+                <div class="grid grid-cols-4 gap-2 mt-2">
+                    <div class="bg-black/30 rounded-lg p-2 text-center">
+                        <div class="text-[8px] text-slate-500 uppercase font-bold">C50 (dB)</div>
+                        <div class="text-sm font-black text-purple-400" id="schroeder-c50">--</div>
+                    </div>
+                    <div class="bg-black/30 rounded-lg p-2 text-center">
+                        <div class="text-[8px] text-slate-500 uppercase font-bold">C80 (dB)</div>
+                        <div class="text-sm font-black text-purple-400" id="schroeder-c80">--</div>
+                    </div>
+                    <div class="bg-black/30 rounded-lg p-2 text-center">
+                        <div class="text-[8px] text-slate-500 uppercase font-bold">D50 (%)</div>
+                        <div class="text-sm font-black text-emerald-400" id="schroeder-d50">--</div>
+                    </div>
+                    <div class="bg-black/30 rounded-lg p-2 text-center">
+                        <div class="text-[8px] text-slate-500 uppercase font-bold">STI</div>
+                        <div class="text-sm font-black text-rose-400" id="schroeder-sti">--</div>
+                    </div>
+                </div>
             </div>
             
             <div id="mapping-container" class="hidden bg-slate-800/40 border border-white/10 rounded-2xl p-6">
@@ -289,9 +307,33 @@
 
     // Escuta o evento disparado pelo analyzer ao receber resultado de RT60
     document.addEventListener('rt60-result', (e) => {
-        const { curve, rt60, t20, t30, edt, snr } = e.detail || {};
+        const { curve, rt60, t20, t30, edt, snr, c50, c80, d50, sti, sti_category } = e.detail || {};
         if (curve && curve.length > 0) {
             drawSchroederCurve(curve, { rt60, t20, t30, edt, snr });
+        }
+        
+        // Atualiza métricas de clareza e inteligibilidade
+        if (c50 !== undefined) {
+            document.getElementById('schroeder-c50').textContent = c50 != null ? `${c50} dB` : '--';
+            const c50El = document.getElementById('schroeder-c50');
+            c50El.className = 'text-sm font-black ' + (c50 > 0 ? 'text-emerald-400' : c50 > -2 ? 'text-yellow-400' : 'text-red-400');
+        }
+        if (c80 !== undefined) {
+            document.getElementById('schroeder-c80').textContent = c80 != null ? `${c80} dB` : '--';
+            const c80El = document.getElementById('schroeder-c80');
+            c80El.className = 'text-sm font-black ' + (c80 > 2 ? 'text-emerald-400' : c80 > 0 ? 'text-yellow-400' : 'text-red-400');
+        }
+        if (d50 !== undefined) {
+            document.getElementById('schroeder-d50').textContent = d50 != null ? `${d50}%` : '--';
+            const d50El = document.getElementById('schroeder-d50');
+            d50El.className = 'text-sm font-black ' + (d50 > 50 ? 'text-emerald-400' : d50 > 35 ? 'text-yellow-400' : 'text-red-400');
+        }
+        if (sti !== undefined) {
+            const stiStr = sti != null ? `${sti}` : '--';
+            const stiCat = sti_category || '';
+            document.getElementById('schroeder-sti').textContent = stiStr + (stiCat ? ' (' + stiCat.charAt(0) + ')' : '');
+            const stiEl = document.getElementById('schroeder-sti');
+            stiEl.className = 'text-sm font-black ' + (sti >= 0.6 ? 'text-emerald-400' : sti >= 0.45 ? 'text-yellow-400' : 'text-red-400');
         }
     });
 </script>

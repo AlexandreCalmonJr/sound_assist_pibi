@@ -42,6 +42,16 @@
     const MAX_DOSE_PERCENT = 999;
     const DOSE_PROFILE = 'NHO_NIOSH_85_3';
 
+    /** Perfis de exposição ocupacional (ISO 1996 / NR-15 Brasil / OSHA) */
+    const EXPOSURE_PROFILES = {
+        'NIOSH': { criterionDb: 85, exchangeRate: 3, thresholdDb: 80, durationSec: 28800, name: 'NIOSH 85dB/8h' },
+        'OSHA': { criterionDb: 90, exchangeRate: 5, thresholdDb: 80, durationSec: 28800, name: 'OSHA 90dB/8h' },
+        'NR15': { criterionDb: 85, exchangeRate: 5, thresholdDb: 80, durationSec: 28800, name: 'NR-15 (Brasil) 85dB/8h' },
+        'ACGIH': { criterionDb: 85, exchangeRate: 3, thresholdDb: 80, durationSec: 28800, name: 'ACGIH 85dB/8h' }
+    };
+    
+    let _currentProfile = 'NIOSH';
+
     /** Limite NIOSH para dose diária (mantido como alias público legado). */
     const NIOSH_LIMIT_DB = EXPOSURE_CRITERION_DB;
 
@@ -171,6 +181,25 @@
         console.log(`[SplLogger] Ponderação: ${w}`);
     }
 
+    /** Muda o perfil de exposição ocupacional (NIOSH, OSHA, NR-15, ACGIH). */
+    function setExposureProfile(profileName) {
+        if (!EXPOSURE_PROFILES[profileName]) return;
+        _currentProfile = profileName;
+        _resetExposureAccumulators();
+        console.log(`[SplLogger] Perfil de exposição: ${profileName}`);
+        AppStore.setState({ splExposureProfile: profileName });
+    }
+
+    function _getCurrentProfileParams() {
+        const p = EXPOSURE_PROFILES[_currentProfile];
+        return {
+            criterionDb: p.criterionDb,
+            exchangeRate: p.exchangeRate,
+            thresholdDb: p.thresholdDb,
+            durationSec: p.durationSec
+        };
+    }
+
     /** Retorna leitura instantânea para a UI (não usa o buffer 1s — usa o último frame). */
     function getLive() {
         if (_acc1sCount === 0) return { spl: -Infinity, leq1: -Infinity, leq10: -Infinity };
@@ -186,6 +215,7 @@
         const live     = getLive();
         const ldose    = _round1(Math.min(MAX_DOSE_PERCENT, _dosePercentAcc));
         const ldenData = _getLdenStats();
+        const profileParams = _getCurrentProfileParams();
 
         return {
             leqTotal:    _formatDbStat(leqTotal),
@@ -195,9 +225,10 @@
             lmin:        _lminSession === Infinity ? null : parseFloat(_lminSession.toFixed(1)),
             ldose,
             dose8h:      Math.round(ldose),
-            doseProfile: DOSE_PROFILE,
-            doseCriterionDb: EXPOSURE_CRITERION_DB,
-            doseExchangeRateDb: EXCHANGE_RATE_DB,
+            doseProfile: DOSE_PROFILE, // Mantido para compatibilidade legacy
+            doseProfileName: _currentProfile,
+            doseCriterionDb: profileParams.criterionDb,
+            doseExchangeRateDb: profileParams.exchangeRate,
             doseThresholdDb: EXPOSURE_THRESHOLD_DB,
             doseSecondsAboveThreshold: _doseSecondsAboveThreshold,
             lden:        ldenData.lden,
@@ -560,10 +591,11 @@
     }
 
     function _accumulateDose(leq1s) {
-        if (!Number.isFinite(leq1s) || leq1s < EXPOSURE_THRESHOLD_DB) return;
+        const profile = _getCurrentProfileParams();
+        if (!Number.isFinite(leq1s) || leq1s < profile.thresholdDb) return;
 
-        const allowedSec = EXPOSURE_CRITERION_SEC *
-            Math.pow(2, (EXPOSURE_CRITERION_DB - leq1s) / EXCHANGE_RATE_DB);
+        const allowedSec = profile.durationSec *
+            Math.pow(2, (profile.criterionDb - leq1s) / profile.exchangeRate);
 
         _dosePercentAcc += 100 / allowedSec;
         _doseSecondsAboveThreshold++;
@@ -635,6 +667,7 @@
         stop,
         push,
         setWeighting,
+        setExposureProfile,
         getLive,
         getStats,
         getHistory,
@@ -650,6 +683,7 @@
         EXPOSURE_THRESHOLD_DB,
         MAX_DOSE_PERCENT,
         DOSE_PROFILE,
+        EXPOSURE_PROFILES,
     };
 
 })();

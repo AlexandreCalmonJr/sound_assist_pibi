@@ -128,6 +128,14 @@
                         🗑️
                     </button>
                 </div>
+                <div class="mt-4 flex flex-wrap items-center gap-2">
+                    <button id="btn-export-png" class="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all">
+                        📊 Export PNG
+                    </button>
+                    <button id="btn-export-pdf" class="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all">
+                        📄 Export PDF
+                    </button>
+                </div>
                 <label class="mt-3 flex items-center justify-between gap-3 bg-black/30 border border-white/10 rounded-xl px-3 py-2">
                     <span class="text-[9px] font-black uppercase text-slate-500 tracking-widest">Averaging Transfer Function</span>
                     <select id="tf-avg-select" class="bg-slate-950 text-purple-300 text-[10px] font-black uppercase rounded px-2 py-1 outline-none border border-purple-500/20">
@@ -327,21 +335,36 @@
             <h3 class="text-lg font-semibold mb-2">Gerador de Sinais (Alinhamento)</h3>
             <p class="text-xs text-slate-500 mb-6">Use a saída de fone ligada à mesa para jogar o som no PA e calibrar o sistema.</p>
             
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                <button id="btn-pink-noise" class="group flex flex-col items-center justify-center p-6 bg-red-900/20 border border-red-500/20 hover:border-red-500/50 rounded-2xl transition-all">
-                    <span class="text-3xl mb-2 group-hover:scale-110 transition-transform">🔊</span>
-                    <span class="text-sm font-bold text-red-400">Ruído Rosa (Pink)</span>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-8">
+                <button id="btn-pink-noise" class="group flex flex-col items-center justify-center p-4 bg-red-900/20 border border-red-500/20 hover:border-red-500/50 rounded-xl transition-all">
+                    <span class="text-2xl mb-1 group-hover:scale-110 transition-transform">🔊</span>
+                    <span class="text-xs font-bold text-red-400">Rosa</span>
                 </button>
-                <button id="btn-measure-pink" class="group flex flex-col items-center justify-center p-6 bg-cyan-900/20 border border-cyan-500/20 hover:border-cyan-500/50 rounded-2xl transition-all">
-                    <span class="text-3xl mb-2 group-hover:scale-110 transition-transform">🎚️</span>
-                    <span class="text-sm font-bold text-cyan-400">Medir Ruído Rosa</span>
+                <button id="btn-white-noise" class="group flex flex-col items-center justify-center p-4 bg-slate-700/50 border border-slate-500/30 hover:border-slate-400 rounded-xl transition-all">
+                    <span class="text-2xl mb-1 group-hover:scale-110 transition-transform">🌫️</span>
+                    <span class="text-xs font-bold text-slate-300">Branco</span>
                 </button>
-                <button id="btn-log-sweep" class="group flex flex-col items-center justify-center p-6 bg-purple-900/20 border border-purple-500/20 hover:border-purple-500/50 rounded-2xl transition-all">
-                    <span class="text-3xl mb-2 group-hover:scale-110 transition-transform">📈</span>
-                    <span class="text-sm font-bold text-purple-400">Sweep Logarítmico</span>
-                    <span class="text-[9px] text-purple-300 opacity-60 mt-1 uppercase">20Hz - 20kHz (10s)</span>
+                <button id="btn-mls-signal" class="group flex flex-col items-center justify-center p-4 bg-amber-900/20 border border-amber-500/30 hover:border-amber-400 rounded-xl transition-all">
+                    <span class="text-2xl mb-1 group-hover:scale-110 transition-transform">📊</span>
+                    <span class="text-xs font-bold text-amber-400">MLS</span>
+                </button>
+                <button id="btn-chirp-signal" class="group flex flex-col items-center justify-center p-4 bg-purple-900/20 border border-purple-500/30 hover:border-purple-400 rounded-xl transition-all">
+                    <span class="text-2xl mb-1 group-hover:scale-110 transition-transform">📈</span>
+                    <span class="text-xs font-bold text-purple-400">Chirp</span>
+                </button>
+                <button id="btn-dual-tone" class="group flex flex-col items-center justify-center p-4 bg-cyan-900/20 border border-cyan-500/30 hover:border-cyan-400 rounded-xl transition-all">
+                    <span class="text-2xl mb-1 group-hover:scale-110 transition-transform">〰️</span>
+                    <span class="text-xs font-bold text-cyan-400">Dual-Tone</span>
+                </button>
+                <button id="btn-measure-pink" class="group flex flex-col items-center justify-center p-4 bg-emerald-900/20 border border-emerald-500/30 hover:border-emerald-400 rounded-xl transition-all">
+                    <span class="text-2xl mb-1 group-hover:scale-110 transition-transform">🎚️</span>
+                    <span class="text-xs font-bold text-emerald-400">Medir Rosa</span>
                 </button>
             </div>
+            
+            <button id="btn-log-sweep" class="w-full py-3 bg-purple-900/30 hover:bg-purple-800/30 border border-purple-500/30 rounded-xl text-sm font-bold text-purple-300 transition-all">
+                📈 Sweep Logarítmico (20Hz - 20kHz)
+            </button>
             
             <div class="bg-black/40 rounded-xl p-4 mb-8">
                 <p id="pink-measure-summary" class="text-xs text-slate-400 text-center">Use a medição de ruído rosa para capturar a resposta do salão.</p>
@@ -389,7 +412,69 @@
 </section>
 
 <script>
-    // ✅ Inicialização via page-loaded event (analyzer.js).
-    // Inline script mantido apenas para logs de debug.
-    console.log('[Analyzer] Página carregada via router.');
+    document.addEventListener('page-loaded', () => {
+        const analyzer = window.SoundMasterAnalyzer;
+        
+        // White Noise
+        document.getElementById('btn-white-noise')?.addEventListener('click', function() {
+            if (analyzer.isPlayingAnySignal()) {
+                analyzer.stopAllSignals();
+                this.classList.remove('bg-cyan-600', 'text-white');
+                this.classList.add('bg-slate-700/50');
+                this.querySelector('span:last-child').textContent = 'Branco';
+            } else {
+                analyzer.startWhiteNoise(0.3);
+                this.classList.add('bg-cyan-600', 'text-white');
+                this.classList.remove('bg-slate-700/50');
+                this.querySelector('span:last-child').textContent = 'STOP';
+            }
+        });
+        
+        // MLS
+        document.getElementById('btn-mls-signal')?.addEventListener('click', function() {
+            if (analyzer.isPlayingAnySignal()) {
+                analyzer.stopAllSignals();
+                this.classList.remove('bg-amber-600', 'text-white');
+                this.classList.add('bg-amber-900/20');
+                this.querySelector('span:last-child').textContent = 'MLS';
+            } else {
+                analyzer.startMLS(13, 0.5);
+                this.classList.add('bg-amber-600', 'text-white');
+                this.classList.remove('bg-amber-900/20');
+                this.querySelector('span:last-child').textContent = 'STOP';
+            }
+        });
+        
+        // Chirp
+        document.getElementById('btn-chirp-signal')?.addEventListener('click', function() {
+            if (analyzer.isPlayingAnySignal()) {
+                analyzer.stopAllSignals();
+                this.classList.remove('bg-purple-600', 'text-white');
+                this.classList.add('bg-purple-900/20');
+                this.querySelector('span:last-child').textContent = 'Chirp';
+            } else {
+                analyzer.startChirp(20, 20000, 2.0, 0.5);
+                this.classList.add('bg-purple-600', 'text-white');
+                this.classList.remove('bg-purple-900/20');
+                this.querySelector('span:last-child').textContent = 'STOP';
+            }
+        });
+        
+        // Dual-Tone
+        document.getElementById('btn-dual-tone')?.addEventListener('click', function() {
+            if (analyzer.isPlayingAnySignal()) {
+                analyzer.stopAllSignals();
+                this.classList.remove('bg-cyan-600', 'text-white');
+                this.classList.add('bg-cyan-900/20');
+                this.querySelector('span:last-child').textContent = 'Dual-Tone';
+            } else {
+                analyzer.startDualTone(1000, 1500, 0.3);
+                this.classList.add('bg-cyan-600', 'text-white');
+                this.classList.remove('bg-cyan-900/20');
+                this.querySelector('span:last-child').textContent = 'STOP';
+            }
+        });
+        
+        console.log('[Analyzer] Signal generators bound');
+    });
 </script>

@@ -215,6 +215,94 @@
     }
 
     /**
+     * Aplica EQ paramétrico no canal especificado.
+     * Usado pelo Auto-Cut de feedback.
+     * @param {number} channel - Canal (1-16 ou 'master')
+     * @param {number} freq - Frequência central em Hz
+     * @param {number} q - Fator Q (largura da banda)
+     * @param {number} gainDb - Ganho em dB (negativo para corte)
+     */
+    function applyEQ(channel, freq, q, gainDb) {
+        const ch = _validateChannel(channel);
+        const payload = {
+            channel: ch,
+            freq: Math.round(freq),
+            q: Math.round(q * 10) / 10,
+            gain: Math.round(gainDb * 10) / 10,
+            type: 'peaking'
+        };
+        
+        _logAutoCutAction({
+            timestamp: new Date().toISOString(),
+            action: 'applyEQ',
+            channel: ch,
+            freq: payload.freq,
+            q: payload.q,
+            gain: payload.gain,
+            source: 'feedback-detector'
+        });
+        
+        return _emit('apply_parametric_eq', payload, 
+            `EQ Aplicado: ${gainDb}dB em ${freq}Hz (Q=${q}) no canal ${ch}`);
+    }
+
+    /**
+     * Aplica um Notch Filter (corte estreito) na frequência de feedback.
+     * @param {number} channel - Canal (1-16 ou 'master')
+     * @param {number} freq - Frequência central em Hz
+     * @param {number} gainDb - Ganho negativo (ex: -3, -6)
+     */
+    function applyNotchFilter(channel, freq, gainDb = -3) {
+        const ch = _validateChannel(channel);
+        const q = 30; // Q bem alto para notch estreito
+        
+        _logAutoCutAction({
+            timestamp: new Date().toISOString(),
+            action: 'notch',
+            channel: ch,
+            freq: Math.round(freq),
+            q: q,
+            gain: gainDb,
+            source: 'feedback-detector'
+        });
+        
+        return _emit('apply_notch_filter', {
+            channel: ch,
+            freq: Math.round(freq),
+            q: q,
+            gain: gainDb
+        }, `Notch Filter: ${gainDb}dB em ${Math.round(freq)}Hz (Q=${q})`);
+    }
+
+    /**
+     * Registra ação de Auto-Cut no log local.
+     * @param {Object} actionData
+     */
+    const _autoCutLog = [];
+    function _logAutoCutAction(actionData) {
+        _autoCutLog.push(actionData);
+        console.log('[AutoCut-Log]', JSON.stringify(actionData));
+        
+        // Limita o log a 50 entradas para evitar memory leak
+        if (_autoCutLog.length > 50) _autoCutLog.shift();
+    }
+
+    /**
+     * Retorna o histórico de ações de Auto-Cut.
+     * @returns {Array}
+     */
+    function getAutoCutLog() {
+        return [..._autoCutLog];
+    }
+
+    /**
+     * Limpa o histórico de Auto-Cut.
+     */
+    function clearAutoCutLog() {
+        _autoCutLog.length = 0;
+    }
+
+    /**
      * Executa um comando vindo da IA (objeto com action, desc, etc.).
      * @param {Object} command
      */
@@ -472,6 +560,11 @@
         setHwGain,
         setChannelName,
         vuToHeight,
+        // Auto-Cut / Feedback Detection
+        applyEQ,
+        applyNotchFilter,
+        getAutoCutLog,
+        clearAutoCutLog,
         pingMixer: function() {
             return _emit('ping_mixer', {}, 'Solicitando status da mesa...');
         }

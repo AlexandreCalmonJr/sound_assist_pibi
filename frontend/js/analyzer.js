@@ -81,6 +81,16 @@ let pinkNoiseNode = null;
 let isSineWavePlaying = false;
 let sineWaveNode = null;
 
+// Novos sinais (Bloco 5.1)
+let whiteNoiseNode = null;
+let isWhiteNoisePlaying = false;
+let mlsNode = null;
+let isMLSPlaying = false;
+let chirpNode = null;
+let isChirpPlaying = false;
+let dualToneNode = null;
+let isDualTonePlaying = false;
+
 class FeedbackDetector {
     constructor(bufferSize = 10) {
         this.peakHistory = new Array(bufferSize).fill(null);
@@ -994,6 +1004,129 @@ function stopPinkNoise() {
     btnPink && btnPink.classList.add('secondary');
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// NOVOS SINAIS (Bloco 5.1): White Noise, MLS, Chirp, Dual-Tone
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function startWhiteNoise(amplitude = 0.3) {
+    ensureAudioCtx();
+    try {
+        await audioCtx.audioWorklet.addModule('js/core/signal-generators.js');
+        whiteNoiseNode = new AudioWorkletNode(audioCtx, 'white-noise-processor');
+        whiteNoiseNode.parameters.get('amplitude').value = amplitude;
+        whiteNoiseNode.connect(audioCtx.destination);
+        isWhiteNoisePlaying = true;
+        console.log('[SignalGen] White Noise started');
+        return true;
+    } catch (e) {
+        console.error('[SignalGen] White Noise failed:', e);
+        return false;
+    }
+}
+
+function stopWhiteNoise() {
+    if (whiteNoiseNode) {
+        try { whiteNoiseNode.disconnect(); } catch (_) {}
+        whiteNoiseNode = null;
+    }
+    isWhiteNoisePlaying = false;
+    console.log('[SignalGen] White Noise stopped');
+}
+
+async function startMLS(order = 13, amplitude = 0.5) {
+    ensureAudioCtx();
+    try {
+        await audioCtx.audioWorklet.addModule('js/core/signal-generators.js');
+        mlsNode = new AudioWorkletNode(audioCtx, 'mls-processor');
+        mlsNode.parameters.get('order').value = order;
+        mlsNode.parameters.get('amplitude').value = amplitude;
+        mlsNode.connect(audioCtx.destination);
+        isMLSPlaying = true;
+        console.log(`[SignalGen] MLS started (order ${order})`);
+        return true;
+    } catch (e) {
+        console.error('[SignalGen] MLS failed:', e);
+        return false;
+    }
+}
+
+function stopMLS() {
+    if (mlsNode) {
+        try { mlsNode.disconnect(); } catch (_) {}
+        mlsNode = null;
+    }
+    isMLSPlaying = false;
+    console.log('[SignalGen] MLS stopped');
+}
+
+async function startChirp(startFreq = 20, endFreq = 20000, duration = 2.0, amplitude = 0.5) {
+    ensureAudioCtx();
+    try {
+        await audioCtx.audioWorklet.addModule('js/core/signal-generators.js');
+        chirpNode = new AudioWorkletNode(audioCtx, 'chirp-processor');
+        chirpNode.parameters.get('startFreq').value = startFreq;
+        chirpNode.parameters.get('endFreq').value = endFreq;
+        chirpNode.parameters.get('duration').value = duration;
+        chirpNode.parameters.get('amplitude').value = amplitude;
+        chirpNode.connect(audioCtx.destination);
+        isChirpPlaying = true;
+        console.log(`[SignalGen] Chirp started (${startFreq}-${endFreq}Hz, ${duration}s)`);
+        return true;
+    } catch (e) {
+        console.error('[SignalGen] Chirp failed:', e);
+        return false;
+    }
+}
+
+function stopChirp() {
+    if (chirpNode) {
+        try { chirpNode.disconnect(); } catch (_) {}
+        chirpNode = null;
+    }
+    isChirpPlaying = false;
+    console.log('[SignalGen] Chirp stopped');
+}
+
+async function startDualTone(freq1 = 1000, freq2 = 1500, amplitude = 0.3) {
+    ensureAudioCtx();
+    try {
+        await audioCtx.audioWorklet.addModule('js/core/signal-generators.js');
+        dualToneNode = new AudioWorkletNode(audioCtx, 'dual-tone-processor');
+        dualToneNode.parameters.get('freq1').value = freq1;
+        dualToneNode.parameters.get('freq2').value = freq2;
+        dualToneNode.parameters.get('amplitude').value = amplitude;
+        dualToneNode.connect(audioCtx.destination);
+        isDualTonePlaying = true;
+        console.log(`[SignalGen] Dual-Tone started (${freq1}Hz + ${freq2}Hz)`);
+        return true;
+    } catch (e) {
+        console.error('[SignalGen] Dual-Tone failed:', e);
+        return false;
+    }
+}
+
+function stopDualTone() {
+    if (dualToneNode) {
+        try { dualToneNode.disconnect(); } catch (_) {}
+        dualToneNode = null;
+    }
+    isDualTonePlaying = false;
+    console.log('[SignalGen] Dual-Tone stopped');
+}
+
+function stopAllSignals() {
+    stopPinkNoise();
+    stopWhiteNoise();
+    stopMLS();
+    stopChirp();
+    stopDualTone();
+    if (isSineWavePlaying && sineWaveNode) {
+        sineWaveNode.stop();
+        sineWaveNode.disconnect();
+        isSineWavePlaying = false;
+    }
+}
+
 
 /**
  * Configura a fonte de referência via WebSocket PCM Stream.
@@ -1292,40 +1425,15 @@ function analyze() {
     }
 
     // --- Crosshair UI (RTA) ---
-    if (rtaCrosshairX > 0 && rtaCrosshairY > 0) {
-        canvasCtx.strokeStyle = 'rgba(255,255,255,0.4)';
-        canvasCtx.lineWidth = 1;
-        canvasCtx.setLineDash([2, 2]);
-
-        // Linha vertical
-        canvasCtx.beginPath();
-        canvasCtx.moveTo(rtaCrosshairX, 0);
-        canvasCtx.lineTo(rtaCrosshairX, canvas.height);
-        canvasCtx.stroke();
-
-        // Linha horizontal
-        canvasCtx.beginPath();
-        canvasCtx.moveTo(0, rtaCrosshairY);
-        canvasCtx.lineTo(canvas.width, rtaCrosshairY);
-        canvasCtx.stroke();
-        canvasCtx.setLineDash([]);
-
-        // Calcular valores
-        const dbVal = analyser.maxDecibels - ((rtaCrosshairY / canvas.height) * (analyser.maxDecibels - analyser.minDecibels));
-        
-        // Descobrir a banda (aproximada pela posição X)
-        const bandIndex = Math.floor(rtaCrosshairX / (barWidth + spacing));
-        const hzVal = iecCenters[Math.min(numBands - 1, Math.max(0, bandIndex))] || 0;
-
-        canvasCtx.fillStyle = 'rgba(0,0,0,0.8)';
-        // Se estiver muito pra direita, desenha a tooltip pra esquerda
-        const ttWidth = 90;
-        const ttX = rtaCrosshairX + ttWidth + 10 > canvas.width ? rtaCrosshairX - ttWidth - 10 : rtaCrosshairX + 10;
-        canvasCtx.fillRect(ttX, Math.max(5, rtaCrosshairY - 20), ttWidth, 16);
-        
-        canvasCtx.fillStyle = '#22d3ee';
-        canvasCtx.font = '10px monospace';
-        canvasCtx.fillText(`${hzVal >= 1000 ? hzVal/1000 + 'k' : hzVal}Hz | ${dbVal.toFixed(1)}dB`, ttX + 4, Math.max(17, rtaCrosshairY - 8));
+    if (rtaCrosshairX > 0 && rtaCrosshairY > 0 && window.Crosshair) {
+        Crosshair.drawRTA(canvasCtx, rtaCrosshairX, rtaCrosshairY, {
+            width: canvas.width,
+            height: canvas.height,
+            color: '#22d3ee',
+            minDb: analyser.minDecibels,
+            maxDb: analyser.maxDecibels,
+            iecCenters: iecCenters
+        });
     }
 
     // --- Lógica de Waterfall (Histórico Visual Otimizado) ---
@@ -1484,8 +1592,9 @@ function analyze() {
         }
 
         if (isAutoCutEnabled && autoCutCooldown === 0) {
-            // Arredonda para a dezena/centena mais próxima para não criar múltiplos EQs vizinhos
-            const bandId = Math.round(freqInt / 10) * 10;
+            // Usa a frequência exata do feedback (não arredonda) para notch preciso
+            const exactFreq = Math.round(peakHz);
+            const bandId = Math.round(exactFreq / 10) * 10;
             const currentCut = autoCutHistory[bandId] || 0;
             
             // Limita o corte máximo para -12dB na mesma banda
@@ -1494,25 +1603,32 @@ function analyze() {
                 autoCutHistory[bandId] = newCut;
                 autoCutCooldown = 60; // 1 segundo de cooldown a 60fps para o áudio reagir
                 
-                // Usando a API solicitada
-                if (window.MixerService && typeof MixerService.applyEQ === 'function') {
-                    MixerService.applyEQ(bandId, 10, -3); // Q alto (10), gain relativo -3
-                    console.log(`[AutoCut] Corte Automático aplicado em ${bandId}Hz (Total acumulado: ${newCut}dB)`);
-                } else if (window.MixerService && typeof MixerService.cutFeedback === 'function') {
-                    // Fallback se applyEQ ainda não foi portado
-                    MixerService.cutFeedback(bandId);
+                // Aplica Notch Filter (Q=30 bem estreito)
+                if (window.MixerService) {
+                    if (typeof MixerService.applyNotchFilter === 'function') {
+                        // Preferir Notch Filter para feedback
+                        MixerService.applyNotchFilter('master', exactFreq, -3);
+                        console.log(`[AutoCut] Notch Filter aplicado em ${exactFreq}Hz (Total: ${newCut}dB)`);
+                    } else if (typeof MixerService.applyEQ === 'function') {
+                        // Fallback para EQ paramétrico
+                        MixerService.applyEQ('master', exactFreq, 30, -3);
+                        console.log(`[AutoCut] EQ aplicado em ${exactFreq}Hz (Q=30, -3dB)`);
+                    } else {
+                        // Fallback final
+                        MixerService.cutFeedback(exactFreq);
+                    }
                 }
 
                 if (btnAutoCut) {
                     btnAutoCut.style.display = 'block';
-                    btnAutoCut.innerText = `Corte automático: ${bandId}Hz (-3dB)`;
+                    btnAutoCut.innerText = `🔇 Notch: ${freqInt}Hz (-3dB)`;
                     btnAutoCut.classList.add('bg-orange-600');
                     setTimeout(() => { btnAutoCut.classList.remove('bg-orange-600'); }, 1000);
                 }
             } else {
                 if (btnAutoCut) {
                     btnAutoCut.style.display = 'block';
-                    btnAutoCut.innerText = `⚠️ Limite de corte atingido em ${bandId}Hz`;
+                    btnAutoCut.innerText = `⚠️ Limite atingido em ${bandId}Hz`;
                 }
             }
         } else if (!isAutoCutEnabled) {
@@ -1879,11 +1995,16 @@ function _handleSweepAnalysisResult(result) {
     document.dispatchEvent(new CustomEvent('rt60-result', {
         detail: {
             curve: result.schroeder_curve || [],
-            rt60:  result.t30 || result.t20,
+            rt60:  result.t30 || result.t20 || result.rt60_est,
             t20:   result.t20,
             t30:   result.t30,
             edt:   result.edt,
             snr:   result.snr_db,
+            c50:   result.c50,
+            c80:   result.c80,
+            d50:   result.d50,
+            sti:   result.sti,
+            sti_category: result.sti_category,
         }
     }));
 }
@@ -1920,6 +2041,11 @@ function _handleRT60Result(result) {
             t30:   result.t30,
             edt:   result.edt,
             snr:   result.snr,
+            c50:   result.c50,
+            c80:   result.c80,
+            d50:   result.d50,
+            sti:   result.sti,
+            sti_category: result.sti_category,
         }
     }));
 }
@@ -1946,8 +2072,8 @@ function getFreqDataSnapshot() {
     };
 }
 
-    window.SoundMasterAnalyzer = {
-        init: initAnalyzer, // ✅ Agora exposto globalmente
+window.SoundMasterAnalyzer = {
+        init: initAnalyzer,
         start: startAnalyzer,
         stop: stopAnalyzer,
         toggle: toggleAnalyzer,
@@ -1965,7 +2091,20 @@ function getFreqDataSnapshot() {
                 currentWeighting = type;
                 console.log(`[Analyzer] SPL Weighting changed to dB(${type})`);
             }
-        }
+        },
+        // Novos Geradores de Sinais (Bloco 5.1)
+        startPinkNoise: () => startPinkNoise(false),
+        stopPinkNoise: stopPinkNoise,
+        startWhiteNoise: (amp) => startWhiteNoise(amp),
+        stopWhiteNoise: stopWhiteNoise,
+        startMLS: (order, amp) => startMLS(order, amp),
+        stopMLS: stopMLS,
+        startChirp: (start, end, dur, amp) => startChirp(start, end, dur, amp),
+        stopChirp: stopChirp,
+        startDualTone: (f1, f2, amp) => startDualTone(f1, f2, amp),
+        stopDualTone: stopDualTone,
+        stopAllSignals: stopAllSignals,
+        isPlayingAnySignal: () => isPinkNoisePlaying || isWhiteNoisePlaying || isMLSPlaying || isChirpPlaying || isDualTonePlaying || isSineWavePlaying
     };
 
     // ✅ Listener Único para Áudio de Referência (Loopback)
