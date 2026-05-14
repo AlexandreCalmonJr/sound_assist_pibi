@@ -165,6 +165,7 @@ function createMixerActions(getMixer) {
         const input = getMixer().input(channel);
         const cleanName = name.substring(0, 20); // Máximo 20 caracteres conforme doc
         input.setName(cleanName);
+        mixerSingleton.updateChannelState(channel, { name: cleanName });
         return `Nome do canal ${channel} alterado para "${cleanName}" e sincronizado com a mesa.`;
     }
 

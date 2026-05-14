@@ -4,7 +4,10 @@ const fs = require('fs');
 const Logger = require('./logger');
 const http = require('http');
 
-function startPythonAI(rootDir) {
+// ✅ T10: Porta do Python configurável via .env
+const PYTHON_PORT = parseInt(process.env.PYTHON_PORT || '3002', 10);
+
+function startPythonAI(rootDir, onExitCallback) {
     const pythonScript = path.join(rootDir, 'backend', 'ai', 'ai_server.py');
 
     if (!fs.existsSync(pythonScript)) {
@@ -36,7 +39,7 @@ function startPythonAI(rootDir) {
     let pythonProcess = null;
     for (const cmd of commands) {
         if (_checkPython(cmd)) {
-            pythonProcess = _trySpawn(cmd, pythonScript, path.dirname(pythonScript));
+            pythonProcess = _trySpawn(cmd, pythonScript, path.dirname(pythonScript), onExitCallback);
             if (pythonProcess) break;
         }
     }
@@ -94,7 +97,7 @@ function _checkPython(command) {
     }
 }
 
-function _trySpawn(command, scriptPath, rootDir) {
+function _trySpawn(command, scriptPath, rootDir, onExitCallback) {
     try {
         const proc = spawn(command, [scriptPath], { 
             stdio: ['pipe', 'pipe', 'pipe'],
@@ -137,6 +140,9 @@ function _trySpawn(command, scriptPath, rootDir) {
         proc.on('exit', (code) => {
             if (code !== null && code !== 0) {
                 console.error(`[Python AI] Processo encerrado com código ${code}`);
+                if (onExitCallback) {
+                    onExitCallback(code);
+                }
             }
         });
 

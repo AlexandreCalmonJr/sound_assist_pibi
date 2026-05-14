@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 import time
 import asyncio
@@ -101,7 +101,7 @@ async def cleanup_sessions_task():
 
 # Modelos de Dados
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(max_length=2000)  # ✅ T12: Limita tamanho da mensagem (Original #13)
     analysis: Optional[Dict[str, Any]] = None
     mixer_context: Optional[Dict[str, Any]] = None
     session_id: Optional[str] = "default"

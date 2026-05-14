@@ -98,7 +98,24 @@ class MixerGitService {
         return new Promise((resolve, reject) => {
             this.db.insert(doc, (err, saved) => {
                 if (err) reject(err);
-                else resolve({ _id: saved._id, hash: saved.hash, label: saved.label, createdAt: saved.createdAt });
+                else {
+                    // ✅ T8: Rotação de commits - mantém máximo 50 (P19)
+                    this._rotateOldCommits();
+                    resolve({ _id: saved._id, hash: saved.hash, label: saved.label, createdAt: saved.createdAt });
+                }
+            });
+        });
+    }
+
+    // Rotação FIFO de commits antigos
+    _rotateOldCommits(maxCommits = 50) {
+        this.db.count({}, (err, count) => {
+            if (err || count <= maxCommits) return;
+            const toDelete = count - maxCommits;
+            this.db.find({}).sort({ createdAt: 1 }).limit(toDelete).exec((err, docs) => {
+                if (err || !docs.length) return;
+                docs.forEach(doc => this.db.remove({ _id: doc._id }));
+                console.log(`[MixerGit] Removidos ${docs.length} commits antigos. Total: ${count - docs.length}`);
             });
         });
     }

@@ -134,7 +134,8 @@ class WorkerPool {
 // ─── Lógica do Worker (roda numa thread separada) ─────────────────────────────
 
 if (!isMainThread) {
-    const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
+    // ✅ T15: Usa fetch nativo do Node.js 18+ (P23)
+    const fetch = globalThis.fetch;
 
     parentPort.on('message', async ({ task, taskId }) => {
         let result, error;

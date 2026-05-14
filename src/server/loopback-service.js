@@ -10,6 +10,7 @@ class LoopbackService {
         this.referenceChannel = 30; // Canal 31 (Índice 30) - Geralmente Main L na Ui24R
         this.sampleBuffer = [];
         this.maxBufferSize = 2048; // Tamanho do bloco para envio via socket
+        this.simulationInterval = null;
     }
 
     init(io) {
@@ -32,8 +33,11 @@ class LoopbackService {
     }
 
     startSimulation() {
+        // Limpa qualquer intervalo anterior
+        this.stopSimulation();
+        
         // Envia blocos de ruído a cada ~42ms (equivalente a 2048 samples a 48kHz)
-        setInterval(() => {
+        this.simulationInterval = setInterval(() => {
             if (!this.io) return;
             const simulatedSamples = new Float32Array(this.maxBufferSize);
             for (let i = 0; i < this.maxBufferSize; i++) {
@@ -43,6 +47,14 @@ class LoopbackService {
                 samples: Array.from(simulatedSamples)
             });
         }, 42);
+    }
+
+    stopSimulation() {
+        if (this.simulationInterval) {
+            clearInterval(this.simulationInterval);
+            this.simulationInterval = null;
+            console.log('[Loopback] Simulação停止了.');
+        }
     }
 
     processAudio({ buffer, channels, bitDepth }) {

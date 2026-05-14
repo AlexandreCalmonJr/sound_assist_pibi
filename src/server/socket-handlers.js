@@ -12,6 +12,9 @@ const path = require('path');
 const fs = require('fs');
 const netDiag = require('./network');
 
+// ✅ T10: Porta do Python configurável via .env
+const PYTHON_PORT = parseInt(process.env.PYTHON_PORT || '3002', 10);
+
 // --- Esquemas de Validação ---
 // ... (esquemas omitidos para brevidade, mantidos no arquivo)
 const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
@@ -118,6 +121,23 @@ function registerSocketHandlers(io, appDataDir = './logs') {
 
     let globalHistoryStack = [];
     let globalRedoStack = [];
+
+    // ✅ T6: Cleanup periódico de Maps para evitar crescimento indefinido (P18)
+    setInterval(() => {
+        const now = Date.now();
+        const TTL_MS = 3600000; // 1 hora
+        
+        for (const [k, v] of feedbackCooldowns) {
+            if (now - v > TTL_MS) feedbackCooldowns.delete(k);
+        }
+        for (const [k, v] of automaticCutState) {
+            if (now - v.timestamp > TTL_MS) automaticCutState.delete(k);
+        }
+        
+        if (feedbackCooldowns.size > 0 || automaticCutState.size > 0) {
+            console.log(`[SocketHandlers] Maps limpos. feedbackCooldowns: ${feedbackCooldowns.size}, automaticCutState: ${automaticCutState.size}`);
+        }
+    }, 300000); // A cada 5 minutos
 
     function createThrottle(fn, ms) {
         let lastTime = 0;
@@ -895,7 +915,7 @@ function registerSocketHandlers(io, appDataDir = './logs') {
                 }
 
                 // Chama o motor Python
-                const aiRes = await fetch('http://127.0.0.1:3002/hardware_diagnosis', {
+                const aiRes = await fetch(`http://127.0.0.1:${PYTHON_PORT}/hardware_diagnosis`, {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json', 'X-API-Key': process.env.AI_API_KEY || '' },
                     body:    JSON.stringify({ channel, snapshots: docs, months }),

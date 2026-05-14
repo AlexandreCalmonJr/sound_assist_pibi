@@ -59,6 +59,11 @@ class Router {
             return;
         }
 
+        // ✅ T13: Dispatch page-unload para cleanup da página anterior (P24)
+        if (this.currentPage) {
+            window.dispatchEvent(new CustomEvent('page-unload', { detail: { pageId: this.currentPage } }));
+        }
+
         const container = document.getElementById('agent-workspace');
         if (!container) return;
 

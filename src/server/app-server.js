@@ -13,6 +13,9 @@ const { registerSocketHandlers } = require('./socket-handlers');
 const { getPool } = require('./worker-pool');
 const mixerGit = require('./mixer-git');
 
+// ✅ T10: Porta do Python configurável via .env (Original #14)
+const PYTHON_PORT = parseInt(process.env.PYTHON_PORT || '3002', 10);
+
 function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     const expressApp = express();
     const server = http.createServer(expressApp);
@@ -144,7 +147,7 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
                 timestamp: Date.now()
             }, payload.mixer_context || {});
 
-            const aiRes = await fetch('http://127.0.0.1:3002/chat', {
+            const aiRes = await fetch(`http://127.0.0.1:${PYTHON_PORT}/chat`, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
@@ -168,7 +171,7 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
 
     expressApp.get('/api/ai/health', async (req, res) => {
         try {
-            const aiRes = await fetch('http://127.0.0.1:3002/');
+            const aiRes = await fetch(`http://127.0.0.1:${PYTHON_PORT}/`);
             const data = await aiRes.json();
             res.json(data);
         } catch (error) {
@@ -209,7 +212,7 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 60000);
         try {
-            const aiRes = await fetch('http://127.0.0.1:3002/hardware_diagnosis', {
+            const aiRes = await fetch(`http://127.0.0.1:${PYTHON_PORT}/hardware_diagnosis`, {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json', 'X-API-Key': process.env.AI_API_KEY || '' },
                 body:    JSON.stringify(req.body),
@@ -265,8 +268,43 @@ function createAppServer({ app, rootDir, localIp, port, dbDir }) {
     // Inicia Worker Pool (aquece os workers na inicialização)
     getPool();
 
-    // Middleware de Autenticação para Socket.IO
+    // Middleware de Autenticação para Socket.IO - IP Allowlist (P20)
+    const ALLOWED_CLIENT_IPS = (process.env.ALLOWED_CLIENT_IPS || '192.168.0.0/16,10.0.0.0/8,127.0.0.1').split(',');
+
+    function isIpAllowed(clientIp) {
+        if (!clientIp) return false;
+        const cleanIp = clientIp.replace(/^::ffff:/, '');
+        if (cleanIp === '127.0.0.1' || cleanIp === '::1') return true;
+        
+        for (const range of ALLOWED_CLIENT_IPS) {
+            const [baseIp, mask] = range.split('/');
+            if (!mask) {
+                if (cleanIp === baseIp) return true;
+                continue;
+            }
+            if (ipMatchesCidr(cleanIp, baseIp, parseInt(mask))) return true;
+        }
+        return false;
+    }
+
+    function ipMatchesCidr(ip, baseIp, mask) {
+        const ipParts = ip.split('.').map(Number);
+        const baseParts = baseIp.split('.').map(Number);
+        const maskBits = (~((1 << (32 - mask)) - 1)) >>> 0;
+        
+        const ipNum = (ipParts[0] << 24) | (ipParts[1] << 16) | (ipParts[2] << 8) | ipParts[3];
+        const baseNum = (baseParts[0] << 24) | (baseParts[1] << 16) | (baseParts[2] << 8) | baseParts[3];
+        
+        return (ipNum & maskBits) === (baseNum & maskBits);
+    }
+
     io.use((socket, next) => {
+        const clientIp = socket.handshake.address;
+        if (!isIpAllowed(clientIp)) {
+            console.warn(`[SocketIO] Conexão rejeitada - IP não autorizado: ${clientIp}`);
+            return next(new Error('IP não autorizado. Contate o administrador.'));
+        }
+        console.log(`[SocketIO] Cliente autorizado: ${clientIp}`);
         next();
     });
 

@@ -8,7 +8,9 @@ const fs = require('fs');
  */
 class FeedbackPredictor {
     constructor() {
-        this.pythonUrl = 'http://127.0.0.1:3002/analyze-feedback';
+        // ✅ T10: Porta do Python configurável via .env
+        const PYTHON_PORT = parseInt(process.env.PYTHON_PORT || '3002', 10);
+        this.pythonUrl = `http://127.0.0.1:${PYTHON_PORT}/analyze-feedback`;
         this.apiKey = process.env.AI_API_KEY || '';
     }
 

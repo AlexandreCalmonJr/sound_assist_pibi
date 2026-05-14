@@ -10,3 +10,4 @@ __pycache__/
 venv/
 backend/ai/venv/
 backend/ai/models/
+*.db

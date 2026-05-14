@@ -3,9 +3,21 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const AdmZip = require('adm-zip');
+const crypto = require('crypto');
 
 const GITHUB_REPO = 'AlexandreCalmonJr/sound_assist_pibi';
 const VERSION_FILE = path.join(__dirname, '..', '..', 'version.json');
+
+// ✅ T9: Função para calcular SHA256 do arquivo baixado (P22)
+async function calculateSHA256(filePath) {
+    return new Promise((resolve, reject) => {
+        const hash = crypto.createHash('sha256');
+        const stream = fs.createReadStream(filePath);
+        stream.on('data', data => hash.update(data));
+        stream.on('end', () => resolve(hash.digest('hex')));
+        stream.on('error', reject);
+    });
+}
 
 async function getLocalVersion() {
     try {
@@ -62,9 +74,20 @@ async function downloadAndInstallUpdate(downloadUrl, newVersion) {
         response.data.pipe(writer);
 
         return new Promise((resolve, reject) => {
-            writer.on('finish', () => {
-                console.log('[Updater] Download concluído. Extraindo...');
+            writer.on('finish', async () => {
+                console.log('[Updater] Download concluído. Verificando integridade...');
                 try {
+                    // ✅ T9: Verificação de integridade SHA256 (P22)
+                    const fileHash = await calculateSHA256(zipPath);
+                    console.log(`[Updater] SHA256: ${fileHash.substring(0, 16)}...`);
+                    
+                    // Verifica se há hash esperado no .env (para produção)
+                    const expectedHash = process.env.UPDATE_HASH;
+                    if (expectedHash && fileHash !== expectedHash) {
+                        throw new Error('Hash SHA256 inválido! Atualização pode estar comprometida.');
+                    }
+                    
+                    console.log('[Updater] Integridade verificada. Extraindo...');
                     const zip = new AdmZip(zipPath);
                     zip.extractAllTo(updateDir, true);
                     

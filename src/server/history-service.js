@@ -82,8 +82,10 @@ class HistoryService {
 
     async getBenchmark() {
         // Retorna médias para comparação Vazio vs Cheio
+        // ✅ T7: Limita a 90 dias e máximo 500 documentos para evitar memory leak (P25)
+        const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
         return new Promise((resolve, reject) => {
-            this.db.find({}, (err, docs) => {
+            this.db.find({ timestamp: { $gt: cutoff } }).limit(500).exec((err, docs) => {
                 if (err) return reject(err);
                 
                 const stats = {

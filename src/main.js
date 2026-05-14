@@ -43,7 +43,9 @@ if (fs.existsSync(updateConfigPath)) {
     }
 }
 
-const PORT = 3001;
+// ✅ T10: Porta configurável via .env (Original #14)
+const PORT = parseInt(process.env.PORT || '3001', 10);
+const PYTHON_PORT = parseInt(process.env.PYTHON_PORT || '3002', 10);
 const localIp = getLocalIp();
 
 let pythonProcess = null;
@@ -90,8 +92,23 @@ app.whenReady().then(async () => {
     isInitialized = true;
     
     const aiPath = path.join(ROOT_DIR, 'backend', 'ai');
-    pythonProcess = startPythonAI(aiPath);
+    
+    // Inicia servidor primeiro para ter ioInstance disponível
     startServer();
+    
+    // Callback de alerta quando Python encerrar (T3)
+    const onPythonExit = (code) => {
+        console.error(`[Main] ⚠️ IA OFFLINE (código ${code})`);
+        if (ioInstance) {
+            ioInstance.emit('system_log', { 
+                msg: `⚠️ IA OFFLINE. Código: ${code}. Execute 'npm run start' para reiniciar.`, 
+                severity: 'error',
+                ts: Date.now()
+            });
+        }
+    };
+    
+    pythonProcess = startPythonAI(aiPath, onPythonExit);
     await configureElectronSession();
     
     const mainWindow = createWindow(PORT);
