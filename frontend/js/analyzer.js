@@ -44,6 +44,9 @@ let bufferLength = 0;
 let canvas, canvasCtx, rmsBar, feedbackAlert, analysisSummaryText, analysisDetailList, btnSendAnalysis, btnMeasurePink, btnDesktopPink, pinkMeasureSummary, btnLogSweep, micSelect;
 let waterfallCanvasEl, waterfallCtx;
 
+let rtaCrosshairX = -1;
+let rtaCrosshairY = -1;
+
 // Web Workers & Worklets
 let acousticWorker = null;
 let audioWorkletNode = null;
@@ -58,6 +61,11 @@ let isSweepActive = false;
 let sweepRecordingBuffer = null;
 let sweepRecordingIdx = 0;
 let sweepCaptureActive = false;
+
+// --- Estado Auto-Cut ---
+let isAutoCutEnabled = false;
+let autoCutHistory = {}; // { '1000': -3 }
+let autoCutCooldown = 0; // Previne cortes em múltiplos frames seguidos
 
 // --- Novas Variáveis de Melhoria ---
 let peakHold = { hz: 0, db: -100, timer: 0 };
@@ -263,6 +271,18 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
         if (!canvas) return;
 
         canvasCtx = canvas.getContext('2d');
+        
+        // Setup Crosshair listener for RTA
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            rtaCrosshairX = (e.clientX - rect.left) * (canvas.width / rect.width);
+            rtaCrosshairY = (e.clientY - rect.top) * (canvas.height / rect.height);
+        });
+        canvas.addEventListener('mouseleave', () => {
+            rtaCrosshairX = -1;
+            rtaCrosshairY = -1;
+        });
+
         _initManualControls();
         _initAutomixControls();
 
@@ -286,6 +306,15 @@ const feedbackDetector = new FeedbackDetector(15); // Sensibilidade ajustada
         // Novos elementos de sugestão IA
         const aiBox = document.getElementById('ai-suggestions-box');
         const aiText = document.getElementById('ai-suggestions-text');
+
+        // Toggle de Auto-Cut
+        const btnToggleAutoCut = document.getElementById('btn-toggle-auto-cut');
+        if (btnToggleAutoCut) {
+            btnToggleAutoCut.addEventListener('change', (e) => {
+                isAutoCutEnabled = e.target.checked;
+                console.log(`[Analyzer] Auto-Cut: ${isAutoCutEnabled ? 'ON' : 'OFF'}`);
+            });
+        }
 
         // Listeners locais da página de análise
         document.getElementById('btn-start-audio')?.addEventListener('click', startAnalyzer);
@@ -1232,6 +1261,43 @@ function analyze() {
         canvasCtx.stroke();
     }
 
+    // --- Crosshair UI (RTA) ---
+    if (rtaCrosshairX > 0 && rtaCrosshairY > 0) {
+        canvasCtx.strokeStyle = 'rgba(255,255,255,0.4)';
+        canvasCtx.lineWidth = 1;
+        canvasCtx.setLineDash([2, 2]);
+
+        // Linha vertical
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(rtaCrosshairX, 0);
+        canvasCtx.lineTo(rtaCrosshairX, canvas.height);
+        canvasCtx.stroke();
+
+        // Linha horizontal
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(0, rtaCrosshairY);
+        canvasCtx.lineTo(canvas.width, rtaCrosshairY);
+        canvasCtx.stroke();
+        canvasCtx.setLineDash([]);
+
+        // Calcular valores
+        const dbVal = analyser.maxDecibels - ((rtaCrosshairY / canvas.height) * (analyser.maxDecibels - analyser.minDecibels));
+        
+        // Descobrir a banda (aproximada pela posição X)
+        const bandIndex = Math.floor(rtaCrosshairX / (barWidth + spacing));
+        const hzVal = iecCenters[Math.min(numBands - 1, Math.max(0, bandIndex))] || 0;
+
+        canvasCtx.fillStyle = 'rgba(0,0,0,0.8)';
+        // Se estiver muito pra direita, desenha a tooltip pra esquerda
+        const ttWidth = 90;
+        const ttX = rtaCrosshairX + ttWidth + 10 > canvas.width ? rtaCrosshairX - ttWidth - 10 : rtaCrosshairX + 10;
+        canvasCtx.fillRect(ttX, Math.max(5, rtaCrosshairY - 20), ttWidth, 16);
+        
+        canvasCtx.fillStyle = '#22d3ee';
+        canvasCtx.font = '10px monospace';
+        canvasCtx.fillText(`${hzVal >= 1000 ? hzVal/1000 + 'k' : hzVal}Hz | ${dbVal.toFixed(1)}dB`, ttX + 4, Math.max(17, rtaCrosshairY - 8));
+    }
+
     // --- Lógica de Waterfall (Histórico Visual Otimizado) ---
 
     if (waterfallCtx && waterfallCanvasEl) {
@@ -1371,6 +1437,9 @@ function analyze() {
     // ✅ Correção Auditoria: Feedback detectado no analisador rápido (latência mínima)
     const isFeedback = feedbackDetector.analyze(currentFastPeakHz, peakDb, -20);
     
+    // Timer para o Auto-Cut
+    if (autoCutCooldown > 0) autoCutCooldown--;
+    
     // ✅ Novo: Solicita verificação de risco de IA se houver pico relevante
     if (isAnalyzing && peakDb > -15) {
         SocketService.emit('analyze_feedback_risk', { 
@@ -1381,24 +1450,61 @@ function analyze() {
     }
     
     if (isFeedback) {
+        const freqInt = Math.round(peakHz);
         if (feedbackAlert) {
             feedbackAlert.className = 'alert danger';
-            feedbackAlert.innerHTML = `⚠️ <strong>Microfonia DETECTADA</strong> em <strong>${Math.round(peakHz)} Hz</strong> sustentados. Diferença local: ${formatDb(peakDb - neighborAvg)} dB.`;
+            feedbackAlert.innerHTML = `⚠️ <strong>Microfonia DETECTADA</strong> em <strong>${freqInt} Hz</strong> sustentados. Diferença local: ${formatDb(peakDb - neighborAvg)} dB.`;
         }
 
-        if (btnAutoCut) {
-            btnAutoCut.style.display = 'block';
-            btnAutoCut.onclick = () => {
-                MixerService.cutFeedback(Math.round(peakHz));
-                btnAutoCut.innerText = 'Cortando...';
-            };
+        if (isAutoCutEnabled && autoCutCooldown === 0) {
+            // Arredonda para a dezena/centena mais próxima para não criar múltiplos EQs vizinhos
+            const bandId = Math.round(freqInt / 10) * 10;
+            const currentCut = autoCutHistory[bandId] || 0;
+            
+            // Limita o corte máximo para -12dB na mesma banda
+            if (currentCut > -12) {
+                const newCut = currentCut - 3;
+                autoCutHistory[bandId] = newCut;
+                autoCutCooldown = 60; // 1 segundo de cooldown a 60fps para o áudio reagir
+                
+                // Usando a API solicitada
+                if (window.MixerService && typeof MixerService.applyEQ === 'function') {
+                    MixerService.applyEQ(bandId, 10, -3); // Q alto (10), gain relativo -3
+                    console.log(`[AutoCut] Corte Automático aplicado em ${bandId}Hz (Total acumulado: ${newCut}dB)`);
+                } else if (window.MixerService && typeof MixerService.cutFeedback === 'function') {
+                    // Fallback se applyEQ ainda não foi portado
+                    MixerService.cutFeedback(bandId);
+                }
+
+                if (btnAutoCut) {
+                    btnAutoCut.style.display = 'block';
+                    btnAutoCut.innerText = `Corte automático: ${bandId}Hz (-3dB)`;
+                    btnAutoCut.classList.add('bg-orange-600');
+                    setTimeout(() => { btnAutoCut.classList.remove('bg-orange-600'); }, 1000);
+                }
+            } else {
+                if (btnAutoCut) {
+                    btnAutoCut.style.display = 'block';
+                    btnAutoCut.innerText = `⚠️ Limite de corte atingido em ${bandId}Hz`;
+                }
+            }
+        } else if (!isAutoCutEnabled) {
+            if (btnAutoCut) {
+                btnAutoCut.style.display = 'block';
+                btnAutoCut.onclick = () => {
+                    if (window.MixerService && typeof MixerService.cutFeedback === 'function') {
+                        MixerService.cutFeedback(freqInt);
+                    }
+                    btnAutoCut.innerText = 'Cortando...';
+                };
+            }
         }
     } else {
         if (feedbackAlert) {
             feedbackAlert.className = 'alert safe';
             feedbackAlert.innerHTML = `Espectro estável. Pico dominante: ${Math.round(peakHz)} Hz (${formatDb(peakDb)} dB).`;
         }
-        if (btnAutoCut) {
+        if (btnAutoCut && !isAutoCutEnabled) {
             btnAutoCut.style.display = 'none';
             btnAutoCut.innerText = '🪄 Cortar Frequência na Mesa';
         }

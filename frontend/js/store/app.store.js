@@ -41,7 +41,7 @@
 
         // SPL Logger (IEC 61672)
         splWeighting: 'A',    // 'A' | 'C' | 'Z'
-        splStats: null,       // { leqTotal, leq1, leq10, lmax, lmin, dose8h, elapsedSec }
+        splStats: null,       // { leqTotal, leq1, leq10, lmax, lmin, ldose, dose8h, lden, elapsedSec }
         splAlert: null,       // { level, message, ts } ou null
         splHistory: null,     // referência ao getter — não guarda array aqui
 

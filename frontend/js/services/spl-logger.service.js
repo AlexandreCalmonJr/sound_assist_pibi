@@ -17,7 +17,7 @@
  *   .push(freqData, timeData) → alimenta com dados do analyser (chamado a cada frame)
  *   .setWeighting('A'|'C'|'Z')
  *   .getHistory()             → { seconds: Float32Array, leq1: Float32Array, leq10: Float32Array }
- *   .getStats()               → { leqTotal, leq1, leq10, lmax, lmin, dose8h, dotsAboveLimit }
+ *   .getStats()               → { leqTotal, leq1, leq10, lmax, lmin, ldose, dose8h, lden }
  *   .reset()
  *   .export()                 → CSV string para download
  */
@@ -34,8 +34,16 @@
     /** Valor de referência SPL (pressão sonora de referência = 20 μPa → 0 dBSPL) */
     const REF_DB = -94; // offset calibração digital (0 dBFS ↔ 94 dBSPL por defeito)
 
-    /** Limite NIOSH para dose diária (acima deste valor conta como exposição excessiva) */
-    const NIOSH_LIMIT_DB = 85;
+    /** Perfil NHO/NIOSH: 85 dB(A) por 8 h, taxa de troca de 3 dB. */
+    const EXPOSURE_CRITERION_DB = 85;
+    const EXPOSURE_CRITERION_SEC = 8 * 3600;
+    const EXCHANGE_RATE_DB = 3;
+    const EXPOSURE_THRESHOLD_DB = 80;
+    const MAX_DOSE_PERCENT = 999;
+    const DOSE_PROFILE = 'NHO_NIOSH_85_3';
+
+    /** Limite NIOSH para dose diária (mantido como alias público legado). */
+    const NIOSH_LIMIT_DB = EXPOSURE_CRITERION_DB;
 
     // ─── Estado interno ───────────────────────────────────────────────────────
 
@@ -60,6 +68,13 @@
     // Temporizador interno (conta segundos desde init)
     let _ticker        = null;
     let _elapsedSec    = 0;
+
+    // Dose ocupacional acumulada em tempo real (percentual de 8 h).
+    let _dosePercentAcc = 0;
+    let _doseSecondsAboveThreshold = 0;
+
+    // Acumuladores Lden por janelas locais: day 07-19, evening 19-23, night 23-07.
+    let _ldenAcc = _makeLdenAcc();
 
     // ─── Histórico compacto (ring buffers de Float32Array) ────────────────────
     // Cada array é um ring buffer com ponteiro de escrita.
@@ -113,6 +128,7 @@
         _resetFilterState();
         _acc1s = _acc1min = _acc10min = _accTotal = 0;
         _acc1sCount = _acc1minCount = _acc10minCount = _accTotalCount = 0;
+        _resetExposureAccumulators();
         _initialized = true;
         console.log(`[SplLogger] Init: fs=${sampleRate} weighting=${_weighting}`);
     }
@@ -150,6 +166,7 @@
         _filterState[w] = _makeFilterState(w);
         _acc1s = _acc1min = _acc10min = _accTotal = 0;
         _acc1sCount = _acc1minCount = _acc10minCount = _accTotalCount = 0;
+        _resetExposureAccumulators();
         AppStore.setState({ splWeighting: w });
         console.log(`[SplLogger] Ponderação: ${w}`);
     }
@@ -167,19 +184,26 @@
     function getStats() {
         const leqTotal = _leanPowerToDb(_accTotal, _accTotalCount);
         const live     = getLive();
-        const doseMin  = _elapsedSec / 60;
-        const doseAllowed = leqTotal > -Infinity && leqTotal < Infinity
-            ? 480 * Math.pow(2, (NIOSH_LIMIT_DB - leqTotal) / 3)
-            : Infinity;
-        const dose8h   = Math.min(999, Math.round(doseMin / doseAllowed * 100));
+        const ldose    = _round1(Math.min(MAX_DOSE_PERCENT, _dosePercentAcc));
+        const ldenData = _getLdenStats();
 
         return {
-            leqTotal:    parseFloat(leqTotal.toFixed(1)),
-            leq1:        parseFloat(live.leq1.toFixed(1)),
-            leq10:       parseFloat(live.leq10.toFixed(1)),
-            lmax:        parseFloat(_lmaxSession.toFixed(1)),
+            leqTotal:    _formatDbStat(leqTotal),
+            leq1:        _formatDbStat(live.leq1),
+            leq10:       _formatDbStat(live.leq10),
+            lmax:        _formatDbStat(_lmaxSession),
             lmin:        _lminSession === Infinity ? null : parseFloat(_lminSession.toFixed(1)),
-            dose8h,
+            ldose,
+            dose8h:      Math.round(ldose),
+            doseProfile: DOSE_PROFILE,
+            doseCriterionDb: EXPOSURE_CRITERION_DB,
+            doseExchangeRateDb: EXCHANGE_RATE_DB,
+            doseThresholdDb: EXPOSURE_THRESHOLD_DB,
+            doseSecondsAboveThreshold: _doseSecondsAboveThreshold,
+            lden:        ldenData.lden,
+            lday:        ldenData.lday,
+            levening:    ldenData.levening,
+            lnight:      ldenData.lnight,
             elapsedSec:  _elapsedSec,
             weighting:   _weighting,
         };
@@ -219,6 +243,7 @@
         _lmaxSession = -Infinity;
         _lminSession  = Infinity;
         _elapsedSec   = 0;
+        _resetExposureAccumulators();
         _hist.spkPtr = _hist.leq1Ptr = _hist.leq10Ptr = 0;
         _hist.spkLen = _hist.leq1Len = _hist.leq10Len = 0;
         _hist.spk.fill(0); _hist.leq1.fill(0); _hist.leq10.fill(0);
@@ -250,6 +275,9 @@
         // SPL médio do último segundo (Leq1s)
         const leq1s = _leanPowerToDb(_acc1s, _acc1sCount);
         _acc1s = _acc1sCount = 0;
+
+        _accumulateDose(leq1s);
+        _accumulateLden(leq1s, new Date());
 
         // Grava no ring buffer de 1 s
         _writeRing(_hist.spk, _hist.spkPtr, leq1s);
@@ -521,6 +549,84 @@
         return 10 * Math.log10(sumPower / count + 1e-30);
     }
 
+    function _formatDbStat(value) {
+        if (value === null || value === undefined) return null;
+        if (!Number.isFinite(value)) return value;
+        return parseFloat(value.toFixed(1));
+    }
+
+    function _round1(value) {
+        return Math.round(value * 10) / 10;
+    }
+
+    function _accumulateDose(leq1s) {
+        if (!Number.isFinite(leq1s) || leq1s < EXPOSURE_THRESHOLD_DB) return;
+
+        const allowedSec = EXPOSURE_CRITERION_SEC *
+            Math.pow(2, (EXPOSURE_CRITERION_DB - leq1s) / EXCHANGE_RATE_DB);
+
+        _dosePercentAcc += 100 / allowedSec;
+        _doseSecondsAboveThreshold++;
+    }
+
+    function _makeLdenAcc() {
+        return {
+            day:     { sum: 0, weightedSum: 0, sec: 0 },
+            evening: { sum: 0, weightedSum: 0, sec: 0 },
+            night:   { sum: 0, weightedSum: 0, sec: 0 },
+        };
+    }
+
+    function _resetExposureAccumulators() {
+        _dosePercentAcc = 0;
+        _doseSecondsAboveThreshold = 0;
+        _ldenAcc = _makeLdenAcc();
+    }
+
+    function _getLdenPeriod(date) {
+        const hour = date.getHours();
+        if (hour >= 7 && hour < 19) {
+            return { key: 'day', penaltyDb: 0 };
+        }
+        if (hour >= 19 && hour < 23) {
+            return { key: 'evening', penaltyDb: 5 };
+        }
+        return { key: 'night', penaltyDb: 10 };
+    }
+
+    function _accumulateLden(leq1s, date) {
+        if (!Number.isFinite(leq1s)) return;
+
+        const period = _getLdenPeriod(date);
+        const acc = _ldenAcc[period.key];
+        acc.sum += Math.pow(10, leq1s / 10);
+        acc.weightedSum += Math.pow(10, (leq1s + period.penaltyDb) / 10);
+        acc.sec++;
+    }
+
+    function _calcPeriodLeq(periodAcc) {
+        if (!periodAcc || periodAcc.sec === 0) return null;
+        return _formatDbStat(10 * Math.log10(periodAcc.sum / periodAcc.sec + 1e-30));
+    }
+
+    function _getLdenStats() {
+        const day = _ldenAcc.day;
+        const evening = _ldenAcc.evening;
+        const night = _ldenAcc.night;
+        const totalSec = day.sec + evening.sec + night.sec;
+        const weightedSum = day.weightedSum + evening.weightedSum + night.weightedSum;
+        const lden = totalSec > 0
+            ? _formatDbStat(10 * Math.log10(weightedSum / totalSec + 1e-30))
+            : null;
+
+        return {
+            lden,
+            lday: _calcPeriodLeq(day),
+            levening: _calcPeriodLeq(evening),
+            lnight: _calcPeriodLeq(night),
+        };
+    }
+
     // ─── Exposição global ─────────────────────────────────────────────────────
 
     window.SplLogger = {
@@ -538,6 +644,12 @@
         // Constantes úteis para a UI
         NIOSH_LIMIT_DB,
         REF_DB,
+        EXPOSURE_CRITERION_DB,
+        EXPOSURE_CRITERION_SEC,
+        EXCHANGE_RATE_DB,
+        EXPOSURE_THRESHOLD_DB,
+        MAX_DOSE_PERCENT,
+        DOSE_PROFILE,
     };
 
 })();

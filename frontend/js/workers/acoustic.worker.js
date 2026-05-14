@@ -109,6 +109,12 @@ function _deconvolveSweep(recording, reference, sampleRate) {
     // Parâmetros de reverberação
     const rev = _revParams(schroederDb, sampleRate);
 
+    // Clarity (C50, C80)
+    const clarity = _clarity(irSq, sampleRate);
+
+    // Speech Transmission Index (STI) approximation
+    const stiMetrics = _approximateSTI(irSq, sampleRate);
+
     // Downsample para UI (máx 2000 pontos)
     const step = Math.max(1, Math.floor(schroederDb.length / 1000));
     const schDownsampled = schroederDb.filter((_, i) => i % step === 0);
@@ -121,6 +127,10 @@ function _deconvolveSweep(recording, reference, sampleRate) {
         t20:        rev.t20,
         t30:        rev.t30,
         rt60_est:   rev.rt60_est,
+        c50:        clarity.c50,
+        c80:        clarity.c80,
+        sti:        stiMetrics.sti,
+        sti_category: stiMetrics.category,
         snr_db:     parseFloat(snrDb.toFixed(1)),
         warning:    rev.warning || (snrDb < 35 ? 'SNR baixo: resultado pode ser impreciso.' : null),
         duration_s: irTrunc.length / sampleRate,
@@ -163,11 +173,20 @@ function _schroederRT60(buffer, sampleRate) {
 
     const rev = _revParams(schDb, sampleRate);
 
+    // C50, C80, STI
+    const irSq = energy.slice(peakIdx);
+    const clarity = _clarity(irSq, sampleRate);
+    const stiMetrics = _approximateSTI(irSq, sampleRate);
+
     return {
         rt60:    rev.rt60_est ? parseFloat(rev.rt60_est.toFixed(2)) : null,
         t20:     rev.t20,
         t30:     rev.t30,
         edt:     rev.edt,
+        c50:     clarity.c50,
+        c80:     clarity.c80,
+        sti:     stiMetrics.sti,
+        sti_category: stiMetrics.category,
         snr:     snr.toFixed(1),
         warning: snr < 35 ? 'SNR Baixo: medição pode estar mascarada pelo ruído ambiente.' : null,
         curve:   Array.from(schDb).filter((_, i) => i % 100 === 0),
@@ -200,6 +219,70 @@ function _revParams(schDb, sampleRate) {
     const rt60_est = t30 ?? t20 ?? (edt != null ? parseFloat((edt * 6).toFixed(2)) : null);
 
     return { edt, t20, t30, rt60_est };
+}
+
+/** Integração de energia para Clarity (C50 e C80) */
+function _clarity(irSq, sampleRate) {
+    const totalEnergy = irSq.reduce((a, b) => a + b, 0);
+    if (totalEnergy === 0) return { c50: 0, c80: 0 };
+
+    const idx50 = Math.min(Math.floor(0.050 * sampleRate), irSq.length);
+    const idx80 = Math.min(Math.floor(0.080 * sampleRate), irSq.length);
+
+    let e50 = 0, e80 = 0;
+    for (let i = 0; i < idx50; i++) e50 += irSq[i];
+    for (let i = 0; i < idx80; i++) e80 += irSq[i];
+
+    const late50 = totalEnergy - e50;
+    const late80 = totalEnergy - e80;
+
+    const c50 = late50 > 0 ? 10 * Math.log10(Math.max(e50 / late50, 1e-10)) : 20;
+    const c80 = late80 > 0 ? 10 * Math.log10(Math.max(e80 / late80, 1e-10)) : 20;
+
+    return { 
+        c50: parseFloat(c50.toFixed(1)), 
+        c80: parseFloat(c80.toFixed(1)) 
+    };
+}
+
+/** Aproximação do Speech Transmission Index (STI) via MTF (Modulation Transfer Function) da resposta ao impulso. */
+function _approximateSTI(irSq, sampleRate) {
+    const totalEnergy = irSq.reduce((a, b) => a + b, 0);
+    if (totalEnergy === 0) return { sti: 0, category: 'U' };
+
+    // Frequências de modulação padrão do STI (bandas de oitava até 12.5 Hz)
+    const fms = [0.63, 0.8, 1.0, 1.25, 1.6, 2.0, 2.5, 3.15, 4.0, 5.0, 6.3, 8.0, 10.0, 12.5];
+    let sumTI = 0;
+
+    for (const fm of fms) {
+        let sumCos = 0, sumSin = 0;
+        const omega = 2 * Math.PI * fm / sampleRate;
+        for (let i = 0; i < irSq.length; i++) {
+            const phase = omega * i;
+            sumCos += irSq[i] * Math.cos(phase);
+            sumSin += irSq[i] * Math.sin(phase);
+        }
+        
+        const m = Math.sqrt(sumCos * sumCos + sumSin * sumSin) / totalEnergy;
+        // Limit MTF between 0.001 and 0.999 to avoid Infinity
+        const m_safe = Math.max(0.001, Math.min(0.999, m));
+        
+        let snrApp = 10 * Math.log10(m_safe / (1 - m_safe));
+        snrApp = Math.max(-15, Math.min(15, snrApp));
+        
+        const ti = (snrApp + 15) / 30;
+        sumTI += ti;
+    }
+
+    const sti = sumTI / fms.length;
+    let category = 'U';
+    if (sti >= 0.75) category = 'A (Excelente)';
+    else if (sti >= 0.60) category = 'B (Bom)';
+    else if (sti >= 0.45) category = 'C (Razoável)';
+    else if (sti >= 0.30) category = 'D (Fraco)';
+    else category = 'E (Ininteligível)';
+
+    return { sti: parseFloat(sti.toFixed(2)), category };
 }
 
 /** Integração reversa de Schroeder. */
